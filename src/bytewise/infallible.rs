@@ -1,0 +1,3 @@
+// Enums
+
+pub enum Infallible {}
