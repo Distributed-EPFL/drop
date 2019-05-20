@@ -7,7 +7,7 @@ os:
   - osx
 
 rust:
-  - stable
+  - nightly
 
 sudo: true
 
