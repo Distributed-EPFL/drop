@@ -1,3 +1,5 @@
+// #[kcov(exclude)]
+
 // Modules
 
 pub mod bytewise;

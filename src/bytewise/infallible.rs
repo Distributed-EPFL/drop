@@ -1,3 +1,5 @@
+// #[kcov(exclude)]
+
 // Enums
 
 #[derive(Debug)]
