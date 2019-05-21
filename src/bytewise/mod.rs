@@ -7,6 +7,7 @@ mod root;
 mod sink;
 mod size;
 mod source;
+mod tape;
 mod writable;
 mod writer;
 
