@@ -1,6 +1,7 @@
 // Modules
 
 mod infallible;
+mod measurable;
 mod readable;
 mod reader;
 mod root;
@@ -14,6 +15,7 @@ mod writer;
 // Traits
 
 pub use infallible::Infallible;
+pub use measurable::Measurable;
 pub use readable::Readable;
 pub use reader::Reader;
 pub use root::Root;
