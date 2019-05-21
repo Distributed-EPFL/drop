@@ -48,6 +48,7 @@ macro_rules! implement {
 implement!(i8: 1, i16: 2, i32: 4, i64: 8, i128: 16, u8: 1, u16: 2, u32: 4, u64: 8, u128: 16);
 
 // Tests
+// #[kcov(exclude)]
 
 #[cfg(test)]
 mod tests {
