@@ -2,11 +2,13 @@
 
 use std::convert::TryInto;
 use super::sink::Sink;
+use super::size::Size;
 use super::source::Source;
 
 // Traits
 
 pub trait Root : Sized {
+    const SIZE: Size;
     fn dump<To: Sink>(&self, to: &mut To) -> Result<(), To::Error>;
     fn load<From: Source>(from: &mut From) -> Result<Self, From::Error>;
 }
@@ -14,6 +16,8 @@ pub trait Root : Sized {
 // Implementations
 
 impl Root for bool {
+    const SIZE: Size = Size::Fixed(1);
+
     fn dump<To: Sink>(&self, to: &mut To) -> Result<(), To::Error> {
         to.push(if *self { &[1] } else { &[0] })
     }
@@ -27,6 +31,8 @@ impl Root for bool {
 macro_rules! implement {
     ($($type:ty: $size:expr), *) => ($(
         impl Root for $type {
+            const SIZE: Size = Size::Fixed($size);
+
             fn dump<To: Sink>(&self, to: &mut To) -> Result<(), To::Error> {
                 to.push(&self.to_le_bytes())
             }
