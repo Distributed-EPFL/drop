@@ -7,3 +7,7 @@ pub mod bytewise;
 pub use bytewise::Root;
 pub use bytewise::Sink;
 pub use bytewise::Source;
+
+// Enums
+
+pub use bytewise::Size;
