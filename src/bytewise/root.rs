@@ -101,10 +101,13 @@ mod tests {
     // Test cases
 
     #[test]
-    fn root() {
+    fn boolean() {
         testcase!(bool, false, [0]);
         testcase!(bool, true, [1]);
+    }
 
+    #[test]
+    fn integers() {
         testcase!(i8, 0x07, [0x07]);
         testcase!(u8, 0x17, [0x17]);
 
