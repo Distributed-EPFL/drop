@@ -1,7 +1,7 @@
 // Dependencies
 
+use super::base::Base;
 use super::reader::Reader;
-use super::root::Root;
 use super::size::Size;
 
 // Traits
@@ -13,7 +13,7 @@ pub trait Readable {
 
 // Implementations
 
-impl<Value:Root> Readable for Value {
+impl<Value:Base> Readable for Value {
     const SIZE: Size = Value::SIZE;
 
     fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
@@ -48,7 +48,7 @@ mod tests {
             acceptor.accept(self)
         }
 
-        fn read<Value: Root>(&mut self, _value: &Value) -> Result<(), Self::Error> {
+        fn read<Value: Base>(&mut self, _value: &Value) -> Result<(), Self::Error> {
             *self = Marker(true);
             Ok(())
         }
@@ -57,7 +57,7 @@ mod tests {
     // Test cases
 
     #[test]
-    fn root() {
+    fn base() {
         let mut marker = Marker::new();
         44.accept(&mut marker).unwrap();
         let Marker(success) = marker;

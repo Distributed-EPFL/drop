@@ -1,8 +1,8 @@
 // Dependencies
 
+use super::base::Base;
 use super::infallible::Infallible;
 use super::readable::Readable;
-use super::root::Root;
 use super::reader::Reader;
 use super::sink::Sink;
 use super::size::Size;
@@ -13,7 +13,7 @@ pub struct Tape {
     size: usize
 }
 
-struct RootTape {
+struct BaseTape {
     size: usize
 }
 
@@ -29,9 +29,9 @@ impl Tape {
     }
 }
 
-impl RootTape {
-    fn new() -> RootTape {
-        RootTape{size: 0}
+impl BaseTape {
+    fn new() -> BaseTape {
+        BaseTape{size: 0}
     }
 
     fn size(&self) -> usize {
@@ -52,20 +52,20 @@ impl Reader for Tape {
         Ok(())
     }
 
-    fn read<Value: Root>(&mut self, value: &Value) -> Result<(), Self::Error> {
+    fn read<Value: Base>(&mut self, value: &Value) -> Result<(), Self::Error> {
         self.size += if let Size::Fixed(size) = Value::SIZE {
             size
         } else {
-            let mut root_tape = RootTape::new();
-            root_tape.read(value).unwrap();
-            root_tape.size()
+            let mut base_tape = BaseTape::new();
+            base_tape.read(value).unwrap();
+            base_tape.size()
         };
 
         Ok(())
     }
 }
 
-impl Sink for RootTape {
+impl Sink for BaseTape {
     type Error = Infallible;
 
     fn push(&mut self, chunk: &[u8]) -> Result<(), Self::Error> {
@@ -86,7 +86,7 @@ mod tests {
 
     struct Mother;
     struct Daughter;
-    struct WeirdRoot;
+    struct WeirdBase;
 
     // Implementations
 
@@ -111,14 +111,14 @@ mod tests {
             }
 
             for _ in 0..3 {
-                visitor.visit(&WeirdRoot)?;
+                visitor.visit(&WeirdBase)?;
             }
 
             Ok(())
         }
     }
 
-    impl Root for WeirdRoot {
+    impl Base for WeirdBase {
         const SIZE: Size = Size::Variable;
 
         fn dump<To: Sink>(&self, to: &mut To) -> Result<(), To::Error> {
@@ -126,7 +126,7 @@ mod tests {
         }
 
         fn load<From: Source>(_from: &mut From) -> Result<Self, From::Error> {
-            Ok(WeirdRoot)
+            Ok(WeirdBase)
         }
     }
 

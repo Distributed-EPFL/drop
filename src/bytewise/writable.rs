@@ -1,6 +1,6 @@
 // Dependencies
 
-use super::root::Root;
+use super::base::Base;
 use super::size::Size;
 use super::writer::Writer;
 
@@ -13,7 +13,7 @@ pub trait Writable {
 
 // Implementations
 
-impl<Value: Root> Writable for Value {
+impl<Value: Base> Writable for Value {
     const SIZE: Size = Value::SIZE;
 
     fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
@@ -48,7 +48,7 @@ mod tests {
             acceptor.accept(self)
         }
 
-        fn write<Value: Root>(&mut self, _value: &mut Value) -> Result<(), Self::Error> {
+        fn write<Value: Base>(&mut self, _value: &mut Value) -> Result<(), Self::Error> {
             *self = Marker(true);
             Ok(())
         }
@@ -57,7 +57,7 @@ mod tests {
     // Test cases
 
     #[test]
-    fn root() {
+    fn base() {
         let mut marker = Marker::new();
         44.accept(&mut marker).unwrap();
         let Marker(success) = marker;

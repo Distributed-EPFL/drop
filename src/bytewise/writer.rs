@@ -1,6 +1,6 @@
 // Dependencies
 
-use super::root::Root;
+use super::base::Base;
 use super::source::Source;
 use super::writable::Writable;
 
@@ -9,7 +9,7 @@ use super::writable::Writable;
 pub trait Writer {
     type Error;
     fn visit<Acceptor: Writable>(&mut self, acceptor: &mut Acceptor) -> Result<(), Self::Error>;
-    fn write<Value: Root>(&mut self, value: &mut Value) -> Result<(), Self::Error>;
+    fn write<Value: Base>(&mut self, value: &mut Value) -> Result<(), Self::Error>;
 }
 
 // Implementations
@@ -21,7 +21,7 @@ impl<Visitor: Source> Writer for Visitor {
         acceptor.accept(self)
     }
 
-    fn write<Value: Root>(&mut self, value: &mut Value) -> Result<(), Self::Error> {
+    fn write<Value: Base>(&mut self, value: &mut Value) -> Result<(), Self::Error> {
         *value = Value::load(self)?;
         Ok(())
     }

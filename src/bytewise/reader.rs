@@ -1,7 +1,7 @@
 // Dependencies
 
+use super::base::Base;
 use super::readable::Readable;
-use super::root::Root;
 use super::sink::Sink;
 
 // Traits
@@ -9,7 +9,7 @@ use super::sink::Sink;
 pub trait Reader {
     type Error;
     fn visit<Acceptor: Readable>(&mut self, acceptor: &Acceptor) -> Result<(), Self::Error>;
-    fn read<Value: Root>(&mut self, value: &Value) -> Result<(), Self::Error>;
+    fn read<Value: Base>(&mut self, value: &Value) -> Result<(), Self::Error>;
 }
 
 // Implementations
@@ -21,7 +21,7 @@ impl<Visitor: Sink> Reader for Visitor {
         acceptor.accept(self)
     }
 
-    fn read<Value: Root>(&mut self, value: &Value) -> Result<(), Self::Error> {
+    fn read<Value: Base>(&mut self, value: &Value) -> Result<(), Self::Error> {
         value.dump(self)
     }
 }

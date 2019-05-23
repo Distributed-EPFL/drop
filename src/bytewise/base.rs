@@ -7,7 +7,7 @@ use super::source::Source;
 
 // Traits
 
-pub trait Root : Sized {
+pub trait Base : Sized {
     const SIZE: Size;
     fn dump<To: Sink>(&self, to: &mut To) -> Result<(), To::Error>;
     fn load<From: Source>(from: &mut From) -> Result<Self, From::Error>;
@@ -15,7 +15,7 @@ pub trait Root : Sized {
 
 // Implementations
 
-impl Root for bool {
+impl Base for bool {
     const SIZE: Size = Size::Fixed(1);
 
     fn dump<To: Sink>(&self, to: &mut To) -> Result<(), To::Error> {
@@ -30,7 +30,7 @@ impl Root for bool {
 
 macro_rules! implement {
     ($($type:ty: $size:expr), *) => ($(
-        impl Root for $type {
+        impl Base for $type {
             const SIZE: Size = Size::Fixed($size);
 
             fn dump<To: Sink>(&self, to: &mut To) -> Result<(), To::Error> {
