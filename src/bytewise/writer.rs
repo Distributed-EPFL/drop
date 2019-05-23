@@ -27,6 +27,9 @@ impl<Visitor: Source> Writer for Visitor {
     }
 }
 
+// Tests
+// #[kcov(exclude)]
+
 #[cfg(test)]
 mod tests {
     use super::*;

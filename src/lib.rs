@@ -3,6 +3,7 @@
 // Modules
 
 pub mod bytewise;
+pub mod data;
 
 // Traits
 
@@ -16,3 +17,7 @@ pub use bytewise::Writer;
 // Enums
 
 pub use bytewise::Size;
+
+// Structs
+
+pub use data::Varint;
