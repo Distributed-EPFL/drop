@@ -17,6 +17,7 @@ impl Base for Varint {
 
     fn dump<To: Sink>(&self, to: &mut To) -> Result<(), To::Error> {
         let Varint(value) = self;
+        assert!(*value <= 0x3fffffff);
 
         if *value < 128 {
             to.push(&[*value as u8])
@@ -118,5 +119,12 @@ mod tests {
         testcase!(0x0765, [0x87, 0x65]);
         testcase!(0x078495, [0xc0, 0x07, 0x84, 0x95]);
         testcase!(0x07849583, [0xc7, 0x84, 0x95, 0x83]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn bounds() {
+        let value = Varint(0x40000000);
+        let _ = value.dump(&mut Reference(&[]));
     }
 }
