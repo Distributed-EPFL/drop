@@ -13,7 +13,7 @@ pub trait Readable {
 
 // Implementations
 
-impl<Value:Base> Readable for Value {
+impl<Value: Base> Readable for Value {
     const SIZE: Size = Value::SIZE;
 
     fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
