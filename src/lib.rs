@@ -11,6 +11,7 @@ pub mod data;
 
 // Traits
 
+pub use bytewise::Load;
 pub use bytewise::Readable;
 pub use bytewise::Reader;
 pub use bytewise::Writable;

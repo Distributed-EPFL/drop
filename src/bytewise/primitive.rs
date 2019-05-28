@@ -59,6 +59,7 @@ implement!(i8: 1, i16: 2, i32: 4, i64: 8, i128: 16, u8: 1, u16: 2, u32: 4, u64: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::load::Load;
 
     // Structs
 
@@ -92,8 +93,7 @@ mod tests {
             let value: $type = $value;
             Readable::accept(&value, &mut Reference(&$reference[..])).unwrap();
 
-            let mut value: $type = Default::default();
-            Writable::accept(&mut value, &mut Reference(&$reference[..])).unwrap();
+            let value = <$type>::load(&mut Reference(&$reference[..])).unwrap();
             assert_eq!(value, $value);
         }
     }
