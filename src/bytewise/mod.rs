@@ -1,5 +1,6 @@
 // Modules
 
+mod primitive;
 mod readable;
 mod reader;
 mod size;
