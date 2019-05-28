@@ -14,7 +14,7 @@ pub struct Varint(pub u32);
 // Implementations
 
 impl Readable for Varint {
-    const SIZE: Size = Size::Variable;
+    const SIZE: Size = Size::variable();
 
     fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
         assert!(self.0 <= 0x3fffffff);
@@ -30,7 +30,7 @@ impl Readable for Varint {
 }
 
 impl Writable for Varint {
-    const SIZE: Size = Size::Variable;
+    const SIZE: Size = Size::variable();
 
     fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
         let alpha = visitor.pop(1)?[0];

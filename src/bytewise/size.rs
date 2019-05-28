@@ -1,39 +1,40 @@
-// Dependencies
-
-use std::ops::Add;
-use std::ops::Mul;
-
-// Enums
+// Structs
 
 #[derive(Debug, PartialEq)]
-pub enum Size {
-    Fixed(usize),
-    Variable
-}
+pub struct Size(usize);
 
-// Operators
+// Implementations
 
-impl Add<Size> for Size {
-    type Output = Size;
-
-    fn add(self, rhs: Size) -> Size {
-        if let (Size::Fixed(left), Size::Fixed(right)) = (self, rhs) {
-            Size::Fixed(left + right)
-        } else {
-            Size::Variable
-        }
+impl Size {
+    pub const fn fixed(size: usize) -> Size {
+        Size(size)
     }
-}
 
-impl Mul<usize> for Size {
-    type Output = Size;
+    pub const fn variable() -> Size {
+        Size(0)
+    }
 
-    fn mul(self, rhs: usize) -> Size {
-        if let Size::Fixed(left) = self {
-            Size::Fixed(left * rhs)
-        } else {
-            Size::Variable
-        }
+    pub const fn add(lho: Size, rho: Size) -> Size {
+        let fixed = (lho.0 != 0, rho.0 != 0);
+        let fixed = (fixed.0 as usize) * (fixed.1 as usize);
+        Size([0, lho.0 + rho.0][fixed])
+    }
+
+    pub const fn mul(lho: usize, rho: Size) -> Size {
+        Size(lho * rho.0)
+    }
+
+    pub fn is_fixed(&self) -> bool {
+        self.0 != 0
+    }
+
+    pub fn is_variable(&self) -> bool {
+        self.0 == 0
+    }
+
+    pub fn size(&self) -> usize {
+        assert!(self.0 != 0);
+        self.0
     }
 }
 
@@ -45,13 +46,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn size() {
-        assert_eq!(Size::Fixed(4) + Size::Fixed(5), Size::Fixed(9));
-        assert_eq!(Size::Fixed(4) + Size::Variable, Size::Variable);
-        assert_eq!(Size::Variable + Size::Fixed(5), Size::Variable);
-        assert_eq!(Size::Variable + Size::Variable, Size::Variable);
+    fn methods() {
+        assert!(Size::fixed(4).is_fixed());
+        assert!(Size::variable().is_variable());
+        assert_eq!(Size::fixed(4).size(), 4);
+    }
 
-        assert_eq!(Size::Fixed(4) * 4, Size::Fixed(16));
-        assert_eq!(Size::Variable * 4, Size::Variable);
+    #[test]
+    fn add() {
+        assert_eq!(Size::add(Size::fixed(4), Size::fixed(5)), Size::fixed(9));
+        assert!(Size::add(Size::fixed(4), Size::variable()).is_variable());
+        assert!(Size::add(Size::variable(), Size::fixed(5)).is_variable());
+        assert!(Size::add(Size::variable(), Size::variable()).is_variable());
+    }
+
+    #[test]
+    fn mul() {
+        assert_eq!(Size::mul(2, Size::fixed(5)), Size::fixed(10));
+        assert!(Size::mul(2, Size::variable()).is_variable());
+    }
+
+    #[test]
+    #[should_panic]
+    fn bounds() {
+        Size::variable().size();
     }
 }

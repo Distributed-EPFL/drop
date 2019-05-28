@@ -2,6 +2,7 @@
 
 // Features
 
+#![feature(const_fn)]
 #![feature(specialization)]
 
 // Modules

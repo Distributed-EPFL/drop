@@ -12,7 +12,7 @@ use super::writer::Writer;
 // Implementations
 
 impl<Item: Readable> Readable for Vec<Item> {
-    const SIZE: Size = Size::Variable;
+    const SIZE: Size = Size::variable();
 
     default fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
         visitor.visit(&Varint(self.len() as u32))?;
@@ -26,7 +26,7 @@ impl<Item: Readable> Readable for Vec<Item> {
 }
 
 impl<Item: Load> Writable for Vec<Item> {
-    const SIZE: Size = Size::Variable;
+    const SIZE: Size = Size::variable();
 
     default fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
         let size = Varint::load(visitor)?.0 as usize;

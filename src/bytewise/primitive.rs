@@ -10,19 +10,15 @@ use super::writer::Writer;
 // Implementations
 
 impl Readable for bool {
-    const SIZE: Size = Size::Fixed(1);
+    const SIZE: Size = Size::fixed(1);
 
     fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
-        if *self {
-            visitor.push(&[0x01])
-        } else {
-            visitor.push(&[0x00])
-        }
+        visitor.push(&[*self as u8])
     }
 }
 
 impl Writable for bool {
-    const SIZE: Size = Size::Fixed(1);
+    const SIZE: Size = Size::fixed(1);
 
     fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
         *self = visitor.pop(1)?[0] != 0;
@@ -33,7 +29,7 @@ impl Writable for bool {
 macro_rules! implement {
     ($($type:ty: $size:expr), *) => ($(
         impl Readable for $type {
-            const SIZE: Size = Size::Fixed($size);
+            const SIZE: Size = Size::fixed($size);
 
             fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
                 visitor.push(&self.to_le_bytes())
@@ -41,7 +37,7 @@ macro_rules! implement {
         }
 
         impl Writable for $type {
-            const SIZE: Size = Size::Fixed($size);
+            const SIZE: Size = Size::fixed($size);
 
             fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
                 *self = Self::from_le_bytes(visitor.pop($size)?.try_into().unwrap());
