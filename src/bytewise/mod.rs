@@ -4,6 +4,7 @@ mod primitive;
 mod readable;
 mod reader;
 mod size;
+mod vec;
 mod writable;
 mod writer;
 

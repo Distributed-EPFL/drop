@@ -1,5 +1,9 @@
 // #[kcov(exclude)]
 
+// Features
+
+#![feature(specialization)]
+
 // Modules
 
 pub mod bytewise;
