@@ -1,6 +1,7 @@
 // Dependencies
 
 use std::ops::Add;
+use std::ops::Mul;
 
 // Enums
 
@@ -24,6 +25,18 @@ impl Add<Size> for Size {
     }
 }
 
+impl Mul<usize> for Size {
+    type Output = Size;
+
+    fn mul(self, rhs: usize) -> Size {
+        if let Size::Fixed(left) = self {
+            Size::Fixed(left * rhs)
+        } else {
+            Size::Variable
+        }
+    }
+}
+
 // Tests
 // #[kcov(exclude)]
 
@@ -37,5 +50,8 @@ mod tests {
         assert_eq!(Size::Fixed(4) + Size::Variable, Size::Variable);
         assert_eq!(Size::Variable + Size::Fixed(5), Size::Variable);
         assert_eq!(Size::Variable + Size::Variable, Size::Variable);
+
+        assert_eq!(Size::Fixed(4) * 4, Size::Fixed(16));
+        assert_eq!(Size::Variable * 4, Size::Variable);
     }
 }
