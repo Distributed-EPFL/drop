@@ -15,6 +15,12 @@ impl Size {
     }
 
     pub const fn add(lho: Size, rho: Size) -> Size {
+        // As of May 28, 2019, Rust does not provide support for `if` or `match` inside a
+        // `const fn`. What follows is an implementation of `if` using the absorbing property of
+        // the multiplication by zero. The second value of `fixed` is zero if either element of the
+        // first `fixed` tuple is false. The array access in the last line simulates a ternary
+        // operator.
+
         let fixed = (lho.0 != 0, rho.0 != 0);
         let fixed = (fixed.0 as usize) * (fixed.1 as usize);
         Size([0, lho.0 + rho.0][fixed])
