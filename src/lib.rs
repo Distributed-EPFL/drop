@@ -8,6 +8,8 @@ pub mod bytewise;
 
 pub use bytewise::Readable;
 pub use bytewise::Reader;
+pub use bytewise::Writable;
+pub use bytewise::Writer;
 
 // Enums
 
