@@ -8,7 +8,7 @@ use crate::bytewise::Writer;
 
 // Structs
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Varint(pub u32);
 
 // Implementations
@@ -102,7 +102,7 @@ mod tests {
             let value = Varint($value);
             Readable::accept(&value, &mut Reference(&$reference[..])).unwrap();
 
-            let mut value = Varint(Default::default());
+            let mut value: Varint = Default::default();
 
             Writable::accept(&mut value, &mut Reference(&$reference[..])).unwrap();
             assert_eq!(value, Varint($value));
