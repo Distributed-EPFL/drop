@@ -11,6 +11,7 @@ mod reader;
 mod serialize;
 mod size;
 mod tape;
+mod tuple;
 mod vec;
 mod writable;
 mod writer;
