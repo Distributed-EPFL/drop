@@ -1,6 +1,5 @@
 // Dependencies
 
-use std::vec::Vec;
 use super::readable::Readable;
 use super::reader::Reader;
 use super::tape::Tape;

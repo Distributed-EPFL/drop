@@ -25,3 +25,7 @@ pub use bytewise::Size;
 // Structs
 
 pub use data::Varint;
+
+// Functions
+
+pub use bytewise::serialize;

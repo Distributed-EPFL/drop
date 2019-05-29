@@ -8,6 +8,7 @@ mod measurable;
 mod primitive;
 mod readable;
 mod reader;
+mod serialize;
 mod size;
 mod tape;
 mod vec;
@@ -26,3 +27,7 @@ pub use writer::Writer;
 // Enums
 
 pub use size::Size;
+
+// Functions
+
+pub use serialize::serialize;
