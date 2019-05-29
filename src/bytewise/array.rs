@@ -35,7 +35,29 @@ macro_rules! implement {
             }
         }
 
-        // TODO: Implement Load for [Item; $size]
+        impl<Item: Load> Load for [Item; $size] {
+            default fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+                unsafe {
+                    let mut array: [Item; $size] = std::mem::uninitialized();
+
+                    for index in 0..$size {
+                        match Item::load(from) {
+                            Ok(item) => std::ptr::write(&mut array[index], item),
+                            Err(err) => {
+                                for item in &mut array[0..index] {
+                                    std::ptr::drop_in_place(item);
+                                }
+
+                                std::mem::forget(array);
+                                return Err(err);
+                            }
+                        }
+                    }
+
+                    return Ok(array);
+                }
+            }
+        }
 
         impl Readable for [u8; $size] {
             fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
