@@ -42,6 +42,14 @@ impl<Item: Load> Writable for Vec<Item> {
     }
 }
 
+impl<Item: Load> Load for Vec<Item> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+        let mut vec = Vec::<Item>::new();
+        from.visit(&mut vec)?;
+        Ok(vec)
+    }
+}
+
 impl Readable for Vec<u8> {
     fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
         visitor.visit(&Varint(self.len() as u32))?;

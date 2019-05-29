@@ -1,6 +1,7 @@
 // Dependencies
 
 use std::convert::TryInto;
+use super::load::Load;
 use super::readable::Readable;
 use super::reader::Reader;
 use super::size::Size;
@@ -21,8 +22,14 @@ impl Writable for bool {
     const SIZE: Size = Size::fixed(1);
 
     fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
-        *self = visitor.pop(1)?[0] != 0;
+        *self = Self::load(visitor)?;
         Ok(())
+    }
+}
+
+impl Load for bool {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+        Ok(from.pop(1)?[0] != 0)
     }
 }
 
@@ -40,8 +47,14 @@ macro_rules! implement {
             const SIZE: Size = Size::fixed($size);
 
             fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
-                *self = Self::from_le_bytes(visitor.pop($size)?.try_into().unwrap());
+                *self = Self::load(visitor)?;
                 Ok(())
+            }
+        }
+
+        impl Load for $type {
+            fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+                Ok(Self::from_le_bytes(from.pop($size)?.try_into().unwrap()))
             }
         }
     )*);

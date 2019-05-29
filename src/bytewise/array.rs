@@ -1,5 +1,6 @@
 // Dependencies
 
+use super::load::Load;
 use super::readable::Readable;
 use super::reader::Reader;
 use super::size::Size;
@@ -34,6 +35,8 @@ macro_rules! implement {
             }
         }
 
+        // TODO: Implement Load for [Item; $size]
+
         impl Readable for [u8; $size] {
             fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
                 visitor.push(self)
@@ -44,6 +47,14 @@ macro_rules! implement {
             fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
                 self.clone_from_slice(visitor.pop($size)?);
                 Ok(())
+            }
+        }
+
+        impl Load for [u8; $size] {
+            fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+                let mut array: [u8; $size] = [0; $size];
+                from.visit(&mut array)?;
+                Ok(array)
             }
         }
     )*);

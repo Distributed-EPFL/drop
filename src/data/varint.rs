@@ -1,5 +1,6 @@
 // Dependencies
 
+use crate::bytewise::Load;
 use crate::bytewise::Readable;
 use crate::bytewise::Reader;
 use crate::bytewise::Size;
@@ -33,25 +34,29 @@ impl Writable for Varint {
     const SIZE: Size = Size::variable();
 
     fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
-        let alpha = visitor.pop(1)?[0];
+        *self = Self::load(visitor)?;
+        Ok(())
+    }
+}
+
+impl Load for Varint {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+        let alpha = from.pop(1)?[0];
 
         if alpha & 0x80 != 0 {
             if alpha & 0x40 != 0 {
-                let more = visitor.pop(3)?;
+                let more = from.pop(3)?;
                 let (beta, gamma, delta) = (more[0], more[1], more[2]);
 
-                *self = Varint(((alpha & 0x3f) as u32) << 24 | (beta as u32) << 16 | (gamma as u32) << 8 | (delta as u32));
-                Ok(())
+                Ok(Varint(((alpha & 0x3f) as u32) << 24 | (beta as u32) << 16 | (gamma as u32) << 8 | (delta as u32)))
             } else {
-                let more = visitor.pop(1)?;
+                let more = from.pop(1)?;
                 let beta = more[0];
 
-                *self = Varint(((alpha & 0x7f) as u32) << 8 | (beta as u32));
-                Ok(())
+                Ok(Varint(((alpha & 0x7f) as u32) << 8 | (beta as u32)))
             }
         } else {
-            *self = Varint(alpha as u32);
-            Ok(())
+            Ok(Varint(alpha as u32))
         }
     }
 }

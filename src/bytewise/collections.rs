@@ -47,6 +47,14 @@ impl<Key: Load + Ord, Value: Load> Writable for BTreeMap<Key, Value> {
     }
 }
 
+impl<Key: Load + Ord, Value: Load> Load for BTreeMap<Key, Value> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+        let mut map = BTreeMap::<Key, Value>::new();
+        from.visit(&mut map)?;
+        Ok(map)
+    }
+}
+
 impl<Key: Readable, Value: Readable> Readable for HashMap<Key, Value> {
     const SIZE: Size = Size::variable();
 
@@ -79,6 +87,14 @@ impl<Key: Load + Eq + Hash, Value: Load> Writable for HashMap<Key, Value> {
     }
 }
 
+impl<Key: Load + Eq + Hash, Value: Load> Load for HashMap<Key, Value> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+        let mut map = HashMap::<Key, Value>::new();
+        from.visit(&mut map)?;
+        Ok(map)
+    }
+}
+
 impl<Item: Readable> Readable for LinkedList<Item> {
     const SIZE: Size = Size::variable();
 
@@ -105,6 +121,14 @@ impl<Item: Load> Writable for LinkedList<Item> {
         }
 
         Ok(())
+    }
+}
+
+impl<Item: Load> Load for LinkedList<Item> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+        let mut list = LinkedList::<Item>::new();
+        from.visit(&mut list)?;
+        Ok(list)
     }
 }
 
@@ -136,5 +160,13 @@ impl<Item: Load> Writable for VecDeque<Item> {
         }
 
         Ok(())
+    }
+}
+
+impl<Item: Load> Load for VecDeque<Item> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+        let mut deque = VecDeque::<Item>::new();
+        from.visit(&mut deque)?;
+        Ok(deque)
     }
 }
