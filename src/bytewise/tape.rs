@@ -1,6 +1,6 @@
 // Dependencies
 
-use super::infallible::Infallible;
+use super::errors::Infallible;
 use super::readable::Readable;
 use super::reader::Reader;
 

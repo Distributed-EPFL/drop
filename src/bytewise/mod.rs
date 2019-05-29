@@ -2,7 +2,7 @@
 
 mod array;
 mod collections;
-mod infallible;
+mod errors;
 mod load;
 mod measurable;
 mod primitive;

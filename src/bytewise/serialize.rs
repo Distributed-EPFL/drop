@@ -1,7 +1,7 @@
 // Dependencies
 
 use std::vec::Vec;
-use super::infallible::Infallible;
+use super::errors::Infallible;
 use super::measurable::Measurable;
 use super::readable::Readable;
 use super::reader::Reader;
