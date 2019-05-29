@@ -2,6 +2,7 @@
 
 mod array;
 mod collections;
+mod deserialize;
 mod errors;
 mod load;
 mod measurable;
@@ -31,4 +32,5 @@ pub use size::Size;
 
 // Functions
 
+pub use deserialize::deserialize;
 pub use serialize::serialize;

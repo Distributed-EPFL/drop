@@ -28,4 +28,5 @@ pub use data::Varint;
 
 // Functions
 
+pub use bytewise::deserialize;
 pub use bytewise::serialize;
