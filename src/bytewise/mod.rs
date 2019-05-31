@@ -3,7 +3,7 @@
 mod array;
 mod collections;
 mod deserialize;
-mod error;
+mod errors;
 mod load;
 mod measurable;
 mod primitive;

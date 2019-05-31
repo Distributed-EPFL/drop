@@ -1,7 +1,7 @@
 // Dependencies
 
 use std::vec::Vec;
-use super::error::Error;
+use super::errors::Error;
 use super::load::Load;
 use super::writer::Writer;
 
