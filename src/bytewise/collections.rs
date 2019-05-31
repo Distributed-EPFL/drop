@@ -51,6 +51,14 @@ impl<Item: Load + Ord> Writable for BinaryHeap<Item> {
     }
 }
 
+impl<Item: Load + Ord> Load for BinaryHeap<Item> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+        let mut heap = BinaryHeap::<Item>::new();
+        from.visit(&mut heap)?;
+        Ok(heap)
+    }
+}
+
 impl<Key: Readable, Value: Readable> Readable for BTreeMap<Key, Value> {
     const SIZE: Size = Size::variable();
 
@@ -115,6 +123,14 @@ impl<Item: Load + Ord> Writable for BTreeSet<Item> {
         }
 
         Ok(())
+    }
+}
+
+impl<Item: Load + Ord> Load for BTreeSet<Item> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+        let mut set = BTreeSet::<Item>::new();
+        from.visit(&mut set)?;
+        Ok(set)
     }
 }
 
@@ -186,6 +202,14 @@ impl<Item: Load + Eq + Hash> Writable for HashSet<Item> {
         }
 
         Ok(())
+    }
+}
+
+impl<Item: Load + Eq + Hash> Load for HashSet<Item> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+        let mut set = HashSet::<Item>::new();
+        from.visit(&mut set)?;
+        Ok(set)
     }
 }
 
