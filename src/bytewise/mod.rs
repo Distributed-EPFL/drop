@@ -35,3 +35,7 @@ pub use size::Size;
 
 pub use deserialize::deserialize;
 pub use serialize::serialize;
+
+// Errors
+
+pub use errors::DeserializeError;
