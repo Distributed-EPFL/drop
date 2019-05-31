@@ -11,6 +11,7 @@ mod readable;
 mod reader;
 mod serialize;
 mod size;
+mod string;
 mod tape;
 mod tuple;
 mod vec;
