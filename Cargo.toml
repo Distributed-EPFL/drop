@@ -5,3 +5,4 @@ authors = ["Matteo Monti <matteo.monti@epfl.ch>"]
 edition = "2018"
 
 [dependencies]
+failure = "0.1.5"

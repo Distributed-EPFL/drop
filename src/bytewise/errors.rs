@@ -1,11 +1,15 @@
 // #[kcov(exclude)]
 
-// Enums
+// Dependencies
 
-#[derive(Debug)]
-pub enum Infallible {}
+use failure::Fail;
 
-#[derive(Debug)]
-pub enum Error {
-    BufferTooShort
-}
+// Structs
+
+#[derive(Fail, Debug)]
+#[fail(display = "This error never occurs.")]
+pub struct Infallible {}
+
+#[derive(Fail, Debug)]
+#[fail(display = "Unexpectedly reached the end of the buffer.")]
+pub struct EndOfBuffer;
