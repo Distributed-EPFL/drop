@@ -38,4 +38,4 @@ pub use serialize::serialize;
 
 // Errors
 
-pub use errors::DeserializeError;
+pub use errors::EndOfBuffer;

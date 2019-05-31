@@ -4,10 +4,8 @@
 
 use failure::Fail;
 
-// Enums
+// Structs
 
 #[derive(Fail, Debug)]
-pub enum DeserializeError {
-    #[fail(display = "Unexpectedly reached the end of the buffer.")]
-    EndOfBuffer
-}
+#[fail(display = "Unexpectedly reached the end of the buffer.")]
+pub struct EndOfBuffer;
