@@ -63,9 +63,9 @@ impl Load for Varint {
 }
 
 // Tests
-// #[kcov(exclude)]
 
 #[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
 mod tests {
     use failure::Fail;
     use super::*;

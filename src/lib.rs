@@ -1,5 +1,3 @@
-// #[kcov(exclude)]
-
 // Features
 
 #![feature(const_fn)]

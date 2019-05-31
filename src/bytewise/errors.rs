@@ -1,5 +1,3 @@
-// #[kcov(exclude)]
-
 // Dependencies
 
 use failure::Fail;

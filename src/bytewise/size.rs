@@ -45,9 +45,9 @@ impl Size {
 }
 
 // Tests
-// #[kcov(exclude)]
 
 #[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
 mod tests {
     use super::*;
 
