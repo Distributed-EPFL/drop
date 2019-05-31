@@ -2,7 +2,7 @@
 
 use std::vec::Vec;
 use failure::Error;
-use super::errors::EndOfBuffer;
+use super::errors::DeserializeError;
 use super::load::Load;
 use super::writer::Writer;
 
@@ -20,7 +20,7 @@ impl Writer for Deserializer<'_> {
 
             Ok(slice)
         } else {
-            Err(EndOfBuffer.into())
+            Err(DeserializeError::EndOfBuffer.into())
         }
     }
 }
