@@ -1,5 +1,6 @@
 // Dependencies
 
+use failure::Error;
 use crate::bytewise::Load;
 use crate::bytewise::Readable;
 use crate::bytewise::Reader;
@@ -17,7 +18,7 @@ pub struct Varint(pub u32);
 impl Readable for Varint {
     const SIZE: Size = Size::variable();
 
-    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
+    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Error> {
         assert!(self.0 <= 0x3fffffff);
 
         if self.0 < 128 {
@@ -33,14 +34,14 @@ impl Readable for Varint {
 impl Writable for Varint {
     const SIZE: Size = Size::variable();
 
-    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
+    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Error> {
         *self = Self::load(visitor)?;
         Ok(())
     }
 }
 
 impl Load for Varint {
-    fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, Error> {
         let alpha = from.pop(1)?[0];
 
         if alpha & 0x80 != 0 {
@@ -66,37 +67,35 @@ impl Load for Varint {
 
 #[cfg(test)]
 mod tests {
+    use failure::Fail;
     use super::*;
 
     // Structs
 
     struct Reference(&'static [u8]);
 
-    #[derive(Debug)]
+    #[derive(Fail, Debug)]
+    #[fail(display = "An unexpected input was provided the `Reader`/`Writer`.")]
     struct Mismatch;
 
     // Implementations
 
     impl Reader for Reference {
-        type Error = Mismatch;
-
-        fn push(&mut self, chunk: &[u8]) -> Result<(), Self::Error> {
+        fn push(&mut self, chunk: &[u8]) -> Result<(), Error> {
             if &self.0[0..chunk.len()] == chunk {
                 *self = Reference(&self.0[chunk.len()..]);
                 Ok(())
-            } else { Err(Mismatch) }
+            } else { Err(Mismatch.into()) }
         }
     }
 
     impl Writer for Reference {
-        type Error = Mismatch;
-
-        fn pop(&mut self, size: usize) -> Result<&[u8], Self::Error> {
+        fn pop(&mut self, size: usize) -> Result<&[u8], Error> {
             if size <= self.0.len() {
                 let chunk = &self.0[0..size];
                 *self = Reference(&self.0[size..]);
                 Ok(chunk)
-            } else { Err(Mismatch) }
+            } else { Err(Mismatch.into()) }
         }
     }
 

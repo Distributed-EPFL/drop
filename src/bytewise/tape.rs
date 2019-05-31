@@ -1,6 +1,6 @@
 // Dependencies
 
-use super::errors::Infallible;
+use failure::Error;
 use super::readable::Readable;
 use super::reader::Reader;
 
@@ -21,14 +21,12 @@ impl Tape {
 }
 
 impl Reader for Tape {
-    type Error = Infallible;
-
-    fn push(&mut self, chunk: &[u8]) -> Result<(), Self::Error> {
+    fn push(&mut self, chunk: &[u8]) -> Result<(), Error> {
         self.0 += chunk.len();
         Ok(())
     }
 
-    fn visit<Acceptor: Readable>(&mut self, acceptor: &Acceptor) -> Result<(), Self::Error> {
+    fn visit<Acceptor: Readable>(&mut self, acceptor: &Acceptor) -> Result<(), Error> {
         if Acceptor::SIZE.is_fixed() {
             self.0 += Acceptor::SIZE.size();
             Ok(())

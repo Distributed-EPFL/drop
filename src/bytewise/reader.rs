@@ -1,14 +1,14 @@
 // Dependencies
 
+use failure::Error;
 use super::readable::Readable;
 
 // Traits
 
 pub trait Reader : Sized {
-    type Error;
-    fn push(&mut self, chunk: &[u8]) -> Result<(), Self::Error>;
+    fn push(&mut self, chunk: &[u8]) -> Result<(), Error>;
 
-    fn visit<Acceptor: Readable>(&mut self, acceptor: &Acceptor) -> Result<(), Self::Error> {
+    fn visit<Acceptor: Readable>(&mut self, acceptor: &Acceptor) -> Result<(), Error> {
         acceptor.accept(self)
     }
 }

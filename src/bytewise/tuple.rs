@@ -1,5 +1,6 @@
 // Dependencies
 
+use failure::Error;
 use super::load::Load;
 use super::readable::Readable;
 use super::reader::Reader;
@@ -20,7 +21,7 @@ macro_rules! implement {
             const SIZE: Size = size!($($types),+);
 
             #[allow(non_snake_case)]
-            fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
+            fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Error> {
                 let ($($types,)+) = self;
                 $(visitor.visit($types)?;)+
 
@@ -32,7 +33,7 @@ macro_rules! implement {
             const SIZE: Size = size!($($types),+);
 
             #[allow(non_snake_case)]
-            fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Visitor::Error> {
+            fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Error> {
                 let ($($types,)+) = self;
                 $(visitor.visit($types)?;)+
 
@@ -41,7 +42,7 @@ macro_rules! implement {
         }
 
         impl<$($types: Load),+> Load for ($($types,)+) {
-            fn load<From: Writer>(from: &mut From) -> Result<Self, From::Error> {
+            fn load<From: Writer>(from: &mut From) -> Result<Self, Error> {
                 Ok(($($types::load(from)?,)+))
             }
         }

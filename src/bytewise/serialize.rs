@@ -1,7 +1,7 @@
 // Dependencies
 
+use failure::Error;
 use std::vec::Vec;
-use super::errors::Infallible;
 use super::measurable::Measurable;
 use super::readable::Readable;
 use super::reader::Reader;
@@ -13,9 +13,7 @@ struct Serializer(Vec<u8>);
 // Implementations
 
 impl Reader for Serializer {
-    type Error = Infallible;
-
-    fn push(&mut self, chunk: &[u8]) -> Result<(), Self::Error> {
+    fn push(&mut self, chunk: &[u8]) -> Result<(), Error> {
         self.0.extend_from_slice(chunk);
         Ok(())
     }
