@@ -45,13 +45,17 @@ pub fn error(options: proc_macro::TokenStream, input: proc_macro::TokenStream) -
     let VisibleParseProxy(visible) = parse_macro_input!(options as VisibleParseProxy);
     let input = parse_macro_input!(input as DeriveInput);
 
+    let name = &input.ident;
     let display = implement(&visible, &input, Mode::Display);
     let debug = implement(&visible, &input, Mode::Debug);
 
     let output = quote! {
         #input
+
         #display
         #debug
+
+        impl std::error::Error for #name {}
     };
 
     output.into()
