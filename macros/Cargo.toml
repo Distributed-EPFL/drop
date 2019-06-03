@@ -1,9 +1,12 @@
 [package]
-name = "drop"
+name = "macros"
 version = "0.1.0"
 authors = ["Matteo Monti <matteo.monti@epfl.ch>"]
 edition = "2018"
 
+[lib]
+proc-macro = true
+
 [dependencies]
-macros = { path = "macros" }
-failure = "0.1.5"
+quote = "0.6.12"
+syn = "0.15.34"
