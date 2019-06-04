@@ -63,7 +63,6 @@ pub fn error(options: proc_macro::TokenStream, input: proc_macro::TokenStream) -
 
 fn implement(visible: &Visible, input: &DeriveInput, mode: Mode) -> TokenStream {
     let name = &input.ident;
-    let (format, arguments) = format(visible, mode);
 
     let implementation = match mode {
         Mode::Display => quote! { std::fmt::Display },
@@ -72,6 +71,8 @@ fn implement(visible: &Visible, input: &DeriveInput, mode: Mode) -> TokenStream 
 
     match &input.data {
         Data::Struct(_) => {
+            let (format, arguments) = format(visible, mode);
+
             quote! {
                 impl #implementation for #name {
                     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -128,7 +129,7 @@ fn dispatch(name: &Ident, data: &DataEnum, mode: Mode) -> TokenStream {
 
         let operation = match mode {
             Mode::Display => quote! { variant.fmt(formatter) },
-            Mode::Debug => quote! {{ variant.fmt(formatter)?; write!(formatter, " -> {}", stringify!(#name)) }}
+            Mode::Debug => quote! {{ write!(formatter, "{} <- ", stringify!(#name))?; variant.fmt(formatter) }}
         };
 
         dispatch = quote! {
