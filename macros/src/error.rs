@@ -1,11 +1,14 @@
 // Dependencies
 
 use proc_macro2::TokenStream;
+use quote::ToTokens;
 use quote::quote;
 use std::vec::Vec;
 use syn::Data;
 use syn::DataEnum;
 use syn::DeriveInput;
+use syn::Fields;
+use syn::GenericParam;
 use syn::Ident;
 use syn::Result;
 use syn::Token;
@@ -46,8 +49,9 @@ pub fn error(options: proc_macro::TokenStream, input: proc_macro::TokenStream) -
     let input = parse_macro_input!(input as DeriveInput);
 
     let name = &input.ident;
-    let display = implement(&visible, &input, Mode::Display);
-    let debug = implement(&visible, &input, Mode::Debug);
+    let display = show(&visible, &input, Mode::Display);
+    let debug = show(&visible, &input, Mode::Debug);
+    let nest = nest(&input);
 
     let output = quote! {
         #input
@@ -56,12 +60,14 @@ pub fn error(options: proc_macro::TokenStream, input: proc_macro::TokenStream) -
         #debug
 
         impl std::error::Error for #name {}
+
+        #nest
     };
 
     output.into()
 }
 
-fn implement(visible: &Visible, input: &DeriveInput, mode: Mode) -> TokenStream {
+fn show(visible: &Visible, input: &DeriveInput, mode: Mode) -> TokenStream {
     let name = &input.ident;
 
     let implementation = match mode {
@@ -139,4 +145,49 @@ fn dispatch(name: &Ident, data: &DataEnum, mode: Mode) -> TokenStream {
     }
 
     dispatch
+}
+
+fn nest(input: &DeriveInput) -> TokenStream {
+    if let Data::Enum(data) = &input.data {
+        let name = &input.ident;
+        let generics = &input.generics;
+
+        let mut specialization = TokenStream::new();
+        for parameter in &generics.params {
+            let parameter: TokenStream = match parameter.clone() {
+                GenericParam::Type(parameter) => parameter.ident.into_token_stream(),
+                GenericParam::Lifetime(parameter) => parameter.lifetime.into_token_stream(),
+                GenericParam::Const(parameter) => parameter.ident.into_token_stream()
+            };
+
+            specialization = quote! {
+                #specialization #parameter,
+            }
+        }
+
+        let mut nest = TokenStream::new();
+        for variant in &data.variants {
+            let source = if let Fields::Unnamed(fields) = &variant.fields {
+                let fields = &fields.unnamed;
+                if fields.len() != 1 { panic!("Attribute #[error] cannot refer to an `enum` with more than one field per variant."); }
+                &fields.first().unwrap().value().ty
+            } else { panic!("Attribute #[error] cannot refer to an `enum` with named variant fields."); };
+
+            let variant = &variant.ident;
+
+            nest = quote! {
+                #nest
+
+                impl<#generics> From<#source> for #name<#specialization> {
+                    fn from(from: #source) -> Self {
+                        #name::#variant(from)
+                    }
+                }
+            }
+        }
+
+        nest
+    } else {
+        quote! {}
+    }
 }

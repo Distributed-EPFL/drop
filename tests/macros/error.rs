@@ -40,10 +40,25 @@ enum IAmConfused {
     WhatWillItBe(WhatWillItBe)
 }
 
+// Functions
+
+fn return_something() -> Result<(), Alpha> {
+    Err(Alpha)
+}
+
+fn return_something_else() -> Result<(), WhatWillItBe> {
+    return_something()?;
+    Ok(())
+}
+
+fn confusedly_return_something() -> Result<(), IAmConfused> {
+    return_something_else()?;
+    Ok(())
+}
+
 // Tests
 
 #[test]
 fn error() {
-    println!("{}", IAmConfused::WhatWillItBe(WhatWillItBe::MyError(MyError{i: 99, j: 44, k: "Hello World!".to_string(), c: Peculiar})));
-    println!("{:?}", IAmConfused::WhatWillItBe(WhatWillItBe::MyError(MyError{i: 99, j: 44, k: "Hello World!".to_string(), c: Peculiar})));
+    println!("{:?}", confusedly_return_something());
 }
