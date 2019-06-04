@@ -2,63 +2,66 @@
 
 use macros::error;
 
+// Traits
+
+trait Reader {
+    type Error;
+}
+
+trait Readable {
+    type Error;
+}
+
+// Errors
+
+#[error]
+struct ReaderError<ReaderType: Reader>(ReaderType::Error);
+
+#[error]
+struct ReadableError<ReadableType: Readable>(ReadableType::Error);
+
+#[error]
+enum ReadError<ReaderType: Reader, ReadableType: Readable> {
+    Reader(ReaderError<ReaderType>),
+    Readable(ReadableError<ReadableType>)
+}
+
 // Structs
 
-#[derive(Debug)]
-struct Peculiar;
+struct MyReader;
+struct MyReadable;
 
-impl std::fmt::Display for Peculiar {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(formatter, "Peculiar (display)")
-    }
+// Implementations
+
+impl Reader for MyReader {
+    type Error = u32;
 }
 
-#[error(i, k, c)]
-struct MyError {
-    i: u32,
-    j: u32,
-    k: String,
-    c: Peculiar
-}
-
-#[error]
-struct Alpha;
-
-#[error]
-struct Beta;
-
-#[error]
-enum WhatWillItBe {
-    Alpha(Alpha),
-    Beta(Beta),
-    MyError(MyError)
-}
-
-#[error]
-enum IAmConfused {
-    Alpha(Alpha),
-    WhatWillItBe(WhatWillItBe)
+impl Readable for MyReadable {
+    type Error = u32;
 }
 
 // Functions
 
-fn return_something() -> Result<(), Alpha> {
-    Err(Alpha)
+fn reader_result(first: bool) -> Result<(), ReaderError<MyReader>> {
+    if first { Ok(()) } else { Err(ReaderError(99)) }
+
 }
 
-fn return_something_else() -> Result<(), WhatWillItBe> {
-    return_something()?;
+fn readable_result(second: bool) -> Result<(), ReadableError<MyReadable>> {
+    if second { Ok(()) } else { Err(ReadableError(84)) }
+}
+
+fn read_result(first: bool, second: bool) -> Result<(), ReadError<MyReader, MyReadable>> {
+    reader_result(first)?;
+    readable_result(second)?;
+
     Ok(())
 }
 
-fn confusedly_return_something() -> Result<(), IAmConfused> {
-    return_something_else()?;
-    Ok(())
-}
-
-// Tests
+// Test cases
 
 #[test]
 fn error() {
-    println!("{:?}", confusedly_return_something());
+    println!("{:?}", read_result(true, true));
 }

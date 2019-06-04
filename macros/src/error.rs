@@ -9,6 +9,7 @@ use syn::DataEnum;
 use syn::DeriveInput;
 use syn::Fields;
 use syn::GenericParam;
+use syn::Generics;
 use syn::Ident;
 use syn::Result;
 use syn::Token;
@@ -49,6 +50,9 @@ pub fn error(options: proc_macro::TokenStream, input: proc_macro::TokenStream) -
     let input = parse_macro_input!(input as DeriveInput);
 
     let name = &input.ident;
+    let generics = &input.generics;
+    let specialization = specialization(generics);
+
     let display = show(&visible, &input, Mode::Display);
     let debug = show(&visible, &input, Mode::Debug);
     let nest = nest(&input);
@@ -59,7 +63,7 @@ pub fn error(options: proc_macro::TokenStream, input: proc_macro::TokenStream) -
         #display
         #debug
 
-        impl std::error::Error for #name {}
+        impl #generics std::error::Error for #name #specialization {}
 
         #nest
     };
@@ -69,6 +73,8 @@ pub fn error(options: proc_macro::TokenStream, input: proc_macro::TokenStream) -
 
 fn show(visible: &Visible, input: &DeriveInput, mode: Mode) -> TokenStream {
     let name = &input.ident;
+    let generics = &input.generics;
+    let specialization = specialization(generics);
 
     let implementation = match mode {
         Mode::Display => quote! { std::fmt::Display },
@@ -80,7 +86,7 @@ fn show(visible: &Visible, input: &DeriveInput, mode: Mode) -> TokenStream {
             let (format, arguments) = format(visible, mode);
 
             quote! {
-                impl #implementation for #name {
+                impl #generics #implementation for #name #specialization {
                     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                         write!(formatter, #format, stringify!(#name), #arguments)
                     }
@@ -91,7 +97,7 @@ fn show(visible: &Visible, input: &DeriveInput, mode: Mode) -> TokenStream {
             let dispatch = dispatch(name, data, mode);
 
             quote! {
-                impl #implementation for #name {
+                impl #generics #implementation for #name #specialization {
                     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
                         match self {
                             #dispatch
@@ -147,11 +153,8 @@ fn dispatch(name: &Ident, data: &DataEnum, mode: Mode) -> TokenStream {
     dispatch
 }
 
-fn nest(input: &DeriveInput) -> TokenStream {
-    if let Data::Enum(data) = &input.data {
-        let name = &input.ident;
-        let generics = &input.generics;
-
+fn specialization(generics: &Generics) -> TokenStream {
+    if generics.params.len() > 0 {
         let mut specialization = TokenStream::new();
         for parameter in &generics.params {
             let parameter: TokenStream = match parameter.clone() {
@@ -164,6 +167,16 @@ fn nest(input: &DeriveInput) -> TokenStream {
                 #specialization #parameter,
             }
         }
+
+        quote! { <#specialization> }
+    } else { TokenStream::new() }
+}
+
+fn nest(input: &DeriveInput) -> TokenStream {
+    if let Data::Enum(data) = &input.data {
+        let name = &input.ident;
+        let generics = &input.generics;
+        let specialization = specialization(generics);
 
         let mut nest = TokenStream::new();
         for variant in &data.variants {
@@ -178,7 +191,7 @@ fn nest(input: &DeriveInput) -> TokenStream {
             nest = quote! {
                 #nest
 
-                impl<#generics> From<#source> for #name<#specialization> {
+                impl #generics From<#source> for #name #specialization {
                     fn from(from: #source) -> Self {
                         #name::#variant(from)
                     }
@@ -188,6 +201,6 @@ fn nest(input: &DeriveInput) -> TokenStream {
 
         nest
     } else {
-        quote! {}
+        TokenStream::new()
     }
 }
