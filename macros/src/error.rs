@@ -22,7 +22,7 @@ use syn::punctuated::Punctuated;
 
 type Visible = Punctuated<Ident, Token![,]>;
 
-// Enum
+// Enums
 
 #[derive(Clone, Copy)]
 enum Mode {
@@ -49,9 +49,7 @@ pub fn error(options: proc_macro::TokenStream, input: proc_macro::TokenStream) -
     let VisibleParseProxy(visible) = parse_macro_input!(options as VisibleParseProxy);
     let input = parse_macro_input!(input as DeriveInput);
 
-    let name = &input.ident;
-    let generics = &input.generics;
-    let specialization = specialization(generics);
+    let (name, generics, specialization) = info(&input);
 
     let display = show(&visible, &input, Mode::Display);
     let debug = show(&visible, &input, Mode::Debug);
@@ -71,10 +69,36 @@ pub fn error(options: proc_macro::TokenStream, input: proc_macro::TokenStream) -
     output.into()
 }
 
-fn show(visible: &Visible, input: &DeriveInput, mode: Mode) -> TokenStream {
+fn info(input: &DeriveInput) -> (&Ident, &Generics, TokenStream) {
     let name = &input.ident;
     let generics = &input.generics;
     let specialization = specialization(generics);
+
+    (name, generics, specialization)
+}
+
+fn specialization(generics: &Generics) -> TokenStream {
+    if generics.params.len() > 0 {
+        let mut specialization = TokenStream::new();
+
+        for parameter in &generics.params {
+            let parameter = match parameter.clone() {
+                GenericParam::Type(parameter) => parameter.ident.into_token_stream(),
+                GenericParam::Lifetime(parameter) => parameter.lifetime.into_token_stream(),
+                GenericParam::Const(parameter) => parameter.ident.into_token_stream()
+            };
+
+            specialization = quote! {
+                #specialization #parameter,
+            }
+        }
+
+        quote! { <#specialization> }
+    } else { TokenStream::new() }
+}
+
+fn show(visible: &Visible, input: &DeriveInput, mode: Mode) -> TokenStream {
+    let (name, generics, specialization) = info(input);
 
     let implementation = match mode {
         Mode::Display => quote! { std::fmt::Display },
@@ -106,22 +130,22 @@ fn show(visible: &Visible, input: &DeriveInput, mode: Mode) -> TokenStream {
                 }
             }
         },
-        _ => panic!("Attribute #[error] can only refer to `struct`s or `enum`s.")
+        _ => panic!("Attribute `#[error]` can only refer to `struct`s or `enum`s.")
     }
 }
 
 fn format(visible: &Visible, mode: Mode) -> (String, TokenStream) {
-    let (header, item) = match mode {
+    let (name, item) = match mode {
         Mode::Display => ("{}".to_string(), "{}: {}".to_string()),
         Mode::Debug => ("{}".to_string(), "{}: {:?}".to_string())
     };
 
     let format = if visible.is_empty() {
-        header
+        name
     } else {
         let mut formatters = Vec::new();
         formatters.resize(visible.len(), item);
-        header + "(" + &formatters.join(", ") + ")"
+        name + "(" + &formatters.join(", ") + ")"
     };
 
     let mut arguments = TokenStream::new();
@@ -135,14 +159,14 @@ fn format(visible: &Visible, mode: Mode) -> (String, TokenStream) {
 }
 
 fn dispatch(name: &Ident, data: &DataEnum, mode: Mode) -> TokenStream {
+    let operation = match mode {
+        Mode::Display => quote! { variant.fmt(formatter) },
+        Mode::Debug => quote! {{ write!(formatter, "{} <- ", stringify!(#name))?; variant.fmt(formatter) }}
+    };
+
     let mut dispatch = TokenStream::new();
     for variant in &data.variants {
         let variant = &variant.ident;
-
-        let operation = match mode {
-            Mode::Display => quote! { variant.fmt(formatter) },
-            Mode::Debug => quote! {{ write!(formatter, "{} <- ", stringify!(#name))?; variant.fmt(formatter) }}
-        };
 
         dispatch = quote! {
             #dispatch
@@ -153,38 +177,17 @@ fn dispatch(name: &Ident, data: &DataEnum, mode: Mode) -> TokenStream {
     dispatch
 }
 
-fn specialization(generics: &Generics) -> TokenStream {
-    if generics.params.len() > 0 {
-        let mut specialization = TokenStream::new();
-        for parameter in &generics.params {
-            let parameter: TokenStream = match parameter.clone() {
-                GenericParam::Type(parameter) => parameter.ident.into_token_stream(),
-                GenericParam::Lifetime(parameter) => parameter.lifetime.into_token_stream(),
-                GenericParam::Const(parameter) => parameter.ident.into_token_stream()
-            };
-
-            specialization = quote! {
-                #specialization #parameter,
-            }
-        }
-
-        quote! { <#specialization> }
-    } else { TokenStream::new() }
-}
-
 fn nest(input: &DeriveInput) -> TokenStream {
     if let Data::Enum(data) = &input.data {
-        let name = &input.ident;
-        let generics = &input.generics;
-        let specialization = specialization(generics);
+        let (name, generics, specialization) = info(&input);
 
         let mut nest = TokenStream::new();
         for variant in &data.variants {
             let source = if let Fields::Unnamed(fields) = &variant.fields {
                 let fields = &fields.unnamed;
-                if fields.len() != 1 { panic!("Attribute #[error] cannot refer to an `enum` with more than one field per variant."); }
+                if fields.len() != 1 { panic!("Attribute `#[error]` cannot refer to an `enum` with more than one field per variant."); }
                 &fields.first().unwrap().value().ty
-            } else { panic!("Attribute #[error] cannot refer to an `enum` with named variant fields."); };
+            } else { panic!("Attribute `#[error]` cannot refer to an `enum` with named variant fields."); };
 
             let variant = &variant.ident;
 
