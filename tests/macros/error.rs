@@ -59,6 +59,27 @@ struct AllTogether<'s, Type> {
     q: &'s Type
 }
 
+// Functions
+
+fn maybe_basic() -> Result<(), Basic> {
+    Err(Basic)
+}
+
+fn maybe_one_of_two() -> Result<(), OneOfTwo<u32>> {
+    maybe_basic()?;
+    Ok(())
+}
+
+fn maybe_nested() -> Result<(), Nested<'static, u32>> {
+    maybe_one_of_two()?;
+    Ok(())
+}
+
+fn maybe_further_nested() -> Result<(), FurtherNested<'static, u32>> {
+    maybe_nested()?;
+    Ok(())
+}
+
 // Test cases
 
 #[test]
@@ -94,5 +115,11 @@ fn enum_display() {
     assert_eq!(format!("{:?}", Nested::<u32>::LifetimeGeneric(LifetimeGeneric(&44))), "Nested <- LifetimeGeneric");
 
     assert_eq!(format!("{}", FurtherNested::<'static, u32>::Nested(Nested::OneOfTwo(OneOfTwo::Basic(Basic)))), "Basic");
-    assert_eq!(format!("{:?}", FurtherNested::<'static, u32>::Nested(Nested::OneOfTwo(OneOfTwo::Basic(Basic)))), "FurtherNested <- Nested <- OneOfTwo <- Basic");    
+    assert_eq!(format!("{:?}", FurtherNested::<'static, u32>::Nested(Nested::OneOfTwo(OneOfTwo::Basic(Basic)))), "FurtherNested <- Nested <- OneOfTwo <- Basic");
+}
+
+#[test]
+fn nesting() {
+    assert_eq!(format!("{}", maybe_further_nested().unwrap_err()), "Basic");
+    assert_eq!(format!("{:?}", maybe_further_nested().unwrap_err()), "FurtherNested <- Nested <- OneOfTwo <- Basic");
 }
