@@ -2,66 +2,97 @@
 
 use macros::error;
 
-// Traits
+// Enums
 
-trait Reader {
-    type Error;
+#[error]
+enum OneOfTwo<Type> {
+    Basic(Basic),
+    TypeGeneric(TypeGeneric<Type>)
 }
 
-trait Readable {
-    type Error;
+#[error]
+enum Nested<'s, Type> {
+    OneOfTwo(OneOfTwo<Type>),
+    LifetimeGeneric(LifetimeGeneric<'s>)
 }
 
-// Errors
-
 #[error]
-struct ReaderError<ReaderType: Reader>(ReaderType::Error);
-
-#[error]
-struct ReadableError<ReadableType: Readable>(ReadableType::Error);
-
-#[error]
-enum ReadError<ReaderType: Reader, ReadableType: Readable> {
-    Reader(ReaderError<ReaderType>),
-    Readable(ReadableError<ReadableType>)
+enum FurtherNested<'s, Type> {
+    Nested(Nested<'s, Type>),
+    OneOfTwo(OneOfTwo<Type>),
+    Generic(Generic<'s, Type>)
 }
 
 // Structs
 
-struct MyReader;
-struct MyReadable;
+#[error]
+struct Basic;
 
-// Implementations
+#[error]
+struct TypeGeneric<Type>(Type);
 
-impl Reader for MyReader {
-    type Error = u32;
+#[error]
+struct LifetimeGeneric<'s>(&'s u32);
+
+#[error]
+struct Generic<'s, Type>(&'s Type);
+
+#[error(x)]
+struct ShowOne {
+    x: u32
 }
 
-impl Readable for MyReadable {
-    type Error = u32;
+#[error(x, y)]
+#[derive(Default)]
+struct ShowTwo {
+    x: u32,
+    y: f64,
+    #[allow(dead_code)]
+    q: String
 }
 
-// Functions
-
-fn reader_result(first: bool) -> Result<(), ReaderError<MyReader>> {
-    if first { Ok(()) } else { Err(ReaderError(99)) }
-
-}
-
-fn readable_result(second: bool) -> Result<(), ReadableError<MyReadable>> {
-    if second { Ok(()) } else { Err(ReadableError(84)) }
-}
-
-fn read_result(first: bool, second: bool) -> Result<(), ReadError<MyReader, MyReadable>> {
-    reader_result(first)?;
-    readable_result(second)?;
-
-    Ok(())
+#[error(x, y)]
+struct AllTogether<'s, Type> {
+    x: u32,
+    y: f64,
+    #[allow(dead_code)]
+    q: &'s Type
 }
 
 // Test cases
 
 #[test]
-fn error() {
-    println!("{:?}", read_result(true, true));
+fn struct_display() {
+    assert_eq!(format!("{}", Basic), "Basic");
+    assert_eq!(format!("{:?}", Basic), "Basic");
+
+    assert_eq!(format!("{}", TypeGeneric(99)), "TypeGeneric");
+    assert_eq!(format!("{:?}", TypeGeneric(99)), "TypeGeneric");
+
+    assert_eq!(format!("{}", LifetimeGeneric(&99)), "LifetimeGeneric");
+    assert_eq!(format!("{:?}", LifetimeGeneric(&99)), "LifetimeGeneric");
+
+    assert_eq!(format!("{}", Generic(&99)), "Generic");
+    assert_eq!(format!("{:?}", Generic(&99)), "Generic");
+
+    assert_eq!(format!("{}", ShowOne{x: 44}), "ShowOne(x: 44)");
+    assert_eq!(format!("{:?}", ShowOne{x: 44}), "ShowOne(x: 44)");
+
+    assert_eq!(format!("{}", ShowTwo{x: 44, y: 4.44, ..Default::default()}), "ShowTwo(x: 44, y: 4.44)");
+    assert_eq!(format!("{:?}", ShowTwo{x: 44, y: 4.44, ..Default::default()}), "ShowTwo(x: 44, y: 4.44)");
+
+    assert_eq!(format!("{}", AllTogether{x: 44, y: 4.44, q: &444}), "AllTogether(x: 44, y: 4.44)");
+    assert_eq!(format!("{:?}", AllTogether{x: 44, y: 4.44, q: &444}), "AllTogether(x: 44, y: 4.44)");
+}
+
+#[test]
+fn enum_display() {
+    assert_eq!(format!("{}", OneOfTwo::<u32>::Basic(Basic)), "Basic");
+    assert_eq!(format!("{:?}", OneOfTwo::<u32>::Basic(Basic)), "OneOfTwo <- Basic");
+
+    assert_eq!(format!("{}", Nested::<u32>::LifetimeGeneric(LifetimeGeneric(&44))), "LifetimeGeneric");
+    assert_eq!(format!("{:?}", Nested::<u32>::LifetimeGeneric(LifetimeGeneric(&44))), "Nested <- LifetimeGeneric");
+
+    assert_eq!(format!("{}", FurtherNested::<'static, u32>::Nested(Nested::OneOfTwo(OneOfTwo::Basic(Basic)))), "Basic");
+    assert_eq!(format!("{:?}", FurtherNested::<'static, u32>::Nested(Nested::OneOfTwo(OneOfTwo::Basic(Basic)))), "FurtherNested <- Nested <- OneOfTwo <- Basic");    
 }
