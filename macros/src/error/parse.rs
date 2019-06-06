@@ -61,7 +61,7 @@ struct ErrorCauses {
     causes: FieldsUnnamed
 }
 
-// Parsing
+// Implementations
 
 impl Parse for Error {
     fn parse(input: ParseStream) -> Result<Self> {
