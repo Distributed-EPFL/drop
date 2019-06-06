@@ -3,6 +3,8 @@
 use macros::error;
 
 error! {
+    type: MyError,
+    description: "An error occurred!"
 }
 
 // Test cases
