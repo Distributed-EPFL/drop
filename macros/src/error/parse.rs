@@ -1,14 +1,12 @@
 // Dependencies
 
 use proc_macro2::Span;
-use quote::quote;
 use syn::FieldsNamed;
 use syn::FieldsUnnamed;
 use syn::Ident;
 use syn::LitStr;
 use syn::Result;
 use syn::Token;
-use syn::parse_macro_input;
 use syn::parse::Parse;
 use syn::parse::ParseStream;
 use syn::punctuated::Punctuated;
@@ -24,13 +22,13 @@ mod keyword {
 
 // Data structures
 
-struct Error {
-    ident: Ident,
-    description: LitStr,
-    data: ErrorData
+pub struct Error {
+    pub ident: Ident,
+    pub description: LitStr,
+    pub data: ErrorData
 }
 
-enum ErrorData {
+pub enum ErrorData {
     None,
     Fields(FieldsNamed),
     Causes(FieldsUnnamed)
@@ -180,13 +178,4 @@ impl Parse for ErrorCauses {
 
         Ok(ErrorCauses{causes_token, causes})
     }
-}
-
-// Functions
-
-pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let input = parse_macro_input!(input as Error);
-
-    let output = quote!();
-    output.into()
 }
