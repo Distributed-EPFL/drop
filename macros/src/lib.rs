@@ -12,7 +12,7 @@ mod error;
 
 // Procedural macros
 
-#[proc_macro_attribute]
-pub fn error(options: TokenStream, input: TokenStream) -> TokenStream {
-    error::error(options, input)
+#[proc_macro]
+pub fn error(input: TokenStream) -> TokenStream {
+    error::error(input)
 }
