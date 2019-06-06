@@ -39,7 +39,7 @@ fn data(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
 
     let mut struct_fields = quote! {
-        context: std::vec::Vec<String>
+        more: std::vec::Vec<String>
     };
 
     match &error.data {
@@ -112,7 +112,7 @@ fn methods(error: &Error) -> TokenStream {
     quote! {
         impl #error_ident {
             pub fn new(#(#values: #types),*) -> #error_ident {
-                #error_ident{context: std::vec::Vec::new(), #(#values),*}
+                #error_ident{more: std::vec::Vec::new(), #(#values),*}
             }
 
             #(
@@ -120,6 +120,14 @@ fn methods(error: &Error) -> TokenStream {
                     &self.#members
                 }
             )*
+
+            pub fn more<'s>(&'s self) -> &'s std::vec::Vec<String> {
+                &self.more
+            }
+
+            pub fn add<Text: std::convert::Into<String>>(&mut self, context: Text) {
+                self.more.push(context.into());
+            }
         }
     }
 }

@@ -20,10 +20,13 @@ error! {
 
 #[test]
 fn develop() {
-    let x = MyError::new(99);
+    let mut x = MyError::new(99);
+    x.add("Not easy to solve.");
+    x.add("When processing `develop()`.");
+
     let y: MyOtherError = x.into();
 
     match y.cause() {
-        MyOtherErrorCause::MyError(x) => println!("{}", x.x())
+        MyOtherErrorCause::MyError(x) => println!("{}: {:?}", x.x(), x.more())
     }
 }
