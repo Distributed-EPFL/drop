@@ -87,33 +87,39 @@ fn causes(error: &Error) -> TokenStream {
 fn methods(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
 
-    let arguments = match &error.data {
+    let (types, values) = &match &error.data {
         ErrorData::Fields(fields) => {
-            let fields = &fields.named;
-            quote! { #(#fields),* }
-        }
-        ErrorData::Causes(_) => quote! { cause: #cause_ident },
-        ErrorData::None => TokenStream::new()
-    };
-
-    let values = match &error.data {
-        ErrorData::Fields(fields) => {
+            let mut types = Vec::new();
             let mut values = Vec::new();
+
             for field in &fields.named {
-                values.push(field.ident.clone().unwrap())
+                let ty = &field.ty;
+                let value = &field.ident;
+                types.push(quote!(#ty));
+                values.push(quote!(#value));
             }
 
-            quote! { #(#values),* }
+            (types, values)
         },
-        ErrorData::Causes(_) => quote! { cause },
-        ErrorData::None => TokenStream::new()
+        ErrorData::Causes(_) => (vec![quote!(#cause_ident)], vec![quote!(cause)]),
+        ErrorData::None => (Vec::new(), Vec::new())
     };
+
+    // The reason of this redundancy is explained above.
+    let getters = values;
+    let members = values;
 
     quote! {
         impl #error_ident {
-            pub fn new(#arguments) -> #error_ident {
-                #error_ident{context: std::vec::Vec::new(), #values}
+            pub fn new(#(#values: #types),*) -> #error_ident {
+                #error_ident{context: std::vec::Vec::new(), #(#values),*}
             }
+
+            #(
+                pub fn #getters<'s>(&'s self) -> &'s #types {
+                    &self.#members
+                }
+            )*
         }
     }
 }
