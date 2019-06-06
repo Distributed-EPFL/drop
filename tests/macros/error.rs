@@ -17,5 +17,6 @@ error! {
 
 #[test]
 fn develop() {
-    let x = MyOtherError{context: std::vec::Vec::new(), cause: MyOtherErrorCause::MyError(MyError{context: std::vec::Vec::new()})};
+    let x = MyError::new();
+    let y: MyOtherError = x.into();
 }
