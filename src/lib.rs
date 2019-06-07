@@ -8,6 +8,7 @@
 pub mod bytewise;
 pub mod data;
 pub mod error;
+pub mod traits;
 
 // Traits
 
@@ -19,6 +20,7 @@ pub use bytewise::Writer;
 pub use error::Attachment;
 pub use error::Context;
 pub use error::Error;
+pub use traits::Typename;
 
 // Enums
 
