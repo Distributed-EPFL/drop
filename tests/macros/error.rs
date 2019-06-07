@@ -34,6 +34,14 @@ fn g() -> Result<(), MyOtherError> {
 #[test]
 fn develop() {
     match g().unwrap_err().cause() {
-        MyOtherErrorCause::MyError(err) => println!("{:?}", err.more())
+        MyOtherErrorCause::MyError(err) => {
+            for more in err.more() {
+                println!("{}", more);
+            }
+
+            for attachment in err.attachments() {
+                println!("{}", attachment.typename());
+            }
+        }
     }
 }

@@ -1,3 +1,7 @@
+// Attributes
+
+#![recursion_limit="128"]
+
 // Crates
 
 extern crate proc_macro;

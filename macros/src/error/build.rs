@@ -42,7 +42,8 @@ fn data(error: &Error) -> TokenStream {
 
     let mut struct_fields = quote! {
         description: String,
-        more: std::vec::Vec<String>
+        more: std::vec::Vec<String>,
+        attachments: std::vec::Vec<Box<dyn drop::error::Attachment>>
     };
 
     match &error.data {
@@ -116,7 +117,7 @@ fn methods(error: &Error) -> TokenStream {
     quote! {
         impl #error_ident {
             pub fn new(#(#values: #types),*) -> #error_ident {
-                #error_ident{description: #description.to_string(), more: std::vec::Vec::new(), #(#values),*}
+                #error_ident{description: #description.to_string(), more: std::vec::Vec::new(), attachments: std::vec::Vec::new(), #(#values),*}
             }
 
             #(
@@ -143,8 +144,21 @@ fn implementation(error: &Error) -> TokenStream {
                 error
             }
 
+            fn attach<Payload: drop::error::Attachment>(self, attachment: Payload) -> Self {
+                let attachment = Box::new(attachment);
+                let attachment = Box::<dyn drop::error::Attachment>::from(attachment);
+
+                let mut error = self;
+                error.attachments.push(attachment);
+                error
+            }
+
             fn more(&self) -> &Vec<String> {
                 &self.more
+            }
+
+            fn attachments(&self) -> &Vec<Box<dyn drop::error::Attachment>> {
+                &self.attachments
             }
         }
     }
