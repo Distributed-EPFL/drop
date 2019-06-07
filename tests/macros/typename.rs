@@ -11,6 +11,5 @@ struct MyOtherStruct<T>(T);
 
 #[test]
 fn develop() {
-    println!("{}", MyStruct::typename());
-    println!("{}", MyOtherStruct::<MyStruct>::typename());
+    println!("{}", <[MyOtherStruct<MyOtherStruct<(u32, u64, f64, std::collections::BinaryHeap<&'static MyStruct>, std::vec::Vec<String>)>>; 2]>::typename());
 }
