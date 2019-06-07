@@ -1,5 +1,5 @@
 // Traits
 
 pub trait Typename {
-    fn typename(&self) -> &'static str;
+    fn typename() -> String;
 }

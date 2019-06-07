@@ -5,8 +5,14 @@ use std::any::Any;
 
 // Traits
 
-pub trait Attachment : Any + Typename {}
+pub trait Attachment : Any {
+    fn typename(&self) -> String;
+}
 
 // Implementations
 
-impl<Payload: Any + Typename> Attachment for Payload {}
+impl<Payload: Any + Typename> Attachment for Payload {
+    fn typename(&self) -> String {
+        Self::typename()
+    }
+}
