@@ -1,5 +1,6 @@
 // Dependencies
 
+use drop::error::Error;
 use macros::error;
 
 error! {
@@ -20,10 +21,7 @@ error! {
 
 #[test]
 fn develop() {
-    let mut x = MyError::new(99);
-    x.add("Not easy to solve.");
-    x.add("When processing `develop()`.");
-
+    let x = MyError::new(99).add("Not easy to solve.").add("When processing `develop()`.");
     let y: MyOtherError = x.into();
 
     match y.cause() {

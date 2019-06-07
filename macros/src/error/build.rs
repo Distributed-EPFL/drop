@@ -16,12 +16,14 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let data = data(&error);
     let causes = causes(&error);
     let methods = methods(&error);
+    let implementation = implementation(&error);
     let from = from(&error);
 
     let output = quote! {
         #data
         #causes
         #methods
+        #implementation
         #from
     };
 
@@ -39,6 +41,7 @@ fn data(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
 
     let mut struct_fields = quote! {
+        description: String,
         more: std::vec::Vec<String>
     };
 
@@ -86,6 +89,7 @@ fn causes(error: &Error) -> TokenStream {
 
 fn methods(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
+    let description = &error.description;
 
     let (types, values) = &match &error.data {
         ErrorData::Fields(fields) => {
@@ -112,7 +116,7 @@ fn methods(error: &Error) -> TokenStream {
     quote! {
         impl #error_ident {
             pub fn new(#(#values: #types),*) -> #error_ident {
-                #error_ident{more: std::vec::Vec::new(), #(#values),*}
+                #error_ident{description: #description.to_string(), more: std::vec::Vec::new(), #(#values),*}
             }
 
             #(
@@ -120,13 +124,27 @@ fn methods(error: &Error) -> TokenStream {
                     &self.#members
                 }
             )*
+        }
+    }
+}
 
-            pub fn more<'s>(&'s self) -> &'s std::vec::Vec<String> {
-                &self.more
+fn implementation(error: &Error) -> TokenStream {
+    let error_ident = idents(error).0;
+
+    quote! {
+        impl drop::Error for #error_ident {
+            fn description(&self) -> &String {
+                &self.description
             }
 
-            pub fn add<Text: std::convert::Into<String>>(&mut self, context: Text) {
-                self.more.push(context.into());
+            fn add<Text: std::convert::Into<String>>(self, context: Text) -> Self {
+                let mut error = self;
+                error.more.push(context.into());
+                error
+            }
+
+            fn more(&self) -> &Vec<String> {
+                &self.more
             }
         }
     }

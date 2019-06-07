@@ -7,6 +7,7 @@
 
 pub mod bytewise;
 pub mod data;
+pub mod error;
 
 // Traits
 
@@ -15,6 +16,7 @@ pub use bytewise::Readable;
 pub use bytewise::Reader;
 pub use bytewise::Writable;
 pub use bytewise::Writer;
+pub use error::Error;
 
 // Enums
 
