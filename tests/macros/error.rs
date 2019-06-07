@@ -1,47 +1,17 @@
 // Dependencies
 
-use drop::error::Context;
-use drop::error::Error;
 use macros::error;
 
 error! {
     type: MyError,
-    description: "An error occurred!",
+    description: "An error occurred, where x is {x} and y is {y}.",
     fields: {
-        x: u32
+        x: u32,
+        y: u64
     }
 }
-
-error! {
-    type: MyOtherError,
-    description: "Another error occurred!",
-    causes: (MyError)
-}
-
-// Functions
-
-fn f() -> Result<(), MyError> {
-    Err(MyError::new(44))
-}
-
-fn g() -> Result<(), MyOtherError> {
-    f().add("When calling `f()`").add("Difficult to solve.")?;
-    Ok(())
-}
-
-// Test cases
 
 #[test]
 fn develop() {
-    match g().unwrap_err().cause() {
-        MyOtherErrorCause::MyError(err) => {
-            for more in err.more() {
-                println!("{}", more);
-            }
-
-            for attachment in err.attachments() {
-                println!("{}", attachment.typename());
-            }
-        }
-    }
+    println!("{:?}", MyError::new(4, 5));
 }

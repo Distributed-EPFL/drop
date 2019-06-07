@@ -2,6 +2,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
+use regex::Regex;
 use std::vec::Vec;
 use super::parse::Error;
 use super::parse::ErrorData;
@@ -18,6 +19,7 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let methods = methods(&error);
     let implementation = implementation(&error);
     let from = from(&error);
+    let debug = debug(&error);
 
     let output = quote! {
         #data
@@ -25,6 +27,7 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         #methods
         #implementation
         #from
+        #debug
     };
 
     output.into()
@@ -182,4 +185,31 @@ fn from(error: &Error) -> TokenStream {
 
         from
     } else { TokenStream::new() }
+}
+
+fn debug(error: &Error) -> TokenStream {
+    let error_ident = idents(error).0;
+
+    let fields = Regex::new(r"\{([a-zA-Z][a-zA-Z0-9_]*|_[a-zA-Z0-9_]+)\}").unwrap();
+    let description = &error.description.value();
+
+    let arguments: Vec<TokenStream> = fields.captures_iter(description).map(|capture| {
+        let capture = Ident::new(&capture[1], error.description.span());
+        quote!(self.#capture)
+    }).collect();
+
+    let format = fields.replace_all(description, "{}").clone();
+    let write_description = quote! {
+        write!(fmt, "[{}] ", stringify!(#error_ident))?;
+        write!(fmt, #format, #(#arguments),*)?;
+    };
+
+    quote! {
+        impl std::fmt::Debug for #error_ident {
+            fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+                #write_description
+                Ok(())
+            }
+        }
+    }
 }
