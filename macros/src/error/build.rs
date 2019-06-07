@@ -45,6 +45,7 @@ fn data(error: &Error) -> TokenStream {
 
     let mut struct_fields = quote! {
         description: String,
+        backtrace: drop::Backtrace,
         more: std::vec::Vec<String>,
         attachments: std::vec::Vec<Box<dyn drop::error::Attachment>>
     };
@@ -120,7 +121,7 @@ fn methods(error: &Error) -> TokenStream {
     quote! {
         impl #error_ident {
             pub fn new(#(#values: #types),*) -> #error_ident {
-                #error_ident{description: #description.to_string(), more: std::vec::Vec::new(), attachments: std::vec::Vec::new(), #(#values),*}
+                #error_ident{description: #description.to_string(), backtrace: drop::Backtrace::new(), more: std::vec::Vec::new(), attachments: std::vec::Vec::new(), #(#values),*}
             }
 
             #(
@@ -139,6 +140,10 @@ fn implementation(error: &Error) -> TokenStream {
         impl drop::Error for #error_ident {
             fn description(&self) -> &String {
                 &self.description
+            }
+
+            fn backtrace(&self) -> &drop::Backtrace {
+                &self.backtrace
             }
 
             fn add<Text: std::convert::Into<String>>(self, context: Text) -> Self {

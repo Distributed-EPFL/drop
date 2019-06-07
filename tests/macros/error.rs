@@ -1,5 +1,6 @@
 // Dependencies
 
+use drop::error::Error;
 use macros::error;
 
 error! {
@@ -13,5 +14,7 @@ error! {
 
 #[test]
 fn develop() {
-    println!("{:?}", MyError::new(4, 5));
+    let my_error = MyError::new(4, 5);
+    println!("{:?}", my_error);
+    println!("{:?}", my_error.backtrace());
 }

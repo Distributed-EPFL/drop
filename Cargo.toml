@@ -6,4 +6,5 @@ edition = "2018"
 
 [dependencies]
 macros = { path = "macros" }
+backtrace = "0.3.30"
 failure = "0.1.5"

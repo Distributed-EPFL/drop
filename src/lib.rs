@@ -30,6 +30,10 @@ pub use bytewise::Size;
 
 pub use data::Varint;
 
+// External structs
+
+pub use backtrace::Backtrace;
+
 // Functions
 
 pub use bytewise::deserialize;
