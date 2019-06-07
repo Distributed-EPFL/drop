@@ -1,5 +1,6 @@
 // Dependencies
 
+use drop::error::Context;
 use drop::error::Error;
 use macros::error;
 
@@ -17,14 +18,22 @@ error! {
     causes: (MyError)
 }
 
+// Functions
+
+fn f() -> Result<(), MyError> {
+    Err(MyError::new(44))
+}
+
+fn g() -> Result<(), MyOtherError> {
+    f().add("When calling `f()`").add("Difficult to solve.")?;
+    Ok(())
+}
+
 // Test cases
 
 #[test]
 fn develop() {
-    let x = MyError::new(99).add("Not easy to solve.").add("When processing `develop()`.");
-    let y: MyOtherError = x.into();
-
-    match y.cause() {
-        MyOtherErrorCause::MyError(x) => println!("{}: {:?}", x.x(), x.more())
+    match g().unwrap_err().cause() {
+        MyOtherErrorCause::MyError(err) => println!("{:?}", err.more())
     }
 }

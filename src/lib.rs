@@ -16,6 +16,7 @@ pub use bytewise::Readable;
 pub use bytewise::Reader;
 pub use bytewise::Writable;
 pub use bytewise::Writer;
+pub use error::Context;
 pub use error::Error;
 
 // Enums
