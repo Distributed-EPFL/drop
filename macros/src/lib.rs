@@ -2,6 +2,10 @@
 
 #![recursion_limit="128"]
 
+// Features
+
+#![feature(proc_macro_span)]
+
 // Crates
 
 extern crate proc_macro;
