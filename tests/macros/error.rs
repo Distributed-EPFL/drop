@@ -15,10 +15,6 @@ error! {
 #[test]
 fn develop() {
     let my_error = MyError::new(4, 5);
-    
-    if let Some(source) = my_error.source() {
-        println!("The error comes from {}:{}", source.file.display(), source.line);
-    } else {
-        println!("Could not determine the source of the error.");
-    }
+    println!("{:?}", my_error);
+    println!("{:?}", my_error.backtrace());
 }

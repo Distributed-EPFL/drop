@@ -4,14 +4,12 @@ use backtrace::Backtrace;
 use std::convert::Into;
 use std::vec::Vec;
 use super::attachment::Attachment;
-use super::source::Source;
 
 // Traits
 
 pub trait Error {
     fn description(&self) -> &String;
     fn backtrace(&self) -> &Backtrace;
-    fn source(&self) -> Option<Source>;
     fn add<Text: Into<String>>(self, context: Text) -> Self;
     fn attach<Payload: Attachment>(self, attachment: Payload) -> Self;
     fn more(&self) -> &Vec<String>;

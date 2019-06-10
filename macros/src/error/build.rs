@@ -1,6 +1,5 @@
 // Dependencies
 
-use proc_macro::Span;
 use proc_macro2::TokenStream;
 use quote::quote;
 use regex::Regex;
@@ -137,13 +136,6 @@ fn methods(error: &Error) -> TokenStream {
 fn implementation(error: &Error) -> TokenStream {
     let error_ident = idents(error).0;
 
-    let call_site = Span::call_site();
-    let call_file = call_site.source_file().path();
-    let call_file = call_file.to_string_lossy();
-
-    let call_start = call_site.start().line as u32;
-    let call_end = call_site.end().line as u32;
-
     quote! {
         impl drop::Error for #error_ident {
             fn description(&self) -> &String {
@@ -152,30 +144,6 @@ fn implementation(error: &Error) -> TokenStream {
 
             fn backtrace(&self) -> &drop::Backtrace {
                 &self.backtrace
-            }
-
-            fn source(&self) -> Option<drop::error::Source> {
-                let mut source = Option::None;
-                let mut found = false;
-
-                'frames: for frame in self.backtrace.frames() {
-                    for symbol in frame.symbols() {
-                        if found {
-                            if let (Some(file), Some(line)) = (symbol.filename(), symbol.lineno()) {
-                                source = Option::Some(drop::error::Source{file: file.into(), line: line as usize});
-                            }
-                            break 'frames;
-                        }
-
-                        if let (Some(file), Some(line)) = (symbol.filename(), symbol.lineno()) {
-                            if file.ends_with(#call_file) && line >= #call_start && line <= #call_end {
-                                found = true;
-                            }
-                        }
-                    }
-                }
-
-                source
             }
 
             fn add<Text: std::convert::Into<String>>(self, context: Text) -> Self {
