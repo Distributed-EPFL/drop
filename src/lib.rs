@@ -20,6 +20,7 @@ pub use bytewise::Writer;
 pub use error::Attachment;
 pub use error::Context;
 pub use error::Error;
+pub use error::Source;
 pub use traits::Typename;
 
 // Enums
