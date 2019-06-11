@@ -18,42 +18,6 @@ fn idents(error: &Error) -> (Ident, Ident) {
     (error_ident, cause_ident)
 }
 
-pub fn display(error: &Error) -> TokenStream {
-    let (error_ident, cause_ident) = idents(error);
-
-    let implementation = match &error.data {
-        ErrorData::Causes(causes) => {
-            let causes = &causes.unnamed;
-            let cause_ident = iter::repeat(cause_ident);
-
-            quote! {
-                match self.cause() {
-                    #(#cause_ident::#causes(cause) => {
-                        cause.fmt(fmt)?;
-                    }),*
-                }
-            }
-        },
-        _ => {
-            quote! {
-                write!(fmt, "[{}] ", stringify!(#error_ident))?;
-                if let Some(spotting) = self.spottings().first() {
-                    write!(fmt, "at {}, line {}", spotting.file, spotting.line)?;
-                }
-            }
-        }
-    };
-
-    quote! {
-        impl std::fmt::Display for #error_ident {
-            fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-                #implementation
-                Ok(())
-            }
-        }
-    }
-}
-
 pub fn debug(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
 

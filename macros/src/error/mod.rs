@@ -2,6 +2,7 @@
 
 mod build;
 mod data;
+mod format;
 mod impls;
 mod nest;
 mod parse;
@@ -24,8 +25,8 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let nest = nest::nest(&error);
 
+    let display = format::display(&error);
     let debug = build::debug(&error);
-    let display = build::display(&error);
 
     let output = quote! {
         #error_struct
