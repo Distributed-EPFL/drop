@@ -3,6 +3,7 @@
 mod build;
 mod data;
 mod impls;
+mod nest;
 mod parse;
 
 // Dependencies
@@ -21,7 +22,7 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let methods = impls::methods(&error);
     let error_trait = impls::error(&error);
 
-    let from = build::from(&error);
+    let nest = nest::nest(&error);
 
     let debug = build::debug(&error);
     let display = build::display(&error);
@@ -32,8 +33,9 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
         #methods
         #error_trait
-        
-        #from
+
+        #nest
+
         #display
         #debug
     };

@@ -18,26 +18,6 @@ fn idents(error: &Error) -> (Ident, Ident) {
     (error_ident, cause_ident)
 }
 
-pub fn from(error: &Error) -> TokenStream {
-    if let ErrorData::Causes(causes) = &error.data {
-        let (error_ident, cause_ident) = idents(error);
-
-        let mut from = TokenStream::new();
-        for cause in &causes.unnamed {
-            from = quote! {
-                #from
-                impl std::convert::From<#cause> for #error_ident {
-                    fn from(from: #cause) -> Self {
-                        #error_ident::new(#cause_ident::#cause(from))
-                    }
-                }
-            }
-        }
-
-        from
-    } else { TokenStream::new() }
-}
-
 pub fn display(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
 
