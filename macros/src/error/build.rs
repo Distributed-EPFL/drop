@@ -12,8 +12,8 @@ use syn::Ident;
 // Functions
 
 fn idents(error: &Error) -> (Ident, Ident) {
-    let error_ident = error.ident.clone();
-    let cause_ident = Ident::new(&(error_ident.to_string() + "Cause"), error_ident.span());
+    let error_ident = error.idents.error.clone();
+    let cause_ident = error.idents.cause.clone();
 
     (error_ident, cause_ident)
 }

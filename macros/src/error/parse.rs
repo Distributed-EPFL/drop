@@ -23,9 +23,14 @@ mod keyword {
 // Data structures
 
 pub struct Error {
-    pub ident: Ident,
+    pub idents: Idents,
     pub description: LitStr,
     pub data: ErrorData
+}
+
+pub struct Idents {
+    pub error: Ident,
+    pub cause: Ident
 }
 
 pub enum ErrorData {
@@ -114,8 +119,11 @@ impl Parse for Error {
         } else if description.is_none() {
             Err(syn::Error::new(Span::call_site(), "Property `description` is required in an `error!`."))
         } else {
+            let error = ident.unwrap();
+            let cause = Ident::new(&format!("{}Cause", error), error.span());
+
             Ok(Error{
-                ident: ident.unwrap(),
+                idents: Idents{error, cause},
                 description: description.unwrap(),
                 data: if fields.is_some() { ErrorData::Fields(fields.unwrap()) } else if causes.is_some() { ErrorData::Causes(causes.unwrap()) } else { ErrorData::None }
             })
