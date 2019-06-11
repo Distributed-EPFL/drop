@@ -28,5 +28,5 @@ fn develop() {
     let result: MyNestedError = result.unwrap_err().into();
     let result = result.spot(here!()).add("Nested errors can have it too.").attach(std::collections::HashMap::<u32, String>::new());
 
-    println!("{:?}", result);
+    println!("{}", result);
 }

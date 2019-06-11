@@ -21,6 +21,7 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let implementation = implementation(&error);
     let from = from(&error);
     let debug = debug(&error);
+    let display = display(&error);
 
     let output = quote! {
         #data
@@ -28,6 +29,7 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         #methods
         #implementation
         #from
+        #display
         #debug
     };
 
@@ -204,6 +206,42 @@ fn from(error: &Error) -> TokenStream {
     } else { TokenStream::new() }
 }
 
+fn display(error: &Error) -> TokenStream {
+    let (error_ident, cause_ident) = idents(error);
+
+    let implementation = match &error.data {
+        ErrorData::Causes(causes) => {
+            let causes = &causes.unnamed;
+            let cause_ident = iter::repeat(cause_ident);
+
+            quote! {
+                match self.cause() {
+                    #(#cause_ident::#causes(cause) => {
+                        cause.fmt(fmt)?;
+                    }),*
+                }
+            }
+        },
+        _ => {
+            quote! {
+                write!(fmt, "[{}] ", stringify!(#error_ident))?;
+                if let Some(spotting) = self.spottings().first() {
+                    write!(fmt, "at {}, line {}", spotting.file, spotting.line)?;
+                }
+            }
+        }
+    };
+
+    quote! {
+        impl std::fmt::Display for #error_ident {
+            fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+                #implementation
+                Ok(())
+            }
+        }
+    }
+}
+
 fn debug(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
 
@@ -233,11 +271,11 @@ fn debug(error: &Error) -> TokenStream {
     let recursion = match &error.data {
         ErrorData::Causes(causes) => {
             let causes = &causes.unnamed;
-            let causes_ident = iter::repeat(cause_ident);
+            let cause_ident = iter::repeat(cause_ident);
 
             quote! {
                 match self.cause() {
-                    #(#causes_ident::#causes(cause) => {
+                    #(#cause_ident::#causes(cause) => {
                         write!(fmt, "\n")?;
                         cause.fmt(fmt)?;
                     }),*
