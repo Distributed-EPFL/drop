@@ -3,6 +3,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use regex::Regex;
+use std::iter;
 use std::vec::Vec;
 use super::parse::Error;
 use super::parse::ErrorData;
@@ -204,7 +205,7 @@ fn from(error: &Error) -> TokenStream {
 }
 
 fn debug(error: &Error) -> TokenStream {
-    let error_ident = idents(error).0;
+    let (error_ident, cause_ident) = idents(error);
 
     let fields = Regex::new(r"\{([a-zA-Z][a-zA-Z0-9_]*|_[a-zA-Z0-9_]+)\}").unwrap();
     let description = &error.description.value();
@@ -229,10 +230,28 @@ fn debug(error: &Error) -> TokenStream {
         }
     };
 
+    let recursion = match &error.data {
+        ErrorData::Causes(causes) => {
+            let causes = &causes.unnamed;
+            let causes_ident = iter::repeat(cause_ident);
+
+            quote! {
+                match self.cause() {
+                    #(#causes_ident::#causes(cause) => {
+                        write!(fmt, "\n")?;
+                        cause.fmt(fmt)?;
+                    }),*
+                }
+            }
+        },
+        _ => TokenStream::new()
+    };
+
     quote! {
         impl std::fmt::Debug for #error_ident {
             fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
                 #write_description
+                #recursion
                 Ok(())
             }
         }
