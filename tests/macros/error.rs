@@ -26,6 +26,7 @@ fn develop() {
     let result = result.spot(here!()).add("While running `develop`.").attach(44u32);
     let result = result.spot(here!()).add("Seems difficult to fix!").attach(vec!["Hello".to_string(), "World".to_string()]);
     let result: MyNestedError = result.unwrap_err().into();
+    let result = result.spot(here!()).add("Nested errors can have it too.").attach(std::collections::HashMap::<u32, String>::new());
 
     println!("{:?}", result);
 }
