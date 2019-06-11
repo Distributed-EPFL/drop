@@ -8,33 +8,8 @@ use std::vec::Vec;
 use super::parse::Error;
 use super::parse::ErrorData;
 use syn::Ident;
-use syn::parse_macro_input;
 
 // Functions
-
-pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let error = parse_macro_input!(input as Error);
-
-    let data = data(&error);
-    let causes = causes(&error);
-    let methods = methods(&error);
-    let implementation = implementation(&error);
-    let from = from(&error);
-    let debug = debug(&error);
-    let display = display(&error);
-
-    let output = quote! {
-        #data
-        #causes
-        #methods
-        #implementation
-        #from
-        #display
-        #debug
-    };
-
-    output.into()
-}
 
 fn idents(error: &Error) -> (Ident, Ident) {
     let error_ident = error.ident.clone();
@@ -43,7 +18,7 @@ fn idents(error: &Error) -> (Ident, Ident) {
     (error_ident, cause_ident)
 }
 
-fn data(error: &Error) -> TokenStream {
+pub fn data(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
 
     let mut struct_fields = quote! {
@@ -79,7 +54,7 @@ fn data(error: &Error) -> TokenStream {
     }
 }
 
-fn causes(error: &Error) -> TokenStream {
+pub fn causes(error: &Error) -> TokenStream {
     if let ErrorData::Causes(causes) = &error.data {
         let cause_ident = idents(error).1;
 
@@ -96,7 +71,7 @@ fn causes(error: &Error) -> TokenStream {
     } else { TokenStream::new() }
 }
 
-fn methods(error: &Error) -> TokenStream {
+pub fn methods(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
     let description = &error.description;
 
@@ -137,7 +112,7 @@ fn methods(error: &Error) -> TokenStream {
     }
 }
 
-fn implementation(error: &Error) -> TokenStream {
+pub fn implementation(error: &Error) -> TokenStream {
     let error_ident = idents(error).0;
 
     quote! {
@@ -186,7 +161,7 @@ fn implementation(error: &Error) -> TokenStream {
     }
 }
 
-fn from(error: &Error) -> TokenStream {
+pub fn from(error: &Error) -> TokenStream {
     if let ErrorData::Causes(causes) = &error.data {
         let (error_ident, cause_ident) = idents(error);
 
@@ -206,7 +181,7 @@ fn from(error: &Error) -> TokenStream {
     } else { TokenStream::new() }
 }
 
-fn display(error: &Error) -> TokenStream {
+pub fn display(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
 
     let implementation = match &error.data {
@@ -242,7 +217,7 @@ fn display(error: &Error) -> TokenStream {
     }
 }
 
-fn debug(error: &Error) -> TokenStream {
+pub fn debug(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
 
     let fields = Regex::new(r"\{([a-zA-Z][a-zA-Z0-9_]*|_[a-zA-Z0-9_]+)\}").unwrap();
