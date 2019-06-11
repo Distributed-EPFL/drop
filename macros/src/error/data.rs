@@ -38,7 +38,7 @@ pub fn error(error: &Error) -> TokenStream {
     };
 
     quote! {
-        struct #error_ident {
+        pub struct #error_ident {
             #struct_fields
         }
     }
@@ -54,7 +54,7 @@ pub fn cause(error: &Error) -> TokenStream {
         let causes = &causes.unnamed;
 
         quote! {
-            enum #cause_ident {
+            pub enum #cause_ident {
                 #(#variants(#causes)),*
             }
         }
