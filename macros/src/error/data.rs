@@ -25,7 +25,7 @@ pub fn error(error: &Error) -> TokenStream {
 
             quote! {
                 #struct_fields,
-                #(#error_fields),*
+                #(#[allow(dead_code)] #error_fields),*
             }
         },
         ErrorData::Causes(_) => {
