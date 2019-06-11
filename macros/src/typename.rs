@@ -1,9 +1,12 @@
 // Dependencies
 
+use proc_macro2::TokenStream;
 use quote::quote;
 use std::vec::Vec;
 use syn::DeriveInput;
 use syn::GenericParam;
+use syn::Ident;
+use syn::TypeParam;
 use syn::parse_macro_input;
 
 // Functions
@@ -13,23 +16,15 @@ pub fn typename(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ident = &input.ident;
     let where_clause = &input.generics.where_clause;
 
-    let mut types = Vec::new();
-    let mut generics = Vec::new();
+    let params: Vec<&TypeParam> = (&input.generics.params).into_iter().map(|param| {
+        if let GenericParam::Type(param) = param { param } else { panic!("Macro `#[derive(Typename)]` only supports type generics."); }
+    }).collect();
 
-    for generic in &input.generics.params {
-        match generic {
-            GenericParam::Type(generic) => {
-                let ident = &generic.ident;
-                let bounds = &generic.bounds;
-
-                types.push(ident);
-                generics.push(quote! {
-                    #ident: drop::traits::Typename #(+ #bounds)*
-                })
-            }
-            _ => panic!("Macro `#[derive(Typename)]` only supports type generics.")
-        }
-    }
+    let types: Vec<&Ident> = (&params).into_iter().map(|param| &param.ident).collect();
+    let generics: Vec<TokenStream> = (&params).into_iter().map(|param| {
+        let (ident, bounds) = (&param.ident, &param.bounds);
+        quote!(#ident: drop::traits::Typename #(+ #bounds)*)
+    }).collect();
 
     let (types, generics) = (&types, &generics);
 
