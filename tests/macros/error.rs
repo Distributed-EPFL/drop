@@ -17,10 +17,8 @@ error! {
 #[test]
 fn develop() {
     let result = Result::<(), MyError>::Err(MyError::new(6, 7));
-    let result = result.spot(here!());
-    let result = result.spot(here!());
+    let result = result.spot(here!()).add("While running `develop`.").attach(44u32);
+    let result = result.spot(here!()).add("Seems difficult to fix!").attach(vec!["Hello".to_string(), "World".to_string()]);
 
-    for spotting in result.unwrap_err().spottings() {
-        println!("{}:{}", spotting.file, spotting.line);
-    }
+    println!("{:?}", result.unwrap_err());
 }

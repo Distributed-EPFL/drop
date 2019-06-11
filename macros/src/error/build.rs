@@ -218,6 +218,15 @@ fn debug(error: &Error) -> TokenStream {
     let write_description = quote! {
         write!(fmt, "[{}] ", stringify!(#error_ident))?;
         write!(fmt, #format, #(#arguments),*)?;
+        for spotting in self.spottings() {
+            write!(fmt, "\n  Spotted: {}, line {}", spotting.file, spotting.line)?;
+        }
+        for more in self.more() {
+            write!(fmt, "\n  More: {}", more)?;
+        }
+        for attachment in self.attachments() {
+            write!(fmt, "\n  Attachment: {}", attachment.typename())?
+        }
     };
 
     quote! {
