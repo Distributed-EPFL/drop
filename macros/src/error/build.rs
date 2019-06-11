@@ -18,42 +18,6 @@ fn idents(error: &Error) -> (Ident, Ident) {
     (error_ident, cause_ident)
 }
 
-pub fn data(error: &Error) -> TokenStream {
-    let (error_ident, cause_ident) = idents(error);
-
-    let mut struct_fields = quote! {
-        description: String,
-        backtrace: drop::Backtrace,
-        spottings: std::vec::Vec<drop::error::Spotting>,
-        more: std::vec::Vec<String>,
-        attachments: std::vec::Vec<Box<dyn drop::error::Attachment>>
-    };
-
-    match &error.data {
-        ErrorData::Fields(error_fields) => {
-            let error_fields = &error_fields.named;
-
-            struct_fields = quote! {
-                #struct_fields,
-                #(#error_fields),*
-            }
-        },
-        ErrorData::Causes(_) => {
-            struct_fields = quote! {
-                #struct_fields,
-                cause: #cause_ident
-            }
-        },
-        ErrorData::None => {}
-    }
-
-    quote! {
-        struct #error_ident {
-            #struct_fields
-        }
-    }
-}
-
 pub fn causes(error: &Error) -> TokenStream {
     if let ErrorData::Causes(causes) = &error.data {
         let cause_ident = idents(error).1;
