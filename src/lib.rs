@@ -29,6 +29,7 @@ pub use bytewise::Size;
 // Structs
 
 pub use data::Varint;
+pub use error::Spotting;
 
 // External structs
 

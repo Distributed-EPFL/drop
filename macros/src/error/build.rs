@@ -46,6 +46,7 @@ fn data(error: &Error) -> TokenStream {
     let mut struct_fields = quote! {
         description: String,
         backtrace: drop::Backtrace,
+        spottings: std::vec::Vec<drop::error::Spotting>,
         more: std::vec::Vec<String>,
         attachments: std::vec::Vec<Box<dyn drop::error::Attachment>>
     };
@@ -121,7 +122,7 @@ fn methods(error: &Error) -> TokenStream {
     quote! {
         impl #error_ident {
             pub fn new(#(#values: #types),*) -> #error_ident {
-                #error_ident{description: #description.to_string(), backtrace: drop::Backtrace::new(), more: std::vec::Vec::new(), attachments: std::vec::Vec::new(), #(#values),*}
+                #error_ident{description: #description.to_string(), backtrace: drop::Backtrace::new(), spottings: std::vec::Vec::new(), more: std::vec::Vec::new(), attachments: std::vec::Vec::new(), #(#values),*}
             }
 
             #(
@@ -146,6 +147,12 @@ fn implementation(error: &Error) -> TokenStream {
                 &self.backtrace
             }
 
+            fn spot(self, spotting: drop::error::Spotting) -> Self {
+                let mut error = self;
+                error.spottings.push(spotting);
+                error
+            }
+
             fn add<Text: std::convert::Into<String>>(self, context: Text) -> Self {
                 let mut error = self;
                 error.more.push(context.into());
@@ -159,6 +166,10 @@ fn implementation(error: &Error) -> TokenStream {
                 let mut error = self;
                 error.attachments.push(attachment);
                 error
+            }
+
+            fn spottings(&self) -> &Vec<drop::error::Spotting> {
+                &self.spottings
             }
 
             fn more(&self) -> &Vec<String> {
