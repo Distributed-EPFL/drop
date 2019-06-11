@@ -2,6 +2,7 @@
 
 mod build;
 mod data;
+mod impls;
 mod parse;
 
 // Dependencies
@@ -17,7 +18,7 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let error_struct = data::error(&error);
     let cause_enum = data::cause(&error);
 
-    let methods = build::methods(&error);
+    let methods = impls::methods(&error);
     let implementation = build::implementation(&error);
 
     let from = build::from(&error);

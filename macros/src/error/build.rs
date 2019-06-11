@@ -18,47 +18,6 @@ fn idents(error: &Error) -> (Ident, Ident) {
     (error_ident, cause_ident)
 }
 
-pub fn methods(error: &Error) -> TokenStream {
-    let (error_ident, cause_ident) = idents(error);
-    let description = &error.description;
-
-    let (types, values) = &match &error.data {
-        ErrorData::Fields(fields) => {
-            let mut types = Vec::new();
-            let mut values = Vec::new();
-
-            for field in &fields.named {
-                let ty = &field.ty;
-                let value = &field.ident;
-                types.push(quote!(#ty));
-                values.push(quote!(#value));
-            }
-
-            (types, values)
-        },
-        ErrorData::Causes(_) => (vec![quote!(#cause_ident)], vec![quote!(cause)]),
-        ErrorData::None => (Vec::new(), Vec::new())
-    };
-
-    // The reason of this redundancy is explained above.
-    let getters = values;
-    let members = values;
-
-    quote! {
-        impl #error_ident {
-            pub fn new(#(#values: #types),*) -> #error_ident {
-                #error_ident{description: #description.to_string(), backtrace: drop::Backtrace::new(), spottings: std::vec::Vec::new(), more: std::vec::Vec::new(), attachments: std::vec::Vec::new(), #(#values),*}
-            }
-
-            #(
-                pub fn #getters<'s>(&'s self) -> &'s #types {
-                    &self.#members
-                }
-            )*
-        }
-    }
-}
-
 pub fn implementation(error: &Error) -> TokenStream {
     let error_ident = idents(error).0;
 
