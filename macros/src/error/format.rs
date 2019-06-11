@@ -44,3 +44,48 @@ pub fn display(error: &Error) -> TokenStream {
         }
     }
 }
+
+pub fn debug(error: &Error) -> TokenStream {
+    let error_ident = &error.idents.error;
+    let cause_ident = &error.idents.cause;
+
+    let block = quote! {
+        write!(fmt, "{}", self.description())?;
+        for spotting in self.spottings() {
+            write!(fmt, "\n  Spotted: {}, line {}", spotting.file, spotting.line)?;
+        }
+        for context in self.more() {
+            write!(fmt, "\n  Context: {}", context)?;
+        }
+        for attachment in self.attachments() {
+            write!(fmt, "\n  Attachment: {}", attachment.typename())?
+        }
+    };
+
+    let recursion = match &error.data {
+        ErrorData::Causes(causes) => {
+            let causes = &causes.unnamed;
+            let cause_ident = iter::repeat(cause_ident);
+
+            quote! {
+                match self.cause() {
+                    #(#cause_ident::#causes(cause) => {
+                        write!(fmt, "\n")?;
+                        cause.fmt(fmt)?;
+                    }),*
+                }
+            }
+        },
+        _ => TokenStream::new()
+    };
+
+    quote! {
+        impl std::fmt::Debug for #error_ident {
+            fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+                #block
+                #recursion
+                Ok(())
+            }
+        }
+    }
+}
