@@ -43,3 +43,20 @@ pub fn error(error: &Error) -> TokenStream {
         }
     }
 }
+
+pub fn cause(error: &Error) -> TokenStream {
+    if let ErrorData::Causes(causes) = &error.data {
+        let cause_ident = &error.idents.cause;
+
+        // The reference is repeated because, in `quote!`, every interpolation
+        // inside of a repetition must be a distinct variable.
+        let variants = &causes.unnamed;
+        let causes = &causes.unnamed;
+
+        quote! {
+            enum #cause_ident {
+                #(#variants(#causes)),*
+            }
+        }
+    } else { TokenStream::new() }
+}

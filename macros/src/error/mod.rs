@@ -15,7 +15,7 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let error = parse_macro_input!(input as parse::Error);
 
     let error_struct = data::error(&error);
-    let cause_enum = build::causes(&error);
+    let cause_enum = data::cause(&error);
 
     let methods = build::methods(&error);
     let implementation = build::implementation(&error);

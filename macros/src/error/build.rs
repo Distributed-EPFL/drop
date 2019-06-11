@@ -18,23 +18,6 @@ fn idents(error: &Error) -> (Ident, Ident) {
     (error_ident, cause_ident)
 }
 
-pub fn causes(error: &Error) -> TokenStream {
-    if let ErrorData::Causes(causes) = &error.data {
-        let cause_ident = idents(error).1;
-
-        // The reference is repeated because, in `quote!`, every interpolation
-        // inside of a repetition must be a distinct variable.
-        let variants = &causes.unnamed;
-        let causes = &causes.unnamed;
-
-        quote! {
-            enum #cause_ident {
-                #(#variants(#causes)),*
-            }
-        }
-    } else { TokenStream::new() }
-}
-
 pub fn methods(error: &Error) -> TokenStream {
     let (error_ident, cause_ident) = idents(error);
     let description = &error.description;
