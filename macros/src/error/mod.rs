@@ -19,7 +19,7 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let cause_enum = data::cause(&error);
 
     let methods = impls::methods(&error);
-    let implementation = build::implementation(&error);
+    let error_trait = impls::error(&error);
 
     let from = build::from(&error);
 
@@ -29,8 +29,10 @@ pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let output = quote! {
         #error_struct
         #cause_enum
+
         #methods
-        #implementation
+        #error_trait
+        
         #from
         #display
         #debug

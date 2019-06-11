@@ -56,3 +56,52 @@ fn description(error: &Error) -> TokenStream {
     let format = format!("[{}] {}", error_ident, fields.replace_all(description, "{}"));
     quote!(format!(#format, #(#arguments),*))
 }
+
+pub fn error(error: &Error) -> TokenStream {
+    let error_ident = &error.idents.error;
+
+    quote! {
+        impl drop::Error for #error_ident {
+            fn description(&self) -> &String {
+                &self.description
+            }
+
+            fn backtrace(&self) -> &drop::Backtrace {
+                &self.backtrace
+            }
+
+            fn spot(self, spotting: drop::error::Spotting) -> Self {
+                let mut error = self;
+                error.spottings.push(spotting);
+                error
+            }
+
+            fn add<Text: std::convert::Into<String>>(self, context: Text) -> Self {
+                let mut error = self;
+                error.more.push(context.into());
+                error
+            }
+
+            fn attach<Payload: drop::error::Attachment>(self, attachment: Payload) -> Self {
+                let attachment = Box::new(attachment);
+                let attachment = Box::<dyn drop::error::Attachment>::from(attachment);
+
+                let mut error = self;
+                error.attachments.push(attachment);
+                error
+            }
+
+            fn spottings(&self) -> &Vec<drop::error::Spotting> {
+                &self.spottings
+            }
+
+            fn more(&self) -> &Vec<String> {
+                &self.more
+            }
+
+            fn attachments(&self) -> &Vec<Box<dyn drop::error::Attachment>> {
+                &self.attachments
+            }
+        }
+    }
+}
