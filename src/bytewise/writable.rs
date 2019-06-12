@@ -1,6 +1,6 @@
 // Dependencies
 
-use failure::Error;
+use super::errors::WriteError;
 use super::size::Size;
 use super::writer::Writer;
 
@@ -8,5 +8,5 @@ use super::writer::Writer;
 
 pub trait Writable : Sized {
     const SIZE: Size;
-    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Error>;
+    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError>;
 }

@@ -1,11 +1,12 @@
 // Dependencies
 
-use failure::Error;
 use crate::bytewise::Load;
+use crate::bytewise::ReadError;
 use crate::bytewise::Readable;
 use crate::bytewise::Reader;
 use crate::bytewise::Size;
 use crate::bytewise::Writable;
+use crate::bytewise::WriteError;
 use crate::bytewise::Writer;
 
 // Structs
@@ -18,30 +19,32 @@ pub struct Varint(pub u32);
 impl Readable for Varint {
     const SIZE: Size = Size::variable();
 
-    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Error> {
+    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
         assert!(self.0 <= 0x3fffffff);
 
         if self.0 < 128 {
-            visitor.push(&[self.0 as u8])
+            visitor.push(&[self.0 as u8])?;
         } else if self.0 < 16384 {
-            visitor.push(&[(self.0 >> 8) as u8 | 0x80, self.0 as u8])
+            visitor.push(&[(self.0 >> 8) as u8 | 0x80, self.0 as u8])?;
         } else {
-            visitor.push(&[(self.0 >> 24) as u8 | 0xc0, (self.0 >> 16) as u8, (self.0 >> 8) as u8, self.0 as u8])
+            visitor.push(&[(self.0 >> 24) as u8 | 0xc0, (self.0 >> 16) as u8, (self.0 >> 8) as u8, self.0 as u8])?;
         }
+
+        Ok(())
     }
 }
 
 impl Writable for Varint {
     const SIZE: Size = Size::variable();
 
-    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Error> {
+    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
         *self = Self::load(visitor)?;
         Ok(())
     }
 }
 
 impl Load for Varint {
-    fn load<From: Writer>(from: &mut From) -> Result<Self, Error> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
         let alpha = from.pop(1)?[0];
 
         if alpha & 0x80 != 0 {
@@ -67,35 +70,32 @@ impl Load for Varint {
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
 mod tests {
-    use failure::Fail;
+    use crate::bytewise::ReaderError;
+    use crate::bytewise::WriterError;
     use super::*;
 
     // Structs
 
     struct Reference(&'static [u8]);
 
-    #[derive(Fail, Debug)]
-    #[fail(display = "An unexpected input was provided the `Reader`/`Writer`.")]
-    struct Mismatch;
-
     // Implementations
 
     impl Reader for Reference {
-        fn push(&mut self, chunk: &[u8]) -> Result<(), Error> {
+        fn push(&mut self, chunk: &[u8]) -> Result<(), ReaderError> {
             if &self.0[0..chunk.len()] == chunk {
                 *self = Reference(&self.0[chunk.len()..]);
                 Ok(())
-            } else { Err(Mismatch.into()) }
+            } else { Err(ReaderError::new("UnexpectedInput")) }
         }
     }
 
     impl Writer for Reference {
-        fn pop(&mut self, size: usize) -> Result<&[u8], Error> {
+        fn pop(&mut self, size: usize) -> Result<&[u8], WriterError> {
             if size <= self.0.len() {
                 let chunk = &self.0[0..size];
                 *self = Reference(&self.0[size..]);
                 Ok(chunk)
-            } else { Err(Mismatch.into()) }
+            } else { Err(WriterError::new("EndOfBuffer")) }
         }
     }
 

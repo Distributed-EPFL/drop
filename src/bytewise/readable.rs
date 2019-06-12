@@ -1,6 +1,6 @@
 // Dependencies
 
-use failure::Error;
+use super::errors::ReadError;
 use super::reader::Reader;
 use super::size::Size;
 
@@ -8,5 +8,5 @@ use super::size::Size;
 
 pub trait Readable : Sized {
     const SIZE: Size;
-    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Error>;
+    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError>;
 }

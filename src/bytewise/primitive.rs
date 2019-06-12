@@ -1,7 +1,8 @@
 // Dependencies
 
-use failure::Error;
 use std::convert::TryInto;
+use super::errors::ReadError;
+use super::errors::WriteError;
 use super::load::Load;
 use super::readable::Readable;
 use super::reader::Reader;
@@ -14,22 +15,23 @@ use super::writer::Writer;
 impl Readable for bool {
     const SIZE: Size = Size::fixed(1);
 
-    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Error> {
-        visitor.push(&[*self as u8])
+    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
+        visitor.push(&[*self as u8])?;
+        Ok(())
     }
 }
 
 impl Writable for bool {
     const SIZE: Size = Size::fixed(1);
 
-    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Error> {
+    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
         *self = Self::load(visitor)?;
         Ok(())
     }
 }
 
 impl Load for bool {
-    fn load<From: Writer>(from: &mut From) -> Result<Self, Error> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
         Ok(from.pop(1)?[0] != 0)
     }
 }
@@ -39,22 +41,23 @@ macro_rules! implement {
         impl Readable for $type {
             const SIZE: Size = Size::fixed($size);
 
-            fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Error> {
-                visitor.push(&self.to_le_bytes())
+            fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
+                visitor.push(&self.to_le_bytes())?;
+                Ok(())
             }
         }
 
         impl Writable for $type {
             const SIZE: Size = Size::fixed($size);
 
-            fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Error> {
+            fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
                 *self = Self::load(visitor)?;
                 Ok(())
             }
         }
 
         impl Load for $type {
-            fn load<From: Writer>(from: &mut From) -> Result<Self, Error> {
+            fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
                 Ok(Self::from_le_bytes(from.pop($size)?.try_into().unwrap()))
             }
         }
@@ -68,29 +71,26 @@ implement!(i8: 1, i16: 2, i32: 4, i64: 8, i128: 16, u8: 1, u16: 2, u32: 4, u64: 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
 mod tests {
-    use failure::Fail;
     use super::*;
     use super::super::load::Load;
+    use super::super::errors::ReaderError;
+    use super::super::errors::WriterError;
 
     // Structs
 
     struct Reference(&'static [u8]);
 
-    #[derive(Fail, Debug)]
-    #[fail(display = "An unexpected input was provided the `Reader`/`Writer`.")]
-    struct Mismatch;
-
     // Implementations
 
     impl Reader for Reference {
-        fn push(&mut self, chunk: &[u8]) -> Result<(), Error> {
-            if self.0 == chunk { Ok(()) } else { Err(Mismatch.into()) }
+        fn push(&mut self, chunk: &[u8]) -> Result<(), ReaderError> {
+            if self.0 == chunk { Ok(()) } else { Err(ReaderError::new("UnexpectedInput")) }
         }
     }
 
     impl Writer for Reference {
-        fn pop(&mut self, size: usize) -> Result<&[u8], Error> {
-            if size == self.0.len() { Ok(self.0) } else { Err(Mismatch.into()) }
+        fn pop(&mut self, size: usize) -> Result<&[u8], WriterError> {
+            if size == self.0.len() { Ok(self.0) } else { Err(WriterError::new("UnexpectedSize").into()) }
         }
     }
 

@@ -1,6 +1,7 @@
 // Dependencies
 
-use failure::Error;
+use super::errors::ReadError;
+use super::errors::WriteError;
 use super::load::Load;
 use super::readable::Readable;
 use super::reader::Reader;
@@ -15,7 +16,7 @@ macro_rules! implement {
         impl<Item: Readable> Readable for [Item; $size] {
             const SIZE: Size = Size::mul($size, Item::SIZE);
 
-            default fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Error> {
+            default fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
                 for item in self.iter() {
                     visitor.visit(item)?;
                 }
@@ -27,7 +28,7 @@ macro_rules! implement {
         impl<Item: Writable> Writable for [Item; $size] {
             const SIZE: Size = Size::mul($size, Item::SIZE);
 
-            default fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Error> {
+            default fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
                 for item in self.iter_mut() {
                     visitor.visit(item)?;
                 }
@@ -37,7 +38,7 @@ macro_rules! implement {
         }
 
         impl<Item: Load> Load for [Item; $size] {
-            default fn load<From: Writer>(from: &mut From) -> Result<Self, Error> {
+            default fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
                 unsafe {
                     let mut array: [Item; $size] = std::mem::uninitialized();
 
@@ -61,20 +62,21 @@ macro_rules! implement {
         }
 
         impl Readable for [u8; $size] {
-            fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Error> {
-                visitor.push(self)
+            fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
+                visitor.push(self)?;
+                Ok(())
             }
         }
 
         impl Writable for [u8; $size] {
-            fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Error> {
+            fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
                 self.clone_from_slice(visitor.pop($size)?);
                 Ok(())
             }
         }
 
         impl Load for [u8; $size] {
-            fn load<From: Writer>(from: &mut From) -> Result<Self, Error> {
+            fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
                 let mut array: [u8; $size] = [0; $size];
                 from.visit(&mut array)?;
                 Ok(array)

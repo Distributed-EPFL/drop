@@ -1,8 +1,9 @@
 // Dependencies
 
 use crate::data::Varint;
-use failure::Error;
 use std::vec::Vec;
+use super::errors::ReadError;
+use super::errors::WriteError;
 use super::load::Load;
 use super::readable::Readable;
 use super::reader::Reader;
@@ -15,7 +16,7 @@ use super::writer::Writer;
 impl<Item: Readable> Readable for Vec<Item> {
     const SIZE: Size = Size::variable();
 
-    default fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Error> {
+    default fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
         visitor.visit(&Varint(self.len() as u32))?;
 
         for item in self {
@@ -29,7 +30,7 @@ impl<Item: Readable> Readable for Vec<Item> {
 impl<Item: Load> Writable for Vec<Item> {
     const SIZE: Size = Size::variable();
 
-    default fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Error> {
+    default fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
         let size = Varint::load(visitor)?.0 as usize;
 
         self.clear();
@@ -44,7 +45,7 @@ impl<Item: Load> Writable for Vec<Item> {
 }
 
 impl<Item: Load> Load for Vec<Item> {
-    fn load<From: Writer>(from: &mut From) -> Result<Self, Error> {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
         let mut vec = Vec::<Item>::new();
         from.visit(&mut vec)?;
         Ok(vec)
@@ -52,14 +53,15 @@ impl<Item: Load> Load for Vec<Item> {
 }
 
 impl Readable for Vec<u8> {
-    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), Error> {
+    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
         visitor.visit(&Varint(self.len() as u32))?;
-        visitor.push(self)
+        visitor.push(self)?;
+        Ok(())
     }
 }
 
 impl Writable for Vec<u8> {
-    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), Error> {
+    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
         let size = Varint::load(visitor)?.0 as usize;
 
         self.clear();

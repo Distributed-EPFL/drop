@@ -38,4 +38,9 @@ pub use serialize::serialize;
 
 // Errors
 
-pub use errors::EndOfBuffer;
+pub use errors::ReadError;
+pub use errors::ReadableError;
+pub use errors::ReaderError;
+pub use errors::WritableError;
+pub use errors::WriteError;
+pub use errors::WriterError;
