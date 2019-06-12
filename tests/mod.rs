@@ -1,3 +1,3 @@
 // Modules
 
-mod macros;
+#[cfg_attr(tarpaulin, skip)] mod macros;
