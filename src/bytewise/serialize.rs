@@ -1,6 +1,7 @@
 // Dependencies
 
 use std::vec::Vec;
+use super::errors::ReadError;
 use super::errors::ReaderError;
 use super::measurable::Measurable;
 use super::readable::Readable;
@@ -21,8 +22,35 @@ impl Reader for Serializer {
 
 // Functions
 
-pub fn serialize<Acceptor: Readable>(acceptor: &Acceptor) -> Vec<u8> {
-    let mut serializer = Serializer(Vec::with_capacity(acceptor.size()));
-    serializer.visit(acceptor).unwrap();
-    serializer.0
+pub fn serialize<Acceptor: Readable>(acceptor: &Acceptor) -> Result<Vec<u8>, ReadError> {
+    let mut serializer = Serializer(Vec::with_capacity(acceptor.size()?));
+    serializer.visit(acceptor)?;
+    Ok(serializer.0)
+}
+
+// Test
+
+#[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
+mod tests {
+    use super::*;
+    use super::super::errors::ReadableError;
+    use super::super::size::Size;
+
+    // Structs
+
+    struct Unreadable;
+
+    impl Readable for Unreadable {
+        const SIZE: Size = Size::variable();
+        fn accept<Visitor: Reader>(&self, _: &mut Visitor) -> Result<(), ReadError> {
+            Err(ReadableError::new("IAmUnreadable").into())
+        }
+    }
+
+    #[test]
+    fn reference() {
+        assert_eq!(serialize::<[u32; 4]>(&[0x01, 0x02, 0x03, 0x04]).unwrap(), vec![0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00]);
+        serialize(&Unreadable).unwrap_err();
+    }
 }
