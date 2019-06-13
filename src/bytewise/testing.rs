@@ -1,6 +1,7 @@
 // Dependencies
 
 use std::fmt::Debug;
+use std::vec::Vec;
 use super::errors::ReaderError;
 use super::errors::WriterError;
 use super::load::Load;
@@ -65,5 +66,51 @@ pub mod reference {
     pub fn all<Value: Readable + Load + Debug + PartialEq>(value: &Value, buffer: &'static [u8]) {
         read(value, buffer);
         load(buffer, value);
+    }
+}
+
+#[cfg_attr(tarpaulin, skip)]
+mod invert {
+    use super::*;
+
+    // Structs
+
+    pub struct Buffer {
+        cursor: usize,
+        bytes: Vec<u8>
+    }
+
+    // Implementations
+
+    impl Buffer {
+        pub fn new() -> Self {
+            Buffer{cursor: 0, bytes: Vec::new()}
+        }
+    }
+
+    impl Reader for Buffer {
+        fn push(&mut self, chunk: &[u8]) -> Result<(), ReaderError> {
+            self.bytes.extend_from_slice(chunk);
+            Ok(())
+        }
+    }
+
+    impl Writer for Buffer {
+        fn pop(&mut self, size: usize) -> Result<&[u8], WriterError> {
+            if self.cursor + size <= self.bytes.len() {
+                let result = &self.bytes[self.cursor..(self.cursor + size)];
+                self.cursor += size;
+                Ok(result)
+            } else { Err(WriterError::new("EndOfBuffer")) }
+        }
+    }
+
+    // Functions
+
+    pub fn invert<Value: Readable + Load + Debug + PartialEq>(reference: &Value) {
+        let mut buffer = Buffer::new();
+        Reader::visit(&mut buffer, reference).unwrap();
+        let value = Value::load(&mut buffer).unwrap();
+        assert_eq!(&value, reference);
     }
 }
