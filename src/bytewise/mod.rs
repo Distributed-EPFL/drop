@@ -44,3 +44,8 @@ pub use errors::ReaderError;
 pub use errors::WritableError;
 pub use errors::WriteError;
 pub use errors::WriterError;
+
+// Tests
+
+#[cfg(test)]
+mod testing;
