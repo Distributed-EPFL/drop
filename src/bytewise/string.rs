@@ -51,3 +51,33 @@ impl Load for String {
         Ok(string)
     }
 }
+
+// Tests
+
+#[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
+mod tests {
+    use rand;
+    use rand::Rng;
+    use rand::distributions::Alphanumeric;
+    use std::iter;
+    use super::super::testing::invert;
+    use super::super::testing::reference;
+
+    #[test]
+    fn reference() {
+        reference::all(&"".to_string(), &[0x00]);
+        reference::all(&"Hello World".to_string(), &[0x0b, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64]);
+    }
+
+    #[test]
+    fn invert() {
+        let mut rng = rand::thread_rng();
+        
+        for _ in 0..128 {
+            let size = rng.gen_range(0, 256);
+            let string: String = iter::repeat(()).map(|()| rng.sample(Alphanumeric)).take(size).collect();
+            invert::invert(string, |value, reference| assert_eq!(value, reference));
+        }
+    }
+}
