@@ -86,6 +86,10 @@ mod invert {
         pub fn new() -> Self {
             Buffer{cursor: 0, bytes: Vec::new()}
         }
+
+        pub fn empty(&self) -> bool {
+            self.cursor == self.bytes.len()
+        }
     }
 
     impl Reader for Buffer {
@@ -112,5 +116,6 @@ mod invert {
         Reader::visit(&mut buffer, reference).unwrap();
         let value = Value::load(&mut buffer).unwrap();
         assert_eq!(&value, reference);
+        assert!(buffer.empty());
     }
 }
