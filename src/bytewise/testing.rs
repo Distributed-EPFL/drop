@@ -70,7 +70,7 @@ pub mod reference {
 }
 
 #[cfg_attr(tarpaulin, skip)]
-mod invert {
+pub mod invert {
     use super::*;
 
     // Structs
@@ -111,11 +111,11 @@ mod invert {
 
     // Functions
 
-    pub fn invert<Value: Readable + Load + Debug + PartialEq>(reference: &Value) {
+    pub fn invert<Value: Readable + Load, Compare: FnOnce(Value, Value)>(reference: Value, compare: Compare) {
         let mut buffer = Buffer::new();
-        Reader::visit(&mut buffer, reference).unwrap();
+        Reader::visit(&mut buffer, &reference).unwrap();
         let value = Value::load(&mut buffer).unwrap();
-        assert_eq!(&value, reference);
+        compare(value, reference);
         assert!(buffer.empty());
     }
 }
