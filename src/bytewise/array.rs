@@ -93,7 +93,51 @@ implement!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
 mod tests {
+    use std::cell::Cell;
+    use std::ops::Drop;
+    use super::*;
+    use super::super::errors::WritableError;
     use super::super::testing::reference;
+    use super::super::testing::reference::Buffer;
+
+    // Structs
+
+    struct Failable {
+        set: bool
+    }
+
+    // Implementations
+
+    impl Writable for Failable {
+        const SIZE: Size = Size::fixed(1);
+        fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
+            if visitor.pop(1)?[0] == 0 { self.set = true; Ok(()) } else { Err(WritableError::new("NotAZero").into()) }
+        }
+    }
+
+    impl Load for Failable {
+        fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
+            let mut failable = Failable{set: false};
+            from.visit(&mut failable)?;
+            Ok(failable)
+        }
+    }
+
+    impl Drop for Failable {
+        fn drop(&mut self) {
+            if self.set {
+                DROPPED.with(|dropped| {
+                    dropped.set(dropped.get() + 1);
+                });
+            }
+        }
+    }
+
+    // Static variables
+
+    thread_local! {
+        static DROPPED: Cell<usize> = Cell::new(0);
+    }
 
     // Test cases
 
@@ -108,5 +152,12 @@ mod tests {
     fn shortcut() {
         reference::all::<[u8; 16]>(&[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f], &[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f]);
         reference::all::<[[u8; 4]; 4]>(&[[0x00, 0x01, 0x02, 0x03], [0x04, 0x05, 0x06, 0x07], [0x08, 0x09, 0x0a, 0x0b], [0x0c, 0x0d, 0x0e, 0x0f]], &[0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f])
+    }
+
+    #[test]
+    fn rollback() {
+        let mut buffer = Buffer::new(&[0x00, 0x00, 0x00, 0x01, 0x00, 0x00]);
+        assert!(<[Failable; 6]>::load(&mut buffer).is_err());
+        DROPPED.with(|dropped| assert_eq!(dropped.get(), 3));
     }
 }

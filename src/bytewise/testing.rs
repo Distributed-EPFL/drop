@@ -14,12 +14,16 @@ pub mod reference {
 
     // Structs
 
-    struct Buffer(&'static [u8]);
+    pub struct Buffer(&'static [u8]);
 
     // Implementations
 
     impl Buffer {
-        fn empty(&self) -> bool {
+        pub fn new(buffer: &'static [u8]) -> Self {
+            Buffer(buffer)
+        }
+
+        pub fn empty(&self) -> bool {
             self.0.len() == 0
         }
     }
