@@ -61,19 +61,24 @@ mod tests {
     use rand::Rng;
     use rand::distributions::Alphanumeric;
     use std::iter;
+    use super::*;
     use super::super::testing::invert;
     use super::super::testing::reference;
+    use super::super::testing::reference::Buffer;
 
     #[test]
     fn reference() {
         reference::all(&"".to_string(), &[0x00]);
         reference::all(&"Hello World".to_string(), &[0x0b, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64]);
+
+        let mut string = String::new();
+        Reader::visit(&mut Buffer::new(&[0x01, 0x00]), &mut string).unwrap_err();
     }
 
     #[test]
     fn invert() {
         let mut rng = rand::thread_rng();
-        
+
         for _ in 0..128 {
             let size = rng.gen_range(0, 256);
             let string: String = iter::repeat(()).map(|()| rng.sample(Alphanumeric)).take(size).collect();

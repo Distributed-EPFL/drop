@@ -71,7 +71,9 @@ implement!(i8: 1, i16: 2, i32: 4, i64: 8, i128: 16, u8: 1, u16: 2, u32: 4, u64: 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
 mod tests {
+    use super::*;
     use super::super::testing::reference;
+    use super::super::testing::reference::Buffer;
 
     // Test cases
 
@@ -79,6 +81,12 @@ mod tests {
     fn boolean() {
         reference::all::<bool>(&false, &[0]);
         reference::all::<bool>(&true, &[1]);
+
+        let mut value: bool = true;
+        Writer::visit(&mut Buffer::new(&[0x00]), &mut value).unwrap();
+        assert_eq!(value, false);
+        Writer::visit(&mut Buffer::new(&[0x01]), &mut value).unwrap();
+        assert_eq!(value, true);
     }
 
     #[test]
