@@ -19,3 +19,17 @@ impl<Acceptor: Readable> Measurable for Acceptor {
         tape.size()
     }
 }
+
+// Tests
+
+#[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn measurable() {
+        assert_eq!(4u32.size(), 4);
+        assert_eq!("Hello World!".to_string().size(), 13);
+    }
+}
