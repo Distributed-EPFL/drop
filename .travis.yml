@@ -9,7 +9,7 @@ cache: cargo
 rust:
   - nightly
 
-before_cache: |
+install: |
   cargo install cargo-tarpaulin -f
 
 script:
