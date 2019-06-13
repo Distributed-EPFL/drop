@@ -13,8 +13,6 @@ install: |
   cargo install cargo-tarpaulin || :
 
 script:
-- cargo clean
-- cargo build
 - cargo test
 
 after_success: |
