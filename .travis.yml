@@ -10,7 +10,7 @@ rust:
   - nightly
 
 install: |
-  cargo install cargo-tarpaulin
+  cargo install cargo-tarpaulin || :
 
 script:
 - cargo clean
