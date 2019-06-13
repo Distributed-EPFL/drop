@@ -290,3 +290,72 @@ impl<Item: Load> Load for VecDeque<Item> {
         Ok(deque)
     }
 }
+
+// Tests
+
+#[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
+mod tests {
+    use rand;
+    use super::*;
+    use super::super::testing::invert;
+
+    #[test]
+    fn invert() {
+        let mut binary_heap = BinaryHeap::<u32>::new();
+        for _ in 0..128 { binary_heap.push(rand::random()); }
+        invert::invert(binary_heap, |mut value, mut reference| {
+            loop {
+                match (value.pop(), reference.pop()) {
+                    (Some(value), Some(reference)) => assert_eq!(value, reference),
+                    (None, None) => return,
+                    _ => panic!("`BinaryHeap`s have non-matching lengths.")
+                }
+            }
+        });
+
+        let mut b_tree_map = BTreeMap::<u32, u32>::new();
+        for _ in 0..128 { b_tree_map.insert(rand::random(), rand::random()); }
+        invert::invert(b_tree_map, |value, reference| {
+            assert_eq!(value.len(), reference.len());
+            for (key, value) in value {
+                assert_eq!(value, reference[&key]);
+            }
+        });
+
+        let mut b_tree_set = BTreeSet::<u32>::new();
+        for _ in 0..128 { b_tree_set.insert(rand::random()); }
+        invert::invert(b_tree_set, |value, reference| {
+            assert_eq!(value.len(), reference.len());
+            for value in value {
+                assert!(reference.contains(&value));
+            }
+        });
+
+        let mut hash_map = HashMap::<u32, u32>::new();
+        for _ in 0..128 { hash_map.insert(rand::random(), rand::random()); }
+        invert::invert(hash_map, |value, reference| {
+            assert_eq!(value.len(), reference.len());
+            for (key, value) in value {
+                assert_eq!(value, reference[&key]);
+            }
+        });
+
+        let mut hash_set = HashSet::<u32>::new();
+        for _ in 0..128 { hash_set.insert(rand::random()); }
+        invert::invert(hash_set, |value, reference| {
+            assert_eq!(value.len(), reference.len());
+            for value in value {
+                assert!(reference.contains(&value));
+            }
+        });
+
+        let mut linked_list = LinkedList::<u32>::new();
+        for _ in 0..128 { linked_list.push_back(rand::random()); }
+        invert::invert(linked_list, |value, reference| { assert_eq!(value, reference); });
+
+        let mut vec_deque = VecDeque::<u32>::new();
+        for _ in 0..128 { vec_deque.push_back(rand::random()); }
+        invert::invert(vec_deque, |value, reference| { assert_eq!(value, reference); });
+    }
+}
