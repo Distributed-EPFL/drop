@@ -27,9 +27,9 @@ pub fn display(error: &Error) -> TokenStream {
         },
         _ => {
             quote! {
-                write!(fmt, "[{}] ", stringify!(#error_ident))?;
+                write!(fmt, "[{}]", stringify!(#error_ident))?;
                 if let Some(spotting) = self.spottings().first() {
-                    write!(fmt, "at {}, line {}", spotting.file, spotting.line)?;
+                    write!(fmt, " at {}, line {}", spotting.file, spotting.line)?;
                 }
             }
         }

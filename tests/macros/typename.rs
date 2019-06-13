@@ -1,6 +1,6 @@
 // Dependencies
 
-use drop::traits::Typename;
+use drop::lang::Typename;
 use macros::Typename;
 
 #[derive(Typename)]
