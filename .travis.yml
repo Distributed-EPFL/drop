@@ -16,5 +16,5 @@ script:
 - cargo test
 
 after_success: |
-  cargo tarpaulin --out Xml
+  cargo tarpaulin --all --exclude-files tests/* macros/* --out Xml
   bash <(curl -s https://codecov.io/bash)

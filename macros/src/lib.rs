@@ -12,8 +12,8 @@ use crate::proc_macro::TokenStream;
 
 // Modules
 
-#[cfg_attr(tarpaulin, skip)] mod error;
-#[cfg_attr(tarpaulin, skip)] mod typename;
+mod error;
+mod typename;
 
 // Procedural macros
 
