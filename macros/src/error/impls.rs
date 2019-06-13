@@ -82,12 +82,9 @@ pub fn error(error: &Error) -> TokenStream {
                 error
             }
 
-            fn attach<Payload: drop::error::Attachment>(self, attachment: Payload) -> Self {
-                let attachment = Box::new(attachment);
-                let attachment = Box::<dyn drop::error::Attachment>::from(attachment);
-
+            fn attach<Payload: std::any::Any + drop::lang::Typename>(self, attachment: Payload) -> Self {
                 let mut error = self;
-                error.attachments.push(attachment);
+                error.attachments.push(drop::lang::Object::new(attachment));
                 error
             }
 
@@ -99,7 +96,7 @@ pub fn error(error: &Error) -> TokenStream {
                 &self.more
             }
 
-            fn attachments(&self) -> &Vec<Box<dyn drop::error::Attachment>> {
+            fn attachments(&self) -> &Vec<drop::lang::Object> {
                 &self.attachments
             }
         }

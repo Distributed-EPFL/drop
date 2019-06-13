@@ -1,6 +1,7 @@
 // Dependencies
 
-use super::attachment::Attachment;
+use crate::lang::Typename;
+use std::any::Any;
 use super::error::Error;
 use super::spotting::Spotting;
 
@@ -9,7 +10,7 @@ use super::spotting::Spotting;
 pub trait Context {
     fn spot(self, spotting: Spotting) -> Self;
     fn add<Text: Into<String>>(self, context: Text) -> Self;
-    fn attach<Payload: Attachment>(self, attachment: Payload) -> Self;
+    fn attach<Payload: Any + Typename>(self, attachment: Payload) -> Self;
 }
 
 // Implementations
@@ -29,7 +30,7 @@ impl<Ok, Err: Error> Context for Result<Ok, Err> {
         }
     }
 
-    fn attach<Payload: Attachment>(self, attachment: Payload) -> Self {
+    fn attach<Payload: Any + Typename>(self, attachment: Payload) -> Self {
         match self {
             Ok(ok) => Ok(ok),
             Err(err) => Err(err.attach(attachment))

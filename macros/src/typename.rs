@@ -23,7 +23,7 @@ pub fn typename(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let types: Vec<&Ident> = (&params).into_iter().map(|param| &param.ident).collect();
     let generics: Vec<TokenStream> = (&params).into_iter().map(|param| {
         let (ident, bounds) = (&param.ident, &param.bounds);
-        quote!(#ident: drop::traits::Typename #(+ #bounds)*)
+        quote!(#ident: drop::lang::Typename #(+ #bounds)*)
     }).collect();
 
     let (types, generics) = (&types, &generics);
@@ -35,7 +35,7 @@ pub fn typename(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     } else { quote!(stringify!(#ident).to_string()) };
 
     let output = quote! {
-        impl<#(#generics),*> drop::traits::Typename for #ident<#(#types),*> #where_clause {
+        impl<#(#generics),*> drop::lang::Typename for #ident<#(#types),*> #where_clause {
             fn typename() -> String {
                 #format
             }
