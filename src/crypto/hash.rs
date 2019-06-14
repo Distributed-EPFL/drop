@@ -24,14 +24,10 @@ pub const SIZE: usize = 32;
 
 // Structs
 
-pub struct State {
-    state: SodiumState
-}
+pub struct State(SodiumState);
 
 #[derive(Hash, PartialOrd)]
-pub struct Digest {
-    digest: [u8; SIZE]
-}
+pub struct Digest([u8; SIZE]);
 
 // Functions
 
@@ -45,24 +41,24 @@ pub fn hash<Acceptor: Readable>(acceptor: &Acceptor) -> Result<Digest, ReadError
 
 impl State {
     pub fn new() -> Self {
-        State{state: SodiumState::new(SIZE, None).unwrap()}
+        State(SodiumState::new(SIZE, None).unwrap())
     }
 
     pub fn finalize(self) -> Digest {
-        self.state.finalize().unwrap().into()
+        self.0.finalize().unwrap().into()
     }
 }
 
 impl Reader for State {
     fn push(&mut self, chunk: &[u8]) -> Result<(), ReaderError> {
-        self.state.update(chunk).unwrap();
+        self.0.update(chunk).unwrap();
         Ok(())
     }
 }
 
 impl From<SodiumDigest> for Digest {
     fn from(digest: SodiumDigest) -> Self {
-        Digest{digest: digest[..SIZE].try_into().unwrap()}
+        Digest(digest[..SIZE].try_into().unwrap())
     }
 }
 
@@ -77,14 +73,14 @@ impl TryFrom<&str> for Digest {
                                     .map_err(|_| ParseHexError::from(MalformedHex::new()))?;
             }
 
-            Ok(Digest{digest})
+            Ok(Digest(digest))
         }
     }
 }
 
 impl PartialEq<Digest> for Digest {
     fn eq(&self, rhs: &Digest) -> bool {
-        utils::memcmp(&self.digest, &rhs.digest)
+        utils::memcmp(&self.0, &rhs.0)
     }
 }
 
@@ -93,7 +89,7 @@ impl Eq for Digest {}
 impl Display for Digest {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "<")?;
-        for byte in &self.digest { write!(fmt, "{:02x}", byte)?; }
+        for byte in &self.0 { write!(fmt, "{:02x}", byte)?; }
         write!(fmt, ">")?;
 
         Ok(())
