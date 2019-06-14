@@ -1,7 +1,7 @@
 // Modules
 
-pub mod errors;
-pub mod hash;
+mod errors;
+mod hash;
 
 // Structs
 
@@ -11,3 +11,9 @@ pub use hash::State;
 // Functions
 
 pub use hash::hash;
+
+// Errors
+
+pub use errors::MalformedHex;
+pub use errors::ParseHexError;
+pub use errors::UnexpectedSize;
