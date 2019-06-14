@@ -6,6 +6,7 @@
 // Modules
 
 pub mod bytewise;
+pub mod crypto;
 pub mod data;
 pub mod error;
 pub mod lang;

@@ -66,6 +66,8 @@ mod tests {
     use super::super::testing::reference;
     use super::super::testing::reference::Buffer;
 
+    // Test cases
+
     #[test]
     fn reference() {
         reference::all(&"".to_string(), &[0x00]);

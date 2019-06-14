@@ -41,12 +41,16 @@ mod tests {
 
     struct Unreadable;
 
+    // Implementations
+
     impl Readable for Unreadable {
         const SIZE: Size = Size::variable();
         fn accept<Visitor: Reader>(&self, _: &mut Visitor) -> Result<(), ReadError> {
             Err(ReadableError::new("IAmUnreadable").into())
         }
     }
+
+    // Test cases
 
     #[test]
     fn reference() {
