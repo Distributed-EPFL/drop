@@ -9,6 +9,7 @@ use sodiumoxide::crypto::generichash::Digest as SodiumDigest;
 use sodiumoxide::utils;
 use std::default::Default;
 use std::convert::From;
+use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Debug;
@@ -59,8 +60,16 @@ impl Reader for State {
     }
 }
 
-impl Digest {
-    pub fn from(hex: &str) -> Result<Self, ParseHexError> {
+impl From<SodiumDigest> for Digest {
+    fn from(digest: SodiumDigest) -> Self {
+        Digest{digest: digest[..SIZE].try_into().unwrap()}
+    }
+}
+
+impl TryFrom<&str> for Digest {
+    type Error = ParseHexError;
+
+    fn try_from(hex: &str) -> Result<Self, ParseHexError> {
         if hex.len() != (2 * SIZE) { Err(UnexpectedSize::new().into()) } else {
             let mut digest: [u8; SIZE] = Default::default();
             for index in 0..SIZE {
@@ -70,12 +79,6 @@ impl Digest {
 
             Ok(Digest{digest})
         }
-    }
-}
-
-impl From<SodiumDigest> for Digest {
-    fn from(digest: SodiumDigest) -> Self {
-        Digest{digest: digest[..SIZE].try_into().unwrap()}
     }
 }
 
@@ -115,19 +118,19 @@ mod tests {
 
     #[test]
     fn from() {
-        assert_eq!(format!("{}", Digest::from("0000000000000000000000000000000000000000000000000000000000000000").unwrap()), "<0000000000000000000000000000000000000000000000000000000000000000>");
-        assert_eq!(format!("{:?}", Digest::from("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").unwrap()), "<0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef>");
+        assert_eq!(format!("{}", Digest::try_from("0000000000000000000000000000000000000000000000000000000000000000").unwrap()), "<0000000000000000000000000000000000000000000000000000000000000000>");
+        assert_eq!(format!("{:?}", Digest::try_from("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").unwrap()), "<0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef>");
 
-        Digest::from("").unwrap_err();
-        Digest::from("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde").unwrap_err();
-        Digest::from("0123456789abcdef0123456789abqdef0123456789abcdef0123456789abcdef").unwrap_err();
+        Digest::try_from("").unwrap_err();
+        Digest::try_from("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde").unwrap_err();
+        Digest::try_from("0123456789abcdef0123456789abqdef0123456789abcdef0123456789abcdef").unwrap_err();
     }
 
     #[test]
     fn reference() {
-        assert_eq!(hash(&0u32).unwrap(), Digest::from("11da6d1f761ddf9bdb4c9d6e5303ebd41f61858d0a5647a1a7bfe089bf921be9").unwrap());
-        assert_eq!(hash(&"Hello World!".to_string()).unwrap(), Digest::from("975077d5bb150ca2dafda69096aeb20eabd2010edc6f2352b389954fa485b700").unwrap());
-        assert_eq!(hash(&[0u32, 1u32, 2u32, 3u32, 4u32, 5u32, 6u32, 7u32]).unwrap(), Digest::from("d6a648a90a8267de463f99f87849e7e7c5a9273a252e501c95b44fbb958b6f7b").unwrap());
+        assert_eq!(hash(&0u32).unwrap(), Digest::try_from("11da6d1f761ddf9bdb4c9d6e5303ebd41f61858d0a5647a1a7bfe089bf921be9").unwrap());
+        assert_eq!(hash(&"Hello World!".to_string()).unwrap(), Digest::try_from("975077d5bb150ca2dafda69096aeb20eabd2010edc6f2352b389954fa485b700").unwrap());
+        assert_eq!(hash(&[0u32, 1u32, 2u32, 3u32, 4u32, 5u32, 6u32, 7u32]).unwrap(), Digest::try_from("d6a648a90a8267de463f99f87849e7e7c5a9273a252e501c95b44fbb958b6f7b").unwrap());
     }
 
     #[test]
