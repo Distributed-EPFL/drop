@@ -1,10 +1,10 @@
 // Dependencies
 
-use crate::bytewise::ReadError;
 use crate::bytewise::Readable;
 use crate::bytewise::Reader;
 use crate::bytewise::ReaderError;
 use sodiumoxide::crypto::generichash::State as SodiumState;
+use super::errors::HashError;
 use super::key::Key;
 
 // Constants
@@ -20,13 +20,13 @@ pub struct Digest(pub(super) [u8; SIZE]);
 
 // Functions
 
-pub fn hash<Acceptor: Readable>(acceptor: &Acceptor) -> Result<Digest, ReadError> {
+pub fn hash<Acceptor: Readable>(acceptor: &Acceptor) -> Result<Digest, HashError> {
     let mut state = State::new();
     state.visit(acceptor)?;
     Ok(state.finalize())
 }
 
-pub fn authenticate<Acceptor: Readable>(key: &Key, acceptor: &Acceptor) -> Result<Digest, ReadError> {
+pub fn authenticate<Acceptor: Readable>(key: &Key, acceptor: &Acceptor) -> Result<Digest, HashError> {
     let mut state = State::keyed(key);
     state.visit(acceptor)?;
     Ok(state.finalize())
