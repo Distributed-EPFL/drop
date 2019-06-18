@@ -53,3 +53,11 @@ impl Into<KxKey> for Key {
         KxKey(self.0)
     }
 }
+
+impl PartialEq<Key> for Key {
+    fn eq(&self, rhs: &Key) -> bool {
+        utils::memcmp(&self.0, &rhs.0)
+    }
+}
+
+impl Eq for Key {}

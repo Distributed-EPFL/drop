@@ -74,16 +74,6 @@ mod tests {
     // Test cases
 
     #[test]
-    fn from() {
-        assert_eq!(format!("{}", Digest::try_from("0000000000000000000000000000000000000000000000000000000000000000").unwrap()), "<0000000000000000000000000000000000000000000000000000000000000000>");
-        assert_eq!(format!("{:?}", Digest::try_from("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").unwrap()), "<0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef>");
-
-        Digest::try_from("").unwrap_err();
-        Digest::try_from("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde").unwrap_err();
-        Digest::try_from("0123456789abcdef0123456789abqdef0123456789abcdef0123456789abcdef").unwrap_err();
-    }
-
-    #[test]
     fn reference() {
         assert_eq!(hash(&0u32).unwrap(), Digest::try_from("11da6d1f761ddf9bdb4c9d6e5303ebd41f61858d0a5647a1a7bfe089bf921be9").unwrap());
         assert_eq!(hash(&"Hello World!".to_string()).unwrap(), Digest::try_from("975077d5bb150ca2dafda69096aeb20eabd2010edc6f2352b389954fa485b700").unwrap());
