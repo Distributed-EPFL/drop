@@ -1,5 +1,6 @@
 // Modules
 
+mod convert;
 mod errors;
 mod format;
 mod hash;

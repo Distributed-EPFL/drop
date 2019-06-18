@@ -5,9 +5,6 @@ use crate::bytewise::Readable;
 use crate::bytewise::Reader;
 use crate::bytewise::ReaderError;
 use sodiumoxide::crypto::generichash::State as SodiumState;
-use sodiumoxide::crypto::generichash::Digest as SodiumDigest;
-use std::convert::From;
-use std::convert::TryInto;
 
 // Constants
 
@@ -44,12 +41,6 @@ impl Reader for State {
     fn push(&mut self, chunk: &[u8]) -> Result<(), ReaderError> {
         self.0.update(chunk).unwrap();
         Ok(())
-    }
-}
-
-impl From<SodiumDigest> for Digest {
-    fn from(digest: SodiumDigest) -> Self {
-        Digest(digest[..SIZE].try_into().unwrap())
     }
 }
 
