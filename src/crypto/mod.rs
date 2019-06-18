@@ -17,6 +17,7 @@ pub use key::Key;
 // Functions
 
 pub use hash::hash;
+pub use hash::authenticate;
 
 // Errors
 

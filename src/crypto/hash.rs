@@ -5,6 +5,7 @@ use crate::bytewise::Readable;
 use crate::bytewise::Reader;
 use crate::bytewise::ReaderError;
 use sodiumoxide::crypto::generichash::State as SodiumState;
+use super::key::Key;
 
 // Constants
 
@@ -25,11 +26,21 @@ pub fn hash<Acceptor: Readable>(acceptor: &Acceptor) -> Result<Digest, ReadError
     Ok(state.finalize())
 }
 
+pub fn authenticate<Acceptor: Readable>(key: &Key, acceptor: &Acceptor) -> Result<Digest, ReadError> {
+    let mut state = State::keyed(key);
+    state.visit(acceptor)?;
+    Ok(state.finalize())
+}
+
 // Implementations
 
 impl State {
     pub fn new() -> Self {
         State(SodiumState::new(SIZE, None).unwrap())
+    }
+
+    pub fn keyed(key: &Key) -> Self {
+        State(SodiumState::new(SIZE, Some(&key.0)).unwrap())
     }
 
     pub fn finalize(self) -> Digest {
