@@ -40,10 +40,10 @@ impl TxStream {
         TxStream(TxState::Setup(key))
     }
 
-    pub fn encrypt<Plaintext: Readable>(&mut self, plaintext: &Plaintext) -> Result<Vec<u8>, EncryptError> {
+    pub fn encrypt<Message: Readable>(&mut self, message: &Message) -> Result<Vec<u8>, EncryptError> {
         let encrypt = |stream: &mut Stream<Push>, buffer: &mut Vec<u8>| {
             let mut serializer = Serializer(buffer);
-            serializer.visit(plaintext)?;
+            serializer.visit(message)?;
             Ok(stream.push(&buffer, None, Tag::Message).unwrap())
         };
 

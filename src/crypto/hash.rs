@@ -20,15 +20,15 @@ pub struct Digest(pub(super) [u8; SIZE]);
 
 // Functions
 
-pub fn hash<Acceptor: Readable>(acceptor: &Acceptor) -> Result<Digest, HashError> {
+pub fn hash<Message: Readable>(message: &Message) -> Result<Digest, HashError> {
     let mut state = State::new();
-    state.visit(acceptor)?;
+    state.visit(message)?;
     Ok(state.finalize())
 }
 
-pub fn authenticate<Acceptor: Readable>(key: &Key, acceptor: &Acceptor) -> Result<Digest, HashError> {
+pub fn authenticate<Message: Readable>(key: &Key, message: &Message) -> Result<Digest, HashError> {
     let mut state = State::keyed(key);
-    state.visit(acceptor)?;
+    state.visit(message)?;
     Ok(state.finalize())
 }
 
