@@ -1,6 +1,7 @@
 // Dependencies
 
 use sodiumoxide::utils;
+use std::ops::Drop;
 use super::hash::Digest;
 use super::key::Key;
 
@@ -13,6 +14,12 @@ impl PartialEq<Digest> for Digest {
 }
 
 impl Eq for Digest {}
+
+impl Drop for Key {
+    fn drop(&mut self) {
+        utils::memzero(&mut self.0);
+    }
+}
 
 impl PartialEq<Key> for Key {
     fn eq(&self, rhs: &Key) -> bool {
