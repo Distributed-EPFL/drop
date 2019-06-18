@@ -7,16 +7,11 @@ use crate::bytewise::ReaderError;
 use sodiumoxide::crypto::generichash::State as SodiumState;
 use sodiumoxide::crypto::generichash::Digest as SodiumDigest;
 use sodiumoxide::utils;
-use std::default::Default;
 use std::convert::From;
-use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Display;
-use super::errors::MalformedHex;
-use super::errors::ParseHexError;
-use super::errors::UnexpectedSize;
 
 // Constants
 
@@ -27,7 +22,7 @@ pub const SIZE: usize = 32;
 pub struct State(SodiumState);
 
 #[derive(Hash, PartialOrd)]
-pub struct Digest([u8; SIZE]);
+pub struct Digest(pub(super) [u8; SIZE]);
 
 // Functions
 
@@ -59,22 +54,6 @@ impl Reader for State {
 impl From<SodiumDigest> for Digest {
     fn from(digest: SodiumDigest) -> Self {
         Digest(digest[..SIZE].try_into().unwrap())
-    }
-}
-
-impl TryFrom<&str> for Digest {
-    type Error = ParseHexError;
-
-    fn try_from(hex: &str) -> Result<Self, ParseHexError> {
-        if hex.len() != (2 * SIZE) { Err(UnexpectedSize::new().into()) } else {
-            let mut digest: [u8; SIZE] = Default::default();
-            for index in 0..SIZE {
-                digest[index] = u8::from_str_radix(&hex[(2 * index)..(2 * (index + 1))], 16)
-                                    .map_err(|_| ParseHexError::from(MalformedHex::new()))?;
-            }
-
-            Ok(Digest(digest))
-        }
     }
 }
 
