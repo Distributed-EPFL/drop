@@ -9,11 +9,11 @@ use super::reader::Reader;
 
 // Structs
 
-struct Serializer(Vec<u8>);
+struct Serializer<'s>(&'s mut Vec<u8>);
 
 // Implementations
 
-impl Reader for Serializer {
+impl Reader for Serializer<'_> {
     fn push(&mut self, chunk: &[u8]) -> Result<(), ReaderError> {
         self.0.extend_from_slice(chunk);
         Ok(())
@@ -23,9 +23,10 @@ impl Reader for Serializer {
 // Functions
 
 pub fn serialize<Acceptor: Readable>(acceptor: &Acceptor) -> Result<Vec<u8>, ReadError> {
-    let mut serializer = Serializer(Vec::with_capacity(acceptor.size()?));
+    let mut vec = Vec::with_capacity(acceptor.size()?);
+    let mut serializer = Serializer(&mut vec);
     serializer.visit(acceptor)?;
-    Ok(serializer.0)
+    Ok(vec)
 }
 
 // Test
