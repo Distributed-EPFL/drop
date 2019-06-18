@@ -7,12 +7,15 @@ mod hash;
 mod key;
 mod ops;
 mod parse;
+mod stream;
 
 // Structs
 
 pub use hash::Digest;
 pub use hash::State;
 pub use key::Key;
+pub use stream::RxStream;
+pub use stream::TxStream;
 
 // Functions
 

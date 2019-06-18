@@ -9,7 +9,7 @@ use super::reader::Reader;
 
 // Structs
 
-pub struct Serializer<'s>(&'s mut Vec<u8>);
+pub struct Serializer<'s>(pub &'s mut Vec<u8>);
 
 // Implementations
 

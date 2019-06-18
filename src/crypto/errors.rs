@@ -28,3 +28,9 @@ error! {
     description: "The object provided was impossible to hash.",
     causes: (ReadError)
 }
+
+error! {
+    type: EncryptError,
+    description: "The object provided was impossible to encrypt.",
+    causes: (ReadError)
+}

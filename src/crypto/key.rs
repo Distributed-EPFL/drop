@@ -9,6 +9,7 @@ pub const SIZE: usize = 32;
 
 // Structs
 
+#[derive(Clone)]
 pub struct Key(pub(super) [u8; SIZE]);
 
 // Implemenations
