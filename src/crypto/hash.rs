@@ -9,9 +9,6 @@ use sodiumoxide::crypto::generichash::Digest as SodiumDigest;
 use sodiumoxide::utils;
 use std::convert::From;
 use std::convert::TryInto;
-use std::fmt;
-use std::fmt::Debug;
-use std::fmt::Display;
 
 // Constants
 
@@ -65,22 +62,6 @@ impl PartialEq<Digest> for Digest {
 
 impl Eq for Digest {}
 
-impl Display for Digest {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "<")?;
-        for byte in &self.0 { write!(fmt, "{:02x}", byte)?; }
-        write!(fmt, ">")?;
-
-        Ok(())
-    }
-}
-
-impl Debug for Digest {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "{}", self)
-    }
-}
-
 // Tests
 
 #[cfg(test)]
@@ -88,6 +69,7 @@ impl Debug for Digest {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+    use std::convert::TryFrom;
 
     // Test cases
 

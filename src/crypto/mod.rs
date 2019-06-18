@@ -1,6 +1,7 @@
 // Modules
 
 mod errors;
+mod format;
 mod hash;
 mod key;
 mod parse;
