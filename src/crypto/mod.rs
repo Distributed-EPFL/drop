@@ -4,6 +4,7 @@ mod errors;
 mod format;
 mod hash;
 mod key;
+mod ops;
 mod parse;
 
 // Structs

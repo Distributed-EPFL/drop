@@ -6,7 +6,6 @@ use crate::bytewise::Reader;
 use crate::bytewise::ReaderError;
 use sodiumoxide::crypto::generichash::State as SodiumState;
 use sodiumoxide::crypto::generichash::Digest as SodiumDigest;
-use sodiumoxide::utils;
 use std::convert::From;
 use std::convert::TryInto;
 
@@ -53,14 +52,6 @@ impl From<SodiumDigest> for Digest {
         Digest(digest[..SIZE].try_into().unwrap())
     }
 }
-
-impl PartialEq<Digest> for Digest {
-    fn eq(&self, rhs: &Digest) -> bool {
-        utils::memcmp(&self.0, &rhs.0)
-    }
-}
-
-impl Eq for Digest {}
 
 // Tests
 
