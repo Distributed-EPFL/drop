@@ -1,6 +1,5 @@
 // Dependencies
 
-use std::vec::Vec;
 use super::errors::WriteError;
 use super::errors::WriterError;
 use super::load::Load;

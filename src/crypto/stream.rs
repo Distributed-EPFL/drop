@@ -1,13 +1,21 @@
 // Dependencies
 
+use crate::bytewise;
+use crate::bytewise::Load;
 use crate::bytewise::Readable;
 use crate::bytewise::Reader;
 use crate::bytewise::Serializer;
+use sodiumoxide::crypto::secretstream::HEADERBYTES;
+use sodiumoxide::crypto::secretstream::Header;
 use sodiumoxide::crypto::secretstream::Pull;
 use sodiumoxide::crypto::secretstream::Push;
 use sodiumoxide::crypto::secretstream::Stream;
 use sodiumoxide::crypto::secretstream::Tag;
+use super::errors::DecryptError;
 use super::errors::EncryptError;
+use super::errors::InvalidHeader;
+use super::errors::InvalidMac;
+use super::errors::MissingHeader;
 use super::key::Key;
 
 // Enums
@@ -22,10 +30,7 @@ enum TxState {
 
 enum RxState {
     Setup(Key),
-    Run {
-        stream: Stream<Pull>,
-        buffer: Vec<u8>
-    }
+    Run(Stream<Pull>)
 }
 
 // Structs
@@ -68,5 +73,26 @@ impl TxStream {
 impl RxStream {
     pub fn new(key: Key) -> Self {
         RxStream(RxState::Setup(key))
+    }
+
+    pub fn decrypt<Message: Load>(&mut self, ciphertext: &[u8]) -> Result<Message, DecryptError> {
+        match &mut self.0 {
+            RxState::Setup(key) => {
+                if ciphertext.len() >= HEADERBYTES {
+                    let (ciphertext, header) = ciphertext.split_at(ciphertext.len() - HEADERBYTES);
+                    if let Ok(mut stream) = Stream::init_pull(&Header::from_slice(header).unwrap(), &key.clone().into()) {
+                        if let Ok((message, _)) = stream.pull(ciphertext, None) {
+                            self.0 = RxState::Run(stream);
+                            Ok(bytewise::deserialize::<Message>(&message)?)
+                        } else { Err(InvalidMac::new().into()) }
+                    } else { Err(InvalidHeader::new().into()) }
+                } else { Err(MissingHeader::new().into()) }
+            },
+            RxState::Run(stream) => {
+                if let Ok((message, _)) = stream.pull(ciphertext, None) {
+                    Ok(bytewise::deserialize::<Message>(&message)?)
+                } else { Err(InvalidMac::new().into()) }
+            }
+        }
     }
 }
