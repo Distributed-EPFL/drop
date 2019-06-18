@@ -8,7 +8,7 @@ use super::writer::Writer;
 
 // Structs
 
-struct Deserializer<'s>(&'s [u8]);
+pub struct Deserializer<'s>(&'s [u8]);
 
 // Implementations
 

@@ -31,6 +31,11 @@ pub use writer::Writer;
 
 pub use size::Size;
 
+// Structs
+
+pub use deserialize::Deserializer;
+pub use serialize::Serializer;
+
 // Functions
 
 pub use deserialize::deserialize;
