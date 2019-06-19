@@ -9,19 +9,19 @@ struct MyStruct;
 struct MyOtherStruct<T>(T);
 
 #[test]
-fn develop() {
-    let typename = format!("{}", std::collections::BinaryHeap::<&'static MyStruct>::typename());
+fn typename() {
+    let typename = std::collections::BinaryHeap::<&'static MyStruct>::typename();
     assert_eq!(typename, "BinaryHeap<&'static MyStruct>");
 
-    let typename = format!("{}", <(u32, u64, f64, std::collections::BinaryHeap<&'static MyStruct>, std::vec::Vec<String>)>::typename());
+    let typename = <(u32, u64, f64, std::collections::BinaryHeap<&'static MyStruct>, std::vec::Vec<String>)>::typename();
     assert_eq!(typename, "(u32, u64, f64, BinaryHeap<&'static MyStruct>, Vec<String>)");
 
-    let typename = format!("{}", MyOtherStruct::<(u32, u64, f64, std::collections::BinaryHeap<&'static MyStruct>, std::vec::Vec<String>)>::typename());
+    let typename = MyOtherStruct::<(u32, u64, f64, std::collections::BinaryHeap<&'static MyStruct>, std::vec::Vec<String>)>::typename();
     assert_eq!(typename, "MyOtherStruct<(u32, u64, f64, BinaryHeap<&'static MyStruct>, Vec<String>)>");
 
-    let typename = format!("{}", MyOtherStruct::<MyOtherStruct<(u32, u64, f64, std::collections::BinaryHeap<&'static MyStruct>, std::vec::Vec<String>)>>::typename());
+    let typename = MyOtherStruct::<MyOtherStruct<(u32, u64, f64, std::collections::BinaryHeap<&'static MyStruct>, std::vec::Vec<String>)>>::typename();
     assert_eq!(typename, "MyOtherStruct<MyOtherStruct<(u32, u64, f64, BinaryHeap<&'static MyStruct>, Vec<String>)>>");
 
-    let typename = format!("{}", <[MyOtherStruct<MyOtherStruct<(u32, u64, f64, std::collections::BinaryHeap<&'static MyStruct>, std::vec::Vec<String>)>>; 2]>::typename());
+    let typename = <[MyOtherStruct<MyOtherStruct<(u32, u64, f64, std::collections::BinaryHeap<&'static MyStruct>, std::vec::Vec<String>)>>; 2]>::typename();
     assert_eq!(typename, "[MyOtherStruct<MyOtherStruct<(u32, u64, f64, BinaryHeap<&'static MyStruct>, Vec<String>)>>; 2]");
 }
