@@ -99,3 +99,24 @@ impl RxStream {
         }
     }
 }
+
+// Tests
+
+#[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoints() {
+        let key = Key::random();
+        let mut transmitter = TxStream::new(key.clone());
+        let mut receiver = RxStream::new(key);
+
+        for message in 0u64..128u64 {
+            let ciphertext = transmitter.encrypt(&message).unwrap();
+            let plaintext = receiver.decrypt::<u64>(&ciphertext).unwrap();
+            assert_eq!(plaintext, message);
+        }
+    }
+}
