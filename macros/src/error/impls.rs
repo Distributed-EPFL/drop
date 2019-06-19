@@ -31,7 +31,7 @@ pub fn methods(error: &Error) -> TokenStream {
     quote! {
         impl #error_ident {
             pub fn new(#(#values: #types),*) -> #error_ident {
-                #error_ident{description: #description, backtrace: drop::Backtrace::new(), spottings: std::vec::Vec::new(), more: std::vec::Vec::new(), attachments: std::vec::Vec::new(), #(#values),*}
+                #error_ident{description: #description, backtrace: drop::backtrace::Backtrace::new(), spottings: std::vec::Vec::new(), more: std::vec::Vec::new(), attachments: std::vec::Vec::new(), #(#values),*}
             }
 
             #(
@@ -61,12 +61,12 @@ pub fn error(error: &Error) -> TokenStream {
     let error_ident = &error.idents.error;
 
     quote! {
-        impl drop::Error for #error_ident {
+        impl drop::error::Error for #error_ident {
             fn description(&self) -> &String {
                 &self.description
             }
 
-            fn backtrace(&self) -> &drop::Backtrace {
+            fn backtrace(&self) -> &drop::backtrace::Backtrace {
                 &self.backtrace
             }
 

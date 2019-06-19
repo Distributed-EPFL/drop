@@ -13,7 +13,7 @@ pub fn error(error: &Error) -> TokenStream {
 
     let struct_fields = quote! {
         description: String,
-        backtrace: drop::Backtrace,
+        backtrace: drop::backtrace::Backtrace,
         spottings: std::vec::Vec<drop::error::Spotting>,
         more: std::vec::Vec<String>,
         attachments: std::vec::Vec<drop::lang::Object>
