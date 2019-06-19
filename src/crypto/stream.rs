@@ -69,9 +69,7 @@ impl TxStream {
                 *state = TxState::Run{stream, buffer};
                 Ok(ciphertext)
             },
-            TxState::Run{stream, buffer} => {
-                encrypt(stream, buffer)
-            }
+            TxState::Run{stream, buffer} => encrypt(stream, buffer)
         }
     }
 }
@@ -126,5 +124,41 @@ mod tests {
             let plaintext = receiver.decrypt::<u64>(&ciphertext).unwrap();
             assert_eq!(plaintext, message);
         }
+    }
+
+    #[test]
+    fn errors() {
+        let key = Key::random();
+        let wrong_key = Key::random();
+
+        let mut receiver = RxStream::new(key.clone());
+        receiver.decrypt::<u32>(&[]).unwrap_err();
+
+        let mut transmitter = TxStream::new(key.clone());
+        let mut receiver = RxStream::new(key.clone());
+        let mut ciphertext = transmitter.encrypt(&0u32).unwrap();
+        *ciphertext.last_mut().unwrap() += 1;
+        receiver.decrypt::<u32>(&ciphertext).unwrap_err();
+
+        let mut transmitter = TxStream::new(key.clone());
+        let mut receiver = RxStream::new(key.clone());
+        let mut ciphertext = transmitter.encrypt(&0u32).unwrap();
+        *ciphertext.first_mut().unwrap() += 1;
+        receiver.decrypt::<u32>(&ciphertext).unwrap_err();
+
+        let mut transmitter = TxStream::new(key.clone());
+        let mut receiver = RxStream::new(key.clone());
+        let ciphertext = transmitter.encrypt(&0u32).unwrap();
+        receiver.decrypt::<u32>(&ciphertext).unwrap();
+        let mut ciphertext = transmitter.encrypt(&0u32).unwrap();
+        *ciphertext.first_mut().unwrap() += 1;
+        receiver.decrypt::<u32>(&ciphertext).unwrap_err();
+        *ciphertext.first_mut().unwrap() -= 1;
+        receiver.decrypt::<u32>(&ciphertext).unwrap_err();
+
+        let mut transmitter = TxStream::new(key);
+        let mut receiver = RxStream::new(wrong_key);
+        let ciphertext = transmitter.encrypt(&0u32).unwrap();
+        receiver.decrypt::<u32>(&ciphertext).unwrap_err();
     }
 }
