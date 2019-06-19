@@ -49,10 +49,14 @@ impl TxStream {
         let encrypt = |stream: &mut Stream<Push>, buffer: &mut Vec<u8>| {
             let mut serializer = Serializer(buffer);
             serializer.visit(message)?;
-            Ok(stream.push(&buffer, None, Tag::Message).unwrap())
+
+            let ciphertext = stream.push(&buffer, None, Tag::Message).unwrap();
+            buffer.clear();
+            Ok(ciphertext)
         };
 
-        match &mut self.0 {
+        let state = &mut self.0;
+        match state {
             TxState::Setup(key) => {
                 let (mut stream, header) = Stream::init_push(&key.clone().into()).unwrap();
                 let mut buffer = Vec::new();
@@ -60,7 +64,7 @@ impl TxStream {
                 let mut ciphertext = encrypt(&mut stream, &mut buffer)?;
                 ciphertext.extend_from_slice(&header[..]);
 
-                self.0 = TxState::Run{stream, buffer};
+                *state = TxState::Run{stream, buffer};
                 Ok(ciphertext)
             },
             TxState::Run{stream, buffer} => {
@@ -76,22 +80,21 @@ impl RxStream {
     }
 
     pub fn decrypt<Message: Load>(&mut self, ciphertext: &[u8]) -> Result<Message, DecryptError> {
-        match &mut self.0 {
+        let state = &mut self.0;
+        match state {
             RxState::Setup(key) => {
-                if ciphertext.len() >= HEADERBYTES {
-                    let (ciphertext, header) = ciphertext.split_at(ciphertext.len() - HEADERBYTES);
-                    if let Ok(mut stream) = Stream::init_pull(&Header::from_slice(header).unwrap(), &key.clone().into()) {
-                        if let Ok((message, _)) = stream.pull(ciphertext, None) {
-                            self.0 = RxState::Run(stream);
-                            Ok(bytewise::deserialize::<Message>(&message)?)
-                        } else { Err(InvalidMac::new().into()) }
-                    } else { Err(InvalidHeader::new().into()) }
-                } else { Err(MissingHeader::new().into()) }
+                if ciphertext.len() < HEADERBYTES { return Err(MissingHeader::new().into()); }
+                let (ciphertext, header) = ciphertext.split_at(ciphertext.len() - HEADERBYTES);
+
+                let mut stream = Stream::init_pull(&Header::from_slice(header).unwrap(), &key.clone().into()).map_err(|_| InvalidHeader::new())?;
+                let message = stream.pull(ciphertext, None).map_err(|_| InvalidMac::new())?.0;
+
+                *state = RxState::Run(stream);
+                Ok(bytewise::deserialize::<Message>(&message)?)
             },
             RxState::Run(stream) => {
-                if let Ok((message, _)) = stream.pull(ciphertext, None) {
-                    Ok(bytewise::deserialize::<Message>(&message)?)
-                } else { Err(InvalidMac::new().into()) }
+                let message = stream.pull(ciphertext, None).map_err(|_| InvalidMac::new())?.0;
+                Ok(bytewise::deserialize::<Message>(&message)?)
             }
         }
     }
