@@ -11,6 +11,7 @@ use sodiumoxide::crypto::secretstream::Pull;
 use sodiumoxide::crypto::secretstream::Push;
 use sodiumoxide::crypto::secretstream::Stream;
 use sodiumoxide::crypto::secretstream::Tag;
+use super::errors::BrokenStream;
 use super::errors::DecryptError;
 use super::errors::EncryptError;
 use super::errors::InvalidHeader;
@@ -30,7 +31,8 @@ enum TxState {
 
 enum RxState {
     Setup(Key),
-    Run(Stream<Pull>)
+    Run(Stream<Pull>),
+    Broken
 }
 
 // Structs
@@ -80,23 +82,29 @@ impl RxStream {
     }
 
     pub fn decrypt<Message: Load>(&mut self, ciphertext: &[u8]) -> Result<Message, DecryptError> {
-        let state = &mut self.0;
-        match state {
-            RxState::Setup(key) => {
-                if ciphertext.len() < HEADERBYTES { return Err(MissingHeader::new().into()); }
-                let (ciphertext, header) = ciphertext.split_at(ciphertext.len() - HEADERBYTES);
+        (|| {
+            let state = &mut self.0;
+            match state {
+                RxState::Setup(key) => {
+                    if ciphertext.len() < HEADERBYTES { return Err(MissingHeader::new().into()); }
+                    let (ciphertext, header) = ciphertext.split_at(ciphertext.len() - HEADERBYTES);
 
-                let mut stream = Stream::init_pull(&Header::from_slice(header).unwrap(), &key.clone().into()).map_err(|_| InvalidHeader::new())?;
-                let message = stream.pull(ciphertext, None).map_err(|_| InvalidMac::new())?.0;
+                    let mut stream = Stream::init_pull(&Header::from_slice(header).unwrap(), &key.clone().into()).map_err(|_| InvalidHeader::new())?;
+                    let message = stream.pull(ciphertext, None).map_err(|_| InvalidMac::new())?.0;
 
-                *state = RxState::Run(stream);
-                Ok(bytewise::deserialize::<Message>(&message)?)
-            },
-            RxState::Run(stream) => {
-                let message = stream.pull(ciphertext, None).map_err(|_| InvalidMac::new())?.0;
-                Ok(bytewise::deserialize::<Message>(&message)?)
+                    *state = RxState::Run(stream);
+                    Ok(bytewise::deserialize::<Message>(&message)?)
+                },
+                RxState::Run(stream) => {
+                    let message = stream.pull(ciphertext, None).map_err(|_| InvalidMac::new())?.0;
+                    Ok(bytewise::deserialize::<Message>(&message)?)
+                },
+                RxState::Broken => Err(BrokenStream::new().into())
             }
-        }
+        })().map_err(|error| {
+            self.0 = RxState::Broken;
+            error
+        })
     }
 }
 

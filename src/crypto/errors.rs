@@ -52,7 +52,12 @@ error! {
 }
 
 error! {
+    type: BrokenStream,
+    description: "The `RxStream` is broken (it previously incurred in an error)."
+}
+
+error! {
     type: DecryptError,
     description: "The ciphertext provided was impossible to decrypt.",
-    causes: (MissingHeader, InvalidHeader, InvalidMac, WriteError)
+    causes: (MissingHeader, InvalidHeader, InvalidMac, WriteError, BrokenStream)
 }
