@@ -3,16 +3,14 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use super::parse::Configuration;
-use super::parse::Mode;
 
 // Functions
 
 pub fn readable(configuration: &Configuration) -> TokenStream {
-    let ident = &configuration.ident;
-    match &configuration.mode {
-        Mode::Struct => {
-            let visits = (&configuration.acceptors).into_iter().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&self.#ident)?;));
-            let tys = (&configuration.acceptors).into_iter().map(|acceptor| &acceptor.ty);
+    match configuration {
+        Configuration::Struct{ident, acceptors} => {
+            let visits = acceptors.into_iter().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&self.#ident)?;));
+            let tys = acceptors.into_iter().map(|acceptor| &acceptor.ty);
 
             quote! {
                 impl drop::bytewise::Readable for #ident {
@@ -23,7 +21,6 @@ pub fn readable(configuration: &Configuration) -> TokenStream {
                     }
                 }
             }
-        },
-        _ => unimplemented!()
+        }
     }
 }
