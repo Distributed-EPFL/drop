@@ -21,6 +21,7 @@ pub fn readable(configuration: &Configuration) -> TokenStream {
                     }
                 }
             }
-        }
+        },
+        Configuration::Enum{..} => unimplemented!()
     }
 }

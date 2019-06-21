@@ -16,7 +16,24 @@ pub enum Configuration {
     Struct {
         ident: TokenStream,
         acceptors: Vec<Acceptor>
+    },
+    Enum {
+        ident: TokenStream,
+        variants: Vec<Variant>
     }
+}
+
+pub struct Variant {
+    pub ident: TokenStream,
+    pub naming: Naming,
+    pub fields: Vec<TokenStream>,
+    pub acceptors: Vec<Acceptor>
+}
+
+pub enum Naming {
+    Named,
+    Unnamed,
+    Unit
 }
 
 pub struct Acceptor {
@@ -27,9 +44,28 @@ pub struct Acceptor {
 // Functions
 
 pub fn configuration(input: &DeriveInput) -> Configuration {
-    let ident = &input.ident;
+    let input_ident = &input.ident;
     match &input.data {
-        Data::Struct(data) => Configuration::Struct{ident: quote!(#ident), acceptors: acceptors(&data.fields)},
+        Data::Struct(data) => Configuration::Struct{ident: quote!(#input_ident), acceptors: acceptors(&data.fields)},
+        Data::Enum(data) => {
+            let variants: Vec<Variant> = (&data.variants).into_iter().map(|variant| {
+                let variant_ident = &variant.ident;
+                let naming = match &variant.fields { Fields::Named(_) => Naming::Named, Fields::Unnamed(_) => Naming::Unnamed, Fields::Unit => Naming::Unit };
+
+                let fields: Vec<TokenStream> = match &variant.fields {
+                    Fields::Named(fields) => (&fields.named).into_iter().map(|field| {
+                        let field = field.ident.as_ref().unwrap();
+                        quote!(#field)
+                    }).collect(),
+                    Fields::Unnamed(fields) => (0..fields.unnamed.len()).map(|index| quote!(field_#index)).collect(),
+                    Fields::Unit => Vec::new()
+                };
+
+                Variant{ident: quote!(#variant_ident), naming, acceptors: acceptors(&variant.fields), fields}
+            }).collect();
+
+            Configuration::Enum{ident: quote!(#input_ident), variants}
+        }
         _ => unimplemented!()
     }
 }
