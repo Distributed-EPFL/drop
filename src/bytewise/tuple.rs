@@ -11,6 +11,20 @@ use super::writer::Writer;
 
 // Implementations
 
+impl Readable for () {
+    const SIZE: Size = Size::fixed(0);
+    fn accept<Visitor: Reader>(&self, _: &mut Visitor) -> Result<(), ReadError> { Ok(()) }
+}
+
+impl Writable for () {
+    const SIZE: Size = Size::fixed(0);
+    fn accept<Visitor: Writer>(&mut self, _: &mut Visitor) -> Result<(), WriteError> { Ok(()) }
+}
+
+impl Load for () {
+    fn load<From: Writer>(_: &mut From) -> Result<Self, WriteError> { Ok(()) }
+}
+
 macro_rules! size {
     ($only:ident) => { <$only>::SIZE };
     ($head:ident, $($tail:ident),+) => { Size::add(<$head>::SIZE, size!($($tail),+)) };

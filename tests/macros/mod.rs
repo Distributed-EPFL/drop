@@ -1,5 +1,5 @@
 // Modules
 
+mod bytewise;
 mod error;
-mod readable;
 mod typename;
