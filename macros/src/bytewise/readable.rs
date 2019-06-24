@@ -10,9 +10,10 @@ use super::parse::Naming;
 
 pub fn readable(configuration: &Configuration) -> TokenStream {
     match configuration {
-        Configuration::Struct{ident: item_ident, acceptors} => {
-            let visits = acceptors.into_iter().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&self.#ident)?;));
-            let tys = acceptors.into_iter().map(|acceptor| &acceptor.ty);
+        Configuration::Struct{ident: item_ident, naming, fields} => {
+            let acceptors = fields.into_iter().filter(|field| field.marked);
+            let visits = acceptors.clone().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&self.#ident)?;));
+            let tys = acceptors.map(|acceptor| &acceptor.ty);
 
             quote! {
                 impl drop::bytewise::Readable for #item_ident {
@@ -28,18 +29,16 @@ pub fn readable(configuration: &Configuration) -> TokenStream {
             let arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
                 let discriminant = discriminant as u8;
                 let variant_ident = &variant.ident;
-                let prefix = if let Naming::Unnamed = variant.naming { "field_" } else { "" };
 
-                let fields = (&variant.fields).into_iter().map(|field| syn::Ident::new(&format!("{}{}", prefix, field), Span::call_site()));
-                let acceptors = (&variant.acceptors).into_iter().map(|acceptor| syn::Ident::new(&format!("{}{}", prefix, acceptor.ident), Span::call_site()));
-
+                let fields = (&variant.fields).into_iter().map(|field| &field.ident);
                 let destruct = match variant.naming {
                     Naming::Named => quote!(#item_ident::#variant_ident{#(#fields),*}),
                     Naming::Unnamed => quote!(#item_ident::#variant_ident(#(#fields),*)),
                     Naming::Unit => quote!(#item_ident::#variant_ident)
                 };
 
-                let visits = acceptors.into_iter().map(|acceptor| quote!(visitor.visit(#acceptor)?;));
+                let acceptors = (&variant.fields).into_iter().filter(|field| field.marked);
+                let visits = acceptors.into_iter().map(|acceptor| &acceptor.ident).map(|acceptor| quote!(visitor.visit(#acceptor)?;));
 
                 quote! {
                     #destruct => {
