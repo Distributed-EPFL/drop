@@ -52,6 +52,7 @@ pub use errors::WriterError;
 
 // Derive macros
 
+pub use macros::Load;
 pub use macros::Readable;
 
 // Tests

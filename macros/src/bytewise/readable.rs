@@ -16,7 +16,7 @@ pub fn readable(configuration: &Configuration) -> TokenStream {
 
             quote! {
                 impl drop::bytewise::Readable for #item_ident {
-                    const SIZE: drop::bytewise::Size = <(#(#tys),*)>::SIZE;
+                    const SIZE: drop::bytewise::Size = <(#(#tys),*) as drop::bytewise::Readable>::SIZE;
                     fn accept<Visitor: drop::bytewise::Reader>(&self, visitor: &mut Visitor) -> Result<(), drop::bytewise::ReadError> {
                         #(#visits)*
                         Ok(())

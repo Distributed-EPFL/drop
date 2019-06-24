@@ -23,6 +23,11 @@ pub fn error(input: TokenStream) -> TokenStream {
     error::error(input)
 }
 
+#[proc_macro_derive(Load, attributes(bytewise))]
+pub fn load(input: TokenStream) -> TokenStream {
+    bytewise::load(input)
+}
+
 #[proc_macro_derive(Readable, attributes(bytewise))]
 pub fn readable(input: TokenStream) -> TokenStream {
     bytewise::readable(input)
