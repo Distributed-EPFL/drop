@@ -7,10 +7,13 @@ use syn::Data;
 use syn::DeriveInput;
 use syn::Fields;
 use syn::Ident;
+use syn::IntSuffix;
+use syn::LitInt;
 
 // Constants
 
 const MARKER: &str = "bytewise";
+const FIELD_PREFIX: &str = "field_";
 
 // Structs
 
@@ -40,6 +43,7 @@ pub enum Naming {
 
 pub struct Field {
     pub ident: TokenStream,
+    pub destruct: TokenStream,
     pub ty: TokenStream,
     pub marked: bool
 }
@@ -77,15 +81,16 @@ fn fields(fields: &Fields) -> Vec<Field> {
                 let ident = &field.ident;
                 let ty = &field.ty;
                 let marked = (&field.attrs).into_iter().any(|attr| attr.path.is_ident(MARKER));
-                Field{ident: quote!(#ident), ty: quote!(#ty), marked}
+                Field{ident: quote!(#ident), destruct: quote!(#ident), ty: quote!(#ty), marked}
             }).collect()
         },
         Fields::Unnamed(fields) => {
             (&fields.unnamed).into_iter().enumerate().map(|(index, field)| {
-                let ident = Ident::new(&format!("field_{}", index), Span::call_site());
+                let ident = LitInt::new(index as u64, IntSuffix::None, Span::call_site());
+                let destruct = Ident::new(&format!("{}{}", FIELD_PREFIX, index), Span::call_site());
                 let ty = &field.ty;
                 let marked = (&field.attrs).into_iter().any(|attr| attr.path.is_ident(MARKER));
-                Field{ident: quote!(#ident), ty: quote!(#ty), marked}
+                Field{ident: quote!(#ident), destruct: quote!(#destruct), ty: quote!(#ty), marked}
             }).collect()
         },
         Fields::Unit => Vec::new()

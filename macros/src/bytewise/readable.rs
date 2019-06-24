@@ -1,6 +1,5 @@
 // Dependencies
 
-use proc_macro2::Span;
 use proc_macro2::TokenStream;
 use quote::quote;
 use super::parse::Configuration;
@@ -10,7 +9,7 @@ use super::parse::Naming;
 
 pub fn readable(configuration: &Configuration) -> TokenStream {
     match configuration {
-        Configuration::Struct{ident: item_ident, naming, fields} => {
+        Configuration::Struct{ident: item_ident, fields, ..} => {
             let acceptors = fields.into_iter().filter(|field| field.marked);
             let visits = acceptors.clone().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&self.#ident)?;));
             let tys = acceptors.map(|acceptor| &acceptor.ty);
@@ -30,15 +29,15 @@ pub fn readable(configuration: &Configuration) -> TokenStream {
                 let discriminant = discriminant as u8;
                 let variant_ident = &variant.ident;
 
-                let fields = (&variant.fields).into_iter().map(|field| &field.ident);
+                let fields = (&variant.fields).into_iter().map(|field| &field.destruct);
                 let destruct = match variant.naming {
                     Naming::Named => quote!(#item_ident::#variant_ident{#(#fields),*}),
                     Naming::Unnamed => quote!(#item_ident::#variant_ident(#(#fields),*)),
                     Naming::Unit => quote!(#item_ident::#variant_ident)
                 };
 
-                let acceptors = (&variant.fields).into_iter().filter(|field| field.marked);
-                let visits = acceptors.into_iter().map(|acceptor| &acceptor.ident).map(|acceptor| quote!(visitor.visit(#acceptor)?;));
+                let acceptors = (&variant.fields).into_iter().filter(|field| field.marked).map(|acceptor| &acceptor.destruct);
+                let visits = acceptors.map(|acceptor| quote!(visitor.visit(#acceptor)?;));
 
                 quote! {
                     #destruct => {
