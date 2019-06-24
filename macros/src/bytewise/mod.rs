@@ -14,9 +14,7 @@ use syn::parse_macro_input;
 pub fn load(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let configuration = parse::configuration(&input);
-    let output = load::load(&configuration).into();
-    println!("{}", output);
-    output
+    load::load(&configuration).into()
 }
 
 pub fn readable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
