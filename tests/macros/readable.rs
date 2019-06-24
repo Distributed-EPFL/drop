@@ -6,15 +6,26 @@ use drop::bytewise::Readable;
 // Structs
 
 #[derive(Readable)]
-struct MyStruct {
-    #[bytewise] x: u32,
-    y: u64,
-    #[bytewise] z: String
+enum MyEnum {
+    First(#[bytewise] u32, #[bytewise] u64),
+    Second(#[bytewise] u32),
+    Third{#[bytewise] hello: String},
+    Fourth
 }
 
 // Test cases
 
 #[test]
 fn develop() {
-    println!("{:?}", bytewise::serialize(&MyStruct{x: 44, y: 99, z: "Hello World!".to_string()}));
+    let x = MyEnum::First(44, 99);
+    println!("{:?}", bytewise::serialize(&x).unwrap());
+
+    let x = MyEnum::Second(33);
+    println!("{:?}", bytewise::serialize(&x).unwrap());
+
+    let x = MyEnum::Third{hello: "World".to_string()};
+    println!("{:?}", bytewise::serialize(&x).unwrap());
+
+    let x = MyEnum::Fourth;
+    println!("{:?}", bytewise::serialize(&x).unwrap());
 }

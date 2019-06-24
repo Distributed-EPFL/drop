@@ -13,5 +13,7 @@ use syn::parse_macro_input;
 pub fn readable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let configuration = parse::configuration(&input);
-    impls::readable(&configuration).into()
+    let response = impls::readable(&configuration).into();
+    println!("{}", response);
+    response
 }

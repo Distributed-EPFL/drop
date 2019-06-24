@@ -57,7 +57,7 @@ pub fn configuration(input: &DeriveInput) -> Configuration {
                         let field = field.ident.as_ref().unwrap();
                         quote!(#field)
                     }).collect(),
-                    Fields::Unnamed(fields) => (0..fields.unnamed.len()).map(|index| quote!(field_#index)).collect(),
+                    Fields::Unnamed(fields) => (0..fields.unnamed.len()).map(|index| quote!(#index)).collect(),
                     Fields::Unit => Vec::new()
                 };
 
@@ -89,7 +89,7 @@ fn acceptors(fields: &Fields) -> Vec<Acceptor> {
                 } else { None }
             }).collect()
         },
-        Fields::Unit => unimplemented!()
+        Fields::Unit => Vec::new()
     };
 
     acceptors.into_iter().filter(|acceptor| acceptor.is_some()).map(|acceptor| acceptor.unwrap()).collect()
