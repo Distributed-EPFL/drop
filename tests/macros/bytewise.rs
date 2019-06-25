@@ -7,22 +7,22 @@ use drop::bytewise::Writable;
 
 // Structs
 
-#[derive(Readable, Load, Debug, PartialEq)]
+#[derive(Readable, Writable, Load, Debug, PartialEq)]
 struct Unit;
 
-#[derive(Readable, Load, Debug, PartialEq)]
+#[derive(Readable, Writable, Load, Debug, PartialEq)]
 struct UnnamedEmpty();
 
-#[derive(Readable, Load, Debug, PartialEq)]
+#[derive(Readable, Writable, Load, Debug, PartialEq)]
 struct UnnamedPartial(u32, #[bytewise] u32, u32, #[bytewise] String);
 
-#[derive(Readable, Load, Debug, PartialEq)]
+#[derive(Readable, Writable, Load, Debug, PartialEq)]
 struct Unnamed(#[bytewise] u32, #[bytewise] String);
 
-#[derive(Readable, Load, Debug, PartialEq)]
+#[derive(Readable, Writable, Load, Debug, PartialEq)]
 struct NamedEmpty {}
 
-#[derive(Readable, Load, Debug, PartialEq)]
+#[derive(Readable, Writable, Load, Debug, PartialEq)]
 struct NamedPartial {
     _x: u32,
     #[bytewise] y: u32,
@@ -30,7 +30,7 @@ struct NamedPartial {
     #[bytewise] w: String
 }
 
-#[derive(Readable, Load, Debug, PartialEq)]
+#[derive(Readable, Writable, Load, Debug, PartialEq)]
 struct Named {
     #[bytewise] x: u32,
     #[bytewise] y: String
@@ -56,55 +56,6 @@ enum Enum {
 }
 
 // Implementations
-
-impl Writable for Unit {
-    const SIZE: drop::bytewise::Size = drop::bytewise::Size::fixed(0);
-    fn accept<Visitor: drop::bytewise::Writer>(&mut self, _: &mut Visitor) -> Result<(), drop::bytewise::WriteError> {
-        Ok(())
-    }
-}
-
-impl Writable for UnnamedEmpty {
-    const SIZE: drop::bytewise::Size = drop::bytewise::Size::fixed(0);
-    fn accept<Visitor: drop::bytewise::Writer>(&mut self, _: &mut Visitor) -> Result<(), drop::bytewise::WriteError> {
-        Ok(())
-    }
-}
-
-impl Writable for UnnamedPartial {
-    const SIZE: drop::bytewise::Size = drop::bytewise::Size::fixed(0);
-    fn accept<Visitor: drop::bytewise::Writer>(&mut self, _: &mut Visitor) -> Result<(), drop::bytewise::WriteError> {
-        Ok(())
-    }
-}
-
-impl Writable for Unnamed {
-    const SIZE: drop::bytewise::Size = drop::bytewise::Size::fixed(0);
-    fn accept<Visitor: drop::bytewise::Writer>(&mut self, _: &mut Visitor) -> Result<(), drop::bytewise::WriteError> {
-        Ok(())
-    }
-}
-
-impl Writable for NamedEmpty {
-    const SIZE: drop::bytewise::Size = drop::bytewise::Size::fixed(0);
-    fn accept<Visitor: drop::bytewise::Writer>(&mut self, _: &mut Visitor) -> Result<(), drop::bytewise::WriteError> {
-        Ok(())
-    }
-}
-
-impl Writable for NamedPartial {
-    const SIZE: drop::bytewise::Size = drop::bytewise::Size::fixed(0);
-    fn accept<Visitor: drop::bytewise::Writer>(&mut self, _: &mut Visitor) -> Result<(), drop::bytewise::WriteError> {
-        Ok(())
-    }
-}
-
-impl Writable for Named {
-    const SIZE: drop::bytewise::Size = drop::bytewise::Size::fixed(0);
-    fn accept<Visitor: drop::bytewise::Writer>(&mut self, _: &mut Visitor) -> Result<(), drop::bytewise::WriteError> {
-        Ok(())
-    }
-}
 
 impl Writable for Enum {
     const SIZE: drop::bytewise::Size = drop::bytewise::Size::fixed(0);

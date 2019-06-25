@@ -37,3 +37,8 @@ pub fn readable(input: TokenStream) -> TokenStream {
 pub fn typename(input: TokenStream) -> TokenStream {
     typename::typename(input)
 }
+
+#[proc_macro_derive(Writable)]
+pub fn writable(input: TokenStream) -> TokenStream {
+    bytewise::writable(input)
+}
