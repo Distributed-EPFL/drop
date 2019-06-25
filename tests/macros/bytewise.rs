@@ -36,7 +36,7 @@ struct Named {
     #[bytewise] y: String
 }
 
-#[derive(Readable, Load, Debug, PartialEq)]
+#[derive(Readable, Writable, Load, Debug, PartialEq)]
 enum Enum {
     Unit,
     UnnamedEmpty(),
@@ -52,15 +52,6 @@ enum Enum {
     Named {
         #[bytewise] x: u32,
         #[bytewise] y: String
-    }
-}
-
-// Implementations
-
-impl Writable for Enum {
-    const SIZE: drop::bytewise::Size = drop::bytewise::Size::fixed(0);
-    fn accept<Visitor: drop::bytewise::Writer>(&mut self, _: &mut Visitor) -> Result<(), drop::bytewise::WriteError> {
-        Ok(())
     }
 }
 
