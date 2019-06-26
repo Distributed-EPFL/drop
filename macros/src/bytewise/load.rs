@@ -3,19 +3,17 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use super::configuration::Configuration;
-use super::configuration::Enum;
 use super::configuration::Field;
-use super::configuration::Naming;
-use super::configuration::Struct;
 use super::configuration::Variant;
 
 // Functions
 
 pub fn load(configuration: &Configuration) -> TokenStream {
     match configuration {
-        Configuration::Struct(Struct{ident: item_ident, naming, fields}) => {
-            let loads = loads(fields);
-            let build = build(item_ident, naming, fields);
+        Configuration::Struct(item) => {
+            let item_ident = &item.ident;
+            let loads = loads(&item.fields);
+            let build = item.destruct();
 
             quote! {
                 impl drop::bytewise::Load for #item_ident {
@@ -26,15 +24,14 @@ pub fn load(configuration: &Configuration) -> TokenStream {
                 }
             }
         },
-        Configuration::Enum(Enum{ident: item_ident, variants}) => {
-            let arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
+        Configuration::Enum(item) => {
+            let item_ident = &item.ident;
+            let arms = (&item.variants).into_iter().enumerate().map(|(discriminant, variant)| {
                 let discriminant = discriminant as u8;
-                let body = self::variant(item_ident, variant);
+                let value = self::variant(variant);
 
                 quote! {
-                    #discriminant => {
-                        #body
-                    }
+                    #discriminant => #value
                 }
             });
 
@@ -42,11 +39,11 @@ pub fn load(configuration: &Configuration) -> TokenStream {
                 impl drop::bytewise::Load for #item_ident {
                     fn load<From: drop::bytewise::Writer>(visitor: &mut From) -> Result<Self, drop::bytewise::WriteError> {
                         let discriminant = u8::load(visitor)?;
-                        let item = match discriminant {
+                        let value = match discriminant {
                             #(#arms)*,
                             _ => return Err(drop::bytewise::WritableError::new("UnexpectedDiscriminant").into())
                         };
-                        Ok(item)
+                        Ok(value)
                     }
                 }
             }
@@ -54,15 +51,14 @@ pub fn load(configuration: &Configuration) -> TokenStream {
     }
 }
 
-pub fn variant(item_ident: &TokenStream, variant: &Variant) -> TokenStream {
-    let variant_ident = &variant.ident;
+pub fn variant(variant: &Variant) -> TokenStream {
     let loads = loads(&variant.fields);
-    let build = build(&quote!(#variant_ident), &variant.naming, &variant.fields);
+    let build = variant.destruct();
 
-    quote! {
+    quote! {{
         #(#loads)*
         #build
-    }
+    }}
 }
 
 fn loads(fields: &Vec<Field>) -> TokenStream {
@@ -76,13 +72,4 @@ fn loads(fields: &Vec<Field>) -> TokenStream {
             quote!(let #destruct = Default::default();)
         }
     }).collect()
-}
-
-fn build(ident: &TokenStream, naming: &Naming, fields: &Vec<Field>) -> TokenStream {
-    let destructs = fields.into_iter().map(|field| &field.destruct);
-    match naming {
-        Naming::Named => quote!(#ident{#(#destructs),*}),
-        Naming::Unnamed => quote!(#ident(#(#destructs),*)),
-        Naming::Unit => quote!(#ident)
-    }
 }

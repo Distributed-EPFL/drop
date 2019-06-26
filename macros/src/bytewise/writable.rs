@@ -61,7 +61,7 @@ pub fn writable(configuration: &Configuration) -> TokenStream {
 
             let load_arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
                 let discriminant = discriminant as u8;
-                let body = load::variant(item_ident, variant);
+                let body = load::variant(variant);
                 quote! {
                     #discriminant => {
                         #body
