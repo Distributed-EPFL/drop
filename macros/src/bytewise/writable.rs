@@ -31,9 +31,9 @@ pub fn writable(configuration: &Configuration) -> TokenStream {
                 let discriminant = discriminant as u8;
 
                 match variant.naming {
-                    Naming::Named => quote!(#item_ident::#variant_ident{..} => #discriminant),
-                    Naming::Unnamed => quote!(#item_ident::#variant_ident(..) => #discriminant),
-                    Naming::Unit => quote!(#item_ident::#variant_ident => #discriminant)
+                    Naming::Named => quote!(#variant_ident{..} => #discriminant),
+                    Naming::Unnamed => quote!(#variant_ident(..) => #discriminant),
+                    Naming::Unit => quote!(#variant_ident => #discriminant)
                 }
             });
 
@@ -42,9 +42,9 @@ pub fn writable(configuration: &Configuration) -> TokenStream {
 
                 let destructs = (&variant.fields).into_iter().map(|field| &field.destruct);
                 let destruct = match variant.naming {
-                    Naming::Named => quote!(#item_ident::#variant_ident{#(#destructs),*}),
-                    Naming::Unnamed => quote!(#item_ident::#variant_ident(#(#destructs),*)),
-                    Naming::Unit => quote!(#item_ident::#variant_ident)
+                    Naming::Named => quote!(#variant_ident{#(#destructs),*}),
+                    Naming::Unnamed => quote!(#variant_ident(#(#destructs),*)),
+                    Naming::Unit => quote!(#variant_ident)
                 };
 
                 let acceptors = (&variant.fields).into_iter().filter(|field| field.marked);

@@ -55,7 +55,7 @@ pub fn load(configuration: &Configuration) -> TokenStream {
 pub fn variant(item_ident: &TokenStream, variant: &Variant) -> TokenStream {
     let variant_ident = &variant.ident;
     let loads = loads(&variant.fields);
-    let build = build(&quote!(#item_ident::#variant_ident), &variant.naming, &variant.fields);
+    let build = build(&quote!(#variant_ident), &variant.naming, &variant.fields);
 
     quote! {
         #(#loads)*

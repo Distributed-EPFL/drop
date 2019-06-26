@@ -31,9 +31,9 @@ pub fn readable(configuration: &Configuration) -> TokenStream {
 
                 let fields = (&variant.fields).into_iter().map(|field| &field.destruct);
                 let destruct = match variant.naming {
-                    Naming::Named => quote!(#item_ident::#variant_ident{#(#fields),*}),
-                    Naming::Unnamed => quote!(#item_ident::#variant_ident(#(#fields),*)),
-                    Naming::Unit => quote!(#item_ident::#variant_ident)
+                    Naming::Named => quote!(#variant_ident{#(#fields),*}),
+                    Naming::Unnamed => quote!(#variant_ident(#(#fields),*)),
+                    Naming::Unit => quote!(#variant_ident)
                 };
 
                 let acceptors = (&variant.fields).into_iter().filter(|field| field.marked).map(|acceptor| &acceptor.destruct);

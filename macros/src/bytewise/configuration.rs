@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream;
 
-// Structs
+// Data structures
 
 pub enum Configuration {
     Struct {

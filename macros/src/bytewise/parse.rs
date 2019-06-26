@@ -21,16 +21,16 @@ const FIELD_PREFIX: &str = "field_";
 // Functions
 
 pub fn configuration(input: &DeriveInput) -> Configuration {
-    let input_ident = &input.ident;
+    let item_ident = &input.ident;
     match &input.data {
-        Data::Struct(data) => Configuration::Struct{ident: quote!(#input_ident), naming: naming(&data.fields), fields: fields(&data.fields)},
+        Data::Struct(data) => Configuration::Struct{ident: quote!(#item_ident), naming: naming(&data.fields), fields: fields(&data.fields)},
         Data::Enum(data) => {
             let variants: Vec<Variant> = (&data.variants).into_iter().map(|variant| {
                 let variant_ident = &variant.ident;
-                Variant{ident: quote!(#variant_ident), naming: naming(&variant.fields), fields: fields(&variant.fields)}
+                Variant{ident: quote!(#item_ident::#variant_ident), naming: naming(&variant.fields), fields: fields(&variant.fields)}
             }).collect();
 
-            Configuration::Enum{ident: quote!(#input_ident), variants}
+            Configuration::Enum{ident: quote!(#item_ident), variants}
         }
         Data::Union(_) => panic!("Cannot derive `Readable`, `Writable` or `Load` on `union` types.")
     }
