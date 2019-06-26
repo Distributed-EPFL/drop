@@ -15,19 +15,22 @@ pub trait Load {
 
 impl Load for Store {
     fn load(&self) -> TokenStream {
-        let build = self.destruct();
-        let loads = self.fields().into_iter().map(|field| {
+        let marked = self.marked().map(|field| {
             let destruct = field.destruct();
-            if field.marked() {
-                let ty = field.ty();
-                quote!(let #destruct = <#ty as drop::bytewise::Load>::load(visitor)?;)
-            } else {
-                quote!(let #destruct = Default::default();)
-            }
+            let ty = field.ty();
+            quote!(let #destruct = <#ty as drop::bytewise::Load>::load(visitor)?;)
         });
 
+        let unmarked = self.unmarked().map(|field| {
+            let destruct = field.destruct();
+            quote!(let #destruct = Default::default();)
+        });
+
+        let build = self.destruct();
+
         quote! {{
-            #(#loads)*
+            #(#marked)*
+            #(#unmarked)*
             #build
         }}
     }
