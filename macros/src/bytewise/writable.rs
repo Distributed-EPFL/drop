@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use super::load;
+use super::load::Load;
 use super::configuration::Configuration;
 use super::configuration::Enum;
 use super::configuration::Naming;
@@ -61,11 +61,9 @@ pub fn writable(configuration: &Configuration) -> TokenStream {
 
             let load_arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
                 let discriminant = discriminant as u8;
-                let body = load::variant(variant);
+                let load = variant.load();
                 quote! {
-                    #discriminant => {
-                        #body
-                    }
+                    #discriminant => #load
                 }
             });
 

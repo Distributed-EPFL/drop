@@ -3,6 +3,13 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
+// Traits
+
+pub trait Fields {
+    fn fields(&self) -> &Vec<Field>;
+    fn destruct(&self) -> TokenStream;
+}
+
 // Data structures
 
 pub enum Configuration {
@@ -42,14 +49,22 @@ pub struct Field {
 
 // Implementations
 
-impl Struct {
-    pub fn destruct(&self) -> TokenStream {
+impl Fields for Struct {
+    fn fields(&self) -> &Vec<Field> {
+        &self.fields
+    }
+
+    fn destruct(&self) -> TokenStream {
         destruct(&self.ident, &self.naming, &self.fields)
     }
 }
 
-impl Variant {
-    pub fn destruct(&self) -> TokenStream {
+impl Fields for Variant {
+    fn fields(&self) -> &Vec<Field> {
+        &self.fields
+    }
+
+    fn destruct(&self) -> TokenStream {
         destruct(&self.ident, &self.naming, &self.fields)
     }
 }
