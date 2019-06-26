@@ -37,6 +37,15 @@ pub struct Field {
 
 // Implementations
 
+impl Configuration {
+    pub fn ident(&self) -> &TokenStream {
+        match self {
+            Configuration::Struct(item) => item.ident(),
+            Configuration::Enum(item) => item.ident()
+        }
+    }
+}
+
 impl Store {
     pub fn new(ident: TokenStream, naming: Naming, fields: Vec<Field>) -> Store {
         Store{ident, naming, fields}

@@ -39,7 +39,7 @@ impl Load for Store {
 // Functions
 
 pub fn load(configuration: &Configuration) -> TokenStream {
-    let item_ident = match configuration { Configuration::Struct(item) => item.ident(), Configuration::Enum(item) => item.ident() };
+    let item_ident = configuration.ident();
     let body = match configuration {
         Configuration::Struct(item) => {
             let load = item.load();
