@@ -63,7 +63,13 @@ impl Store {
     }
 
     pub fn destruct(&self) -> TokenStream {
-        destruct(&self.ident, &self.naming, &self.fields)
+        let ident = &self.ident;
+        let fields = self.fields.iter().map(|field| field.destruct());
+        match self.naming {
+            Naming::Named => quote!(#ident{#(#fields),*}),
+            Naming::Unnamed => quote!(#ident(#(#fields),*)),
+            Naming::Unit => quote!(#ident)
+        }
     }
 }
 
@@ -100,16 +106,5 @@ impl Field {
 
     pub fn marked(&self) -> bool {
         self.marked
-    }
-}
-
-// Functions
-
-fn destruct(ident: &TokenStream, naming: &Naming, fields: &Vec<Field>) -> TokenStream {
-    let fields = fields.into_iter().map(|field| field.destruct());
-    match naming {
-        Naming::Named => quote!(#ident{#(#fields),*}),
-        Naming::Unnamed => quote!(#ident(#(#fields),*)),
-        Naming::Unit => quote!(#ident)
     }
 }
