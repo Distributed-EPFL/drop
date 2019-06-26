@@ -3,15 +3,17 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use super::configuration::Configuration;
+use super::configuration::Enum;
 use super::configuration::Field;
 use super::configuration::Naming;
+use super::configuration::Struct;
 use super::configuration::Variant;
 
 // Functions
 
 pub fn load(configuration: &Configuration) -> TokenStream {
     match configuration {
-        Configuration::Struct{ident: item_ident, naming, fields} => {
+        Configuration::Struct(Struct{ident: item_ident, naming, fields}) => {
             let loads = loads(fields);
             let build = build(item_ident, naming, fields);
 
@@ -24,7 +26,7 @@ pub fn load(configuration: &Configuration) -> TokenStream {
                 }
             }
         },
-        Configuration::Enum{ident: item_ident, variants} => {
+        Configuration::Enum(Enum{ident: item_ident, variants}) => {
             let arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
                 let discriminant = discriminant as u8;
                 let body = self::variant(item_ident, variant);

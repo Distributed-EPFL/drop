@@ -4,13 +4,15 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use super::load;
 use super::configuration::Configuration;
+use super::configuration::Enum;
 use super::configuration::Naming;
+use super::configuration::Struct;
 
 // Functions
 
 pub fn writable(configuration: &Configuration) -> TokenStream {
     match configuration {
-        Configuration::Struct{ident: item_ident, fields, ..} => {
+        Configuration::Struct(Struct{ident: item_ident, fields, ..}) => {
             let acceptors = fields.into_iter().filter(|field| field.marked);
             let visits = acceptors.clone().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&mut self.#ident)?;));
             let tys = acceptors.map(|acceptor| &acceptor.ty);
@@ -25,7 +27,7 @@ pub fn writable(configuration: &Configuration) -> TokenStream {
                 }
             }
         },
-        Configuration::Enum{ident: item_ident, variants} => {
+        Configuration::Enum(Enum{ident: item_ident, variants}) => {
             let discriminant_arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
                 let variant_ident = &variant.ident;
                 let discriminant = discriminant as u8;

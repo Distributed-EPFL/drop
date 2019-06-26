@@ -3,8 +3,10 @@
 use proc_macro2::Span;
 use quote::quote;
 use super::configuration::Configuration;
+use super::configuration::Enum;
 use super::configuration::Field;
 use super::configuration::Naming;
+use super::configuration::Struct;
 use super::configuration::Variant;
 use syn::Data;
 use syn::DeriveInput;
@@ -23,14 +25,14 @@ const FIELD_PREFIX: &str = "field_";
 pub fn configuration(input: &DeriveInput) -> Configuration {
     let item_ident = &input.ident;
     match &input.data {
-        Data::Struct(data) => Configuration::Struct{ident: quote!(#item_ident), naming: naming(&data.fields), fields: fields(&data.fields)},
+        Data::Struct(data) => Configuration::Struct(Struct{ident: quote!(#item_ident), naming: naming(&data.fields), fields: fields(&data.fields)}),
         Data::Enum(data) => {
             let variants: Vec<Variant> = (&data.variants).into_iter().map(|variant| {
                 let variant_ident = &variant.ident;
                 Variant{ident: quote!(#item_ident::#variant_ident), naming: naming(&variant.fields), fields: fields(&variant.fields)}
             }).collect();
 
-            Configuration::Enum{ident: quote!(#item_ident), variants}
+            Configuration::Enum(Enum{ident: quote!(#item_ident), variants})
         }
         Data::Union(_) => panic!("Cannot derive `Readable`, `Writable` or `Load` on `union` types.")
     }

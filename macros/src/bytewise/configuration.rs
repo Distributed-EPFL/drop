@@ -1,19 +1,24 @@
 // Dependencies
 
 use proc_macro2::TokenStream;
+use quote::quote;
 
 // Data structures
 
 pub enum Configuration {
-    Struct {
-        ident: TokenStream,
-        naming: Naming,
-        fields: Vec<Field>
-    },
-    Enum {
-        ident: TokenStream,
-        variants: Vec<Variant>
-    }
+    Struct(Struct),
+    Enum(Enum)
+}
+
+pub struct Struct {
+    pub ident: TokenStream,
+    pub naming: Naming,
+    pub fields: Vec<Field>
+}
+
+pub struct Enum {
+    pub ident: TokenStream,
+    pub variants: Vec<Variant>
 }
 
 pub struct Variant {
