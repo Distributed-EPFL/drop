@@ -13,14 +13,13 @@ pub trait Load {
 
 // Implementations
 
-impl<Item: Fields> Load for Item {
+impl<WithFields: Fields> Load for WithFields {
     fn load(&self) -> TokenStream {
         let build = self.destruct();
         let loads = self.fields().into_iter().map(|field| {
             let destruct = &field.destruct;
-            let ty = &field.ty;
-
             if field.marked {
+                let ty = &field.ty;
                 quote!(let #destruct = <#ty as drop::bytewise::Load>::load(visitor)?;)
             } else {
                 quote!(let #destruct = Default::default();)
@@ -55,11 +54,8 @@ pub fn load(configuration: &Configuration) -> TokenStream {
             let item_ident = &item.ident;
             let arms = (&item.variants).into_iter().enumerate().map(|(discriminant, variant)| {
                 let discriminant = discriminant as u8;
-                let value = variant.load();
-
-                quote! {
-                    #discriminant => #value
-                }
+                let load = variant.load();
+                quote!(#discriminant => #load)
             });
 
             quote! {
@@ -70,6 +66,7 @@ pub fn load(configuration: &Configuration) -> TokenStream {
                             #(#arms)*,
                             _ => return Err(drop::bytewise::WritableError::new("UnexpectedDiscriminant").into())
                         };
+
                         Ok(value)
                     }
                 }
