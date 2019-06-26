@@ -23,10 +23,10 @@ pub enum Naming {
 }
 
 pub struct Field {
-    pub ident: TokenStream,
-    pub destruct: TokenStream,
-    pub ty: TokenStream,
-    pub marked: bool
+    ident: TokenStream,
+    destruct: TokenStream,
+    ty: TokenStream,
+    marked: bool
 }
 
 // Implementations
@@ -42,5 +42,27 @@ impl Enum {
 
     pub fn variants(&self) -> impl Iterator<Item = (u8, &Store)> {
         self.variants.iter().enumerate().map(|(discriminant, variant)| (discriminant as u8, variant))
+    }
+}
+
+impl Field {
+    pub fn new(ident: TokenStream, destruct: TokenStream, ty: TokenStream, marked: bool) -> Field {
+        Field{ident, destruct, ty, marked}
+    }
+
+    pub fn ident(&self) -> &TokenStream {
+        &self.ident
+    }
+
+    pub fn destruct(&self) -> &TokenStream {
+        &self.destruct
+    }
+
+    pub fn ty(&self) -> &TokenStream {
+        &self.ty
+    }
+
+    pub fn marked(&self) -> bool {
+        self.marked
     }
 }

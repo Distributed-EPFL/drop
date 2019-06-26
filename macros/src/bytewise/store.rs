@@ -34,11 +34,11 @@ impl Store {
     }
 
     pub fn marked(&self) -> impl Iterator<Item = &Field> {
-        self.fields.iter().filter(|field| field.marked)
+        self.fields.iter().filter(|field| field.marked())
     }
 
     pub fn unmarked(&self) -> impl Iterator<Item = &Field> {
-        self.fields.iter().filter(|field| !field.marked)
+        self.fields.iter().filter(|field| !field.marked())
     }
 
     pub fn destruct(&self) -> TokenStream {
@@ -49,7 +49,7 @@ impl Store {
 // Functions
 
 fn destruct(ident: &TokenStream, naming: &Naming, fields: &Vec<Field>) -> TokenStream {
-    let fields = fields.into_iter().map(|field| &field.destruct);
+    let fields = fields.into_iter().map(|field| field.destruct());
     match naming {
         Naming::Named => quote!(#ident{#(#fields),*}),
         Naming::Unnamed => quote!(#ident(#(#fields),*)),

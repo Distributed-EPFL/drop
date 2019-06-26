@@ -17,9 +17,9 @@ impl Load for Store {
     fn load(&self) -> TokenStream {
         let build = self.destruct();
         let loads = self.fields().into_iter().map(|field| {
-            let destruct = &field.destruct;
-            if field.marked {
-                let ty = &field.ty;
+            let destruct = field.destruct();
+            if field.marked() {
+                let ty = field.ty();
                 quote!(let #destruct = <#ty as drop::bytewise::Load>::load(visitor)?;)
             } else {
                 quote!(let #destruct = Default::default();)

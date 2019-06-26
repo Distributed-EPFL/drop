@@ -12,8 +12,8 @@ pub fn readable(configuration: &Configuration) -> TokenStream {
         Configuration::Struct(item) => {
             let item_ident = item.ident();
             let acceptors = item.marked();
-            let visits = item.marked().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&self.#ident)?;));
-            let tys = acceptors.map(|acceptor| &acceptor.ty);
+            let visits = item.marked().map(|acceptor| acceptor.ident()).map(|ident| quote!(visitor.visit(&self.#ident)?;));
+            let tys = acceptors.map(|acceptor| acceptor.ty());
 
             quote! {
                 impl drop::bytewise::Readable for #item_ident {
@@ -30,14 +30,14 @@ pub fn readable(configuration: &Configuration) -> TokenStream {
             let arms = item.variants().map(|(discriminant, variant)| {
                 let variant_ident = variant.ident();
 
-                let fields = variant.fields().map(|field| &field.destruct);
+                let fields = variant.fields().map(|field| field.destruct());
                 let destruct = match variant.naming() {
                     Naming::Named => quote!(#variant_ident{#(#fields),*}),
                     Naming::Unnamed => quote!(#variant_ident(#(#fields),*)),
                     Naming::Unit => quote!(#variant_ident)
                 };
 
-                let acceptors = variant.fields().filter(|field| field.marked).map(|acceptor| &acceptor.destruct);
+                let acceptors = variant.fields().filter(|field| field.marked()).map(|acceptor| acceptor.destruct());
                 let visits = acceptors.map(|acceptor| quote!(visitor.visit(#acceptor)?;));
 
                 quote! {

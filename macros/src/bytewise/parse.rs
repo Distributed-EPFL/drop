@@ -52,7 +52,7 @@ fn fields(fields: &Fields) -> Vec<Field> {
                 let ident = &field.ident;
                 let ty = &field.ty;
                 let marked = (&field.attrs).into_iter().any(|attr| attr.path.is_ident(MARKER));
-                Field{ident: quote!(#ident), destruct: quote!(#ident), ty: quote!(#ty), marked}
+                Field::new(quote!(#ident), quote!(#ident), quote!(#ty), marked)
             }).collect()
         },
         Fields::Unnamed(fields) => {
@@ -61,7 +61,7 @@ fn fields(fields: &Fields) -> Vec<Field> {
                 let destruct = Ident::new(&format!("{}{}", FIELD_PREFIX, discriminant), Span::call_site());
                 let ty = &field.ty;
                 let marked = (&field.attrs).into_iter().any(|attr| attr.path.is_ident(MARKER));
-                Field{ident: quote!(#ident), destruct: quote!(#destruct), ty: quote!(#ty), marked}
+                Field::new(quote!(#ident), quote!(#destruct), quote!(#ty), marked)
             }).collect()
         },
         Fields::Unit => Vec::new()
