@@ -3,7 +3,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use super::configuration::Configuration;
-use super::store::Store;
+use super::configuration::Store;
 
 // Traits
 

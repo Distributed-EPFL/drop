@@ -6,7 +6,7 @@ use super::configuration::Configuration;
 use super::configuration::Enum;
 use super::configuration::Field;
 use super::configuration::Naming;
-use super::store::Store;
+use super::configuration::Store;
 use syn::Data;
 use syn::DeriveInput;
 use syn::Fields;
