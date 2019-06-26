@@ -31,7 +31,7 @@ pub fn configuration(input: &DeriveInput) -> Configuration {
                 Store::new(quote!(#item_ident::#variant_ident), naming(&variant.fields), fields(&variant.fields))
             }).collect();
 
-            Configuration::Enum(Enum{ident: quote!(#item_ident), variants})
+            Configuration::Enum(Enum::new(quote!(#item_ident), variants))
         }
         Data::Union(_) => panic!("Cannot derive `Readable`, `Writable` or `Load` on `union` types.")
     }

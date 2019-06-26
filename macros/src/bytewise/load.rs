@@ -51,9 +51,8 @@ pub fn load(configuration: &Configuration) -> TokenStream {
             }
         },
         Configuration::Enum(item) => {
-            let item_ident = &item.ident;
-            let arms = (&item.variants).into_iter().enumerate().map(|(discriminant, variant)| {
-                let discriminant = discriminant as u8;
+            let item_ident = item.ident();
+            let arms = item.variants().map(|(discriminant, variant)| {
                 let load = variant.load();
                 quote!(#discriminant => #load)
             });

@@ -4,9 +4,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use super::load::Load;
 use super::configuration::Configuration;
-use super::configuration::Enum;
 use super::configuration::Naming;
-use super::store::Store;
 
 // Functions
 
@@ -28,10 +26,10 @@ pub fn writable(configuration: &Configuration) -> TokenStream {
                 }
             }
         },
-        Configuration::Enum(Enum{ident: item_ident, variants}) => {
-            let discriminant_arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
+        Configuration::Enum(item) => {
+            let item_ident = item.ident();
+            let discriminant_arms = item.variants().map(|(discriminant, variant)| {
                 let variant_ident = variant.ident();
-                let discriminant = discriminant as u8;
 
                 match variant.naming() {
                     Naming::Named => quote!(#variant_ident{..} => #discriminant),
@@ -40,7 +38,7 @@ pub fn writable(configuration: &Configuration) -> TokenStream {
                 }
             });
 
-            let write_arms = variants.into_iter().map(|variant| {
+            let write_arms = item.variants().map(|(_, variant)| {
                 let variant_ident = variant.ident();
 
                 let destructs = variant.fields().into_iter().map(|field| &field.destruct);
@@ -60,8 +58,7 @@ pub fn writable(configuration: &Configuration) -> TokenStream {
                 }
             });
 
-            let load_arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
-                let discriminant = discriminant as u8;
+            let load_arms = item.variants().map(|(discriminant, variant)| {
                 let load = variant.load();
                 quote! {
                     #discriminant => #load
