@@ -32,7 +32,7 @@ pub fn configuration(input: &DeriveInput) -> Configuration {
 
             Configuration::Enum{ident: quote!(#input_ident), variants}
         }
-        _ => unimplemented!()
+        Data::Union(_) => panic!("Cannot derive `Readable`, `Writable` or `Load` on `union` types.")
     }
 }
 
@@ -55,9 +55,9 @@ fn fields(fields: &Fields) -> Vec<Field> {
             }).collect()
         },
         Fields::Unnamed(fields) => {
-            (&fields.unnamed).into_iter().enumerate().map(|(index, field)| {
-                let ident = LitInt::new(index as u64, IntSuffix::None, Span::call_site());
-                let destruct = Ident::new(&format!("{}{}", FIELD_PREFIX, index), Span::call_site());
+            (&fields.unnamed).into_iter().enumerate().map(|(discriminant, field)| {
+                let ident = LitInt::new(discriminant as u64, IntSuffix::None, Span::call_site());
+                let destruct = Ident::new(&format!("{}{}", FIELD_PREFIX, discriminant), Span::call_site());
                 let ty = &field.ty;
                 let marked = (&field.attrs).into_iter().any(|attr| attr.path.is_ident(MARKER));
                 Field{ident: quote!(#ident), destruct: quote!(#destruct), ty: quote!(#ty), marked}
