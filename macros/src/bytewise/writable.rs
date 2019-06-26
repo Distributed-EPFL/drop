@@ -6,15 +6,16 @@ use super::load::Load;
 use super::configuration::Configuration;
 use super::configuration::Enum;
 use super::configuration::Naming;
-use super::configuration::Store;
+use super::store::Store;
 
 // Functions
 
 pub fn writable(configuration: &Configuration) -> TokenStream {
     match configuration {
-        Configuration::Struct(Store{ident: item_ident, fields, ..}) => {
-            let acceptors = fields.into_iter().filter(|field| field.marked);
-            let visits = acceptors.clone().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&mut self.#ident)?;));
+        Configuration::Struct(item) => {
+            let item_ident = item.ident();
+            let acceptors = item.marked();
+            let visits = item.marked().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&mut self.#ident)?;));
             let tys = acceptors.map(|acceptor| &acceptor.ty);
 
             quote! {
@@ -29,10 +30,10 @@ pub fn writable(configuration: &Configuration) -> TokenStream {
         },
         Configuration::Enum(Enum{ident: item_ident, variants}) => {
             let discriminant_arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
-                let variant_ident = &variant.ident;
+                let variant_ident = variant.ident();
                 let discriminant = discriminant as u8;
 
-                match variant.naming {
+                match variant.naming() {
                     Naming::Named => quote!(#variant_ident{..} => #discriminant),
                     Naming::Unnamed => quote!(#variant_ident(..) => #discriminant),
                     Naming::Unit => quote!(#variant_ident => #discriminant)
@@ -40,16 +41,16 @@ pub fn writable(configuration: &Configuration) -> TokenStream {
             });
 
             let write_arms = variants.into_iter().map(|variant| {
-                let variant_ident = &variant.ident;
+                let variant_ident = variant.ident();
 
-                let destructs = (&variant.fields).into_iter().map(|field| &field.destruct);
-                let destruct = match variant.naming {
+                let destructs = variant.fields().into_iter().map(|field| &field.destruct);
+                let destruct = match variant.naming() {
                     Naming::Named => quote!(#variant_ident{#(#destructs),*}),
                     Naming::Unnamed => quote!(#variant_ident(#(#destructs),*)),
                     Naming::Unit => quote!(#variant_ident)
                 };
 
-                let acceptors = (&variant.fields).into_iter().filter(|field| field.marked);
+                let acceptors = variant.fields().into_iter().filter(|field| field.marked);
                 let visits = acceptors.map(|acceptor| &acceptor.destruct).map(|ident| quote!(visitor.visit(#ident)?;));
 
                 quote! {

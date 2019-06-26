@@ -4,6 +4,7 @@ mod configuration;
 mod load;
 mod parse;
 mod readable;
+mod store;
 mod writable;
 
 // Dependencies

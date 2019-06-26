@@ -3,7 +3,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use super::configuration::Configuration;
-use super::configuration::Store;
+use super::store::Store;
 
 // Traits
 
@@ -38,7 +38,7 @@ impl Load for Store {
 pub fn load(configuration: &Configuration) -> TokenStream {
     match configuration {
         Configuration::Struct(item) => {
-            let item_ident = &item.ident;
+            let item_ident = item.ident();
             let load = item.load();
 
             quote! {

@@ -5,15 +5,16 @@ use quote::quote;
 use super::configuration::Configuration;
 use super::configuration::Enum;
 use super::configuration::Naming;
-use super::configuration::Store;
+use super::store::Store;
 
 // Functions
 
 pub fn readable(configuration: &Configuration) -> TokenStream {
     match configuration {
-        Configuration::Struct(Store{ident: item_ident, fields, ..}) => {
-            let acceptors = fields.into_iter().filter(|field| field.marked);
-            let visits = acceptors.clone().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&self.#ident)?;));
+        Configuration::Struct(item) => {
+            let item_ident = item.ident();
+            let acceptors = item.marked();
+            let visits = item.marked().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&self.#ident)?;));
             let tys = acceptors.map(|acceptor| &acceptor.ty);
 
             quote! {
@@ -29,16 +30,16 @@ pub fn readable(configuration: &Configuration) -> TokenStream {
         Configuration::Enum(Enum{ident: item_ident, variants}) => {
             let arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
                 let discriminant = discriminant as u8;
-                let variant_ident = &variant.ident;
+                let variant_ident = variant.ident();
 
-                let fields = (&variant.fields).into_iter().map(|field| &field.destruct);
-                let destruct = match variant.naming {
+                let fields = variant.fields().map(|field| &field.destruct);
+                let destruct = match variant.naming() {
                     Naming::Named => quote!(#variant_ident{#(#fields),*}),
                     Naming::Unnamed => quote!(#variant_ident(#(#fields),*)),
                     Naming::Unit => quote!(#variant_ident)
                 };
 
-                let acceptors = (&variant.fields).into_iter().filter(|field| field.marked).map(|acceptor| &acceptor.destruct);
+                let acceptors = variant.fields().filter(|field| field.marked).map(|acceptor| &acceptor.destruct);
                 let visits = acceptors.map(|acceptor| quote!(visitor.visit(#acceptor)?;));
 
                 quote! {
