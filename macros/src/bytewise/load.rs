@@ -17,7 +17,7 @@ pub fn load(configuration: &Configuration) -> TokenStream {
 
             quote! {
                 impl drop::bytewise::Load for #item_ident {
-                    fn load<From: drop::bytewise::Writer>(from: &mut From) -> Result<Self, drop::bytewise::WriteError> {
+                    fn load<From: drop::bytewise::Writer>(visitor: &mut From) -> Result<Self, drop::bytewise::WriteError> {
                         #(#loads)*
                         Ok(#build)
                     }
@@ -27,7 +27,7 @@ pub fn load(configuration: &Configuration) -> TokenStream {
         Configuration::Enum{ident: item_ident, variants} => {
             let arms = variants.into_iter().enumerate().map(|(discriminant, variant)| {
                 let discriminant = discriminant as u8;
-                let body = variant_body(item_ident, variant);
+                let body = self::variant(item_ident, variant);
 
                 quote! {
                     #discriminant => {
@@ -38,12 +38,13 @@ pub fn load(configuration: &Configuration) -> TokenStream {
 
             quote! {
                 impl drop::bytewise::Load for #item_ident {
-                    fn load<From: drop::bytewise::Writer>(from: &mut From) -> Result<Self, drop::bytewise::WriteError> {
-                        let discriminant = u8::load(from)?;
-                        match discriminant {
+                    fn load<From: drop::bytewise::Writer>(visitor: &mut From) -> Result<Self, drop::bytewise::WriteError> {
+                        let discriminant = u8::load(visitor)?;
+                        let item = match discriminant {
                             #(#arms)*,
-                            _ => Err(drop::bytewise::WritableError::new("UnexpectedDiscriminant").into())
-                        }
+                            _ => return Err(drop::bytewise::WritableError::new("UnexpectedDiscriminant").into())
+                        };
+                        Ok(item)
                     }
                 }
             }
@@ -51,14 +52,14 @@ pub fn load(configuration: &Configuration) -> TokenStream {
     }
 }
 
-pub fn variant_body(item_ident: &TokenStream, variant: &Variant) -> TokenStream {
+pub fn variant(item_ident: &TokenStream, variant: &Variant) -> TokenStream {
     let variant_ident = &variant.ident;
     let loads = loads(&variant.fields);
     let build = build(&quote!(#item_ident::#variant_ident), &variant.naming, &variant.fields);
 
     quote! {
         #(#loads)*
-        Ok(#build)
+        #build
     }
 }
 
@@ -68,7 +69,7 @@ fn loads(fields: &Vec<Field>) -> TokenStream {
         let ty = &field.ty;
 
         if field.marked {
-            quote!(let #destruct = <#ty as drop::bytewise::Load>::load(from)?;)
+            quote!(let #destruct = <#ty as drop::bytewise::Load>::load(visitor)?;)
         } else {
             quote!(let #destruct = Default::default();)
         }
