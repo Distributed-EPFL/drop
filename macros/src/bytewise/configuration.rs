@@ -3,21 +3,14 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-// Traits
-
-pub trait Fields {
-    fn fields(&self) -> &Vec<Field>;
-    fn destruct(&self) -> TokenStream;
-}
-
 // Data structures
 
 pub enum Configuration {
-    Struct(Struct),
+    Struct(Store),
     Enum(Enum)
 }
 
-pub struct Struct {
+pub struct Store {
     pub ident: TokenStream,
     pub naming: Naming,
     pub fields: Vec<Field>
@@ -25,13 +18,7 @@ pub struct Struct {
 
 pub struct Enum {
     pub ident: TokenStream,
-    pub variants: Vec<Variant>
-}
-
-pub struct Variant {
-    pub ident: TokenStream,
-    pub naming: Naming,
-    pub fields: Vec<Field>
+    pub variants: Vec<Store>
 }
 
 pub enum Naming {
@@ -49,22 +36,12 @@ pub struct Field {
 
 // Implementations
 
-impl Fields for Struct {
-    fn fields(&self) -> &Vec<Field> {
+impl Store {
+    pub fn fields(&self) -> &Vec<Field> {
         &self.fields
     }
 
-    fn destruct(&self) -> TokenStream {
-        destruct(&self.ident, &self.naming, &self.fields)
-    }
-}
-
-impl Fields for Variant {
-    fn fields(&self) -> &Vec<Field> {
-        &self.fields
-    }
-
-    fn destruct(&self) -> TokenStream {
+    pub fn destruct(&self) -> TokenStream {
         destruct(&self.ident, &self.naming, &self.fields)
     }
 }

@@ -6,13 +6,13 @@ use super::load::Load;
 use super::configuration::Configuration;
 use super::configuration::Enum;
 use super::configuration::Naming;
-use super::configuration::Struct;
+use super::configuration::Store;
 
 // Functions
 
 pub fn writable(configuration: &Configuration) -> TokenStream {
     match configuration {
-        Configuration::Struct(Struct{ident: item_ident, fields, ..}) => {
+        Configuration::Struct(Store{ident: item_ident, fields, ..}) => {
             let acceptors = fields.into_iter().filter(|field| field.marked);
             let visits = acceptors.clone().map(|acceptor| &acceptor.ident).map(|ident| quote!(visitor.visit(&mut self.#ident)?;));
             let tys = acceptors.map(|acceptor| &acceptor.ty);

@@ -6,8 +6,7 @@ use super::configuration::Configuration;
 use super::configuration::Enum;
 use super::configuration::Field;
 use super::configuration::Naming;
-use super::configuration::Struct;
-use super::configuration::Variant;
+use super::configuration::Store;
 use syn::Data;
 use syn::DeriveInput;
 use syn::Fields;
@@ -25,11 +24,11 @@ const FIELD_PREFIX: &str = "field_";
 pub fn configuration(input: &DeriveInput) -> Configuration {
     let item_ident = &input.ident;
     match &input.data {
-        Data::Struct(data) => Configuration::Struct(Struct{ident: quote!(#item_ident), naming: naming(&data.fields), fields: fields(&data.fields)}),
+        Data::Struct(data) => Configuration::Struct(Store{ident: quote!(#item_ident), naming: naming(&data.fields), fields: fields(&data.fields)}),
         Data::Enum(data) => {
-            let variants: Vec<Variant> = (&data.variants).into_iter().map(|variant| {
+            let variants: Vec<Store> = (&data.variants).into_iter().map(|variant| {
                 let variant_ident = &variant.ident;
-                Variant{ident: quote!(#item_ident::#variant_ident), naming: naming(&variant.fields), fields: fields(&variant.fields)}
+                Store{ident: quote!(#item_ident::#variant_ident), naming: naming(&variant.fields), fields: fields(&variant.fields)}
             }).collect();
 
             Configuration::Enum(Enum{ident: quote!(#item_ident), variants})

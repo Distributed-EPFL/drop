@@ -3,7 +3,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use super::configuration::Configuration;
-use super::configuration::Fields;
+use super::configuration::Store;
 
 // Traits
 
@@ -13,7 +13,7 @@ pub trait Load {
 
 // Implementations
 
-impl<WithFields: Fields> Load for WithFields {
+impl Load for Store {
     fn load(&self) -> TokenStream {
         let build = self.destruct();
         let loads = self.fields().into_iter().map(|field| {
