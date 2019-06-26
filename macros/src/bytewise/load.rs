@@ -39,39 +39,38 @@ impl Load for Store {
 // Functions
 
 pub fn load(configuration: &Configuration) -> TokenStream {
-    match configuration {
+    let item_ident = match configuration { Configuration::Struct(item) => item.ident(), Configuration::Enum(item) => item.ident() };
+    let body = match configuration {
         Configuration::Struct(item) => {
-            let item_ident = item.ident();
             let load = item.load();
 
             quote! {
-                impl drop::bytewise::Load for #item_ident {
-                    fn load<From: drop::bytewise::Writer>(visitor: &mut From) -> Result<Self, drop::bytewise::WriteError> {
-                        let value = #load;
-                        Ok(value)
-                    }
-                }
+                let value = #load;
+                Ok(value)
             }
         },
         Configuration::Enum(item) => {
-            let item_ident = item.ident();
             let arms = item.variants().map(|(discriminant, variant)| {
                 let load = variant.load();
                 quote!(#discriminant => #load)
             });
 
             quote! {
-                impl drop::bytewise::Load for #item_ident {
-                    fn load<From: drop::bytewise::Writer>(visitor: &mut From) -> Result<Self, drop::bytewise::WriteError> {
-                        let discriminant = u8::load(visitor)?;
-                        let value = match discriminant {
-                            #(#arms)*,
-                            _ => return Err(drop::bytewise::WritableError::new("UnexpectedDiscriminant").into())
-                        };
+                let discriminant = u8::load(visitor)?;
+                let value = match discriminant {
+                    #(#arms)*,
+                    _ => return Err(drop::bytewise::WritableError::new("UnexpectedDiscriminant").into())
+                };
 
-                        Ok(value)
-                    }
-                }
+                Ok(value)
+            }
+        }
+    };
+
+    quote! {
+        impl drop::bytewise::Load for #item_ident {
+            fn load<From: drop::bytewise::Writer>(visitor: &mut From) -> Result<Self, drop::bytewise::WriteError> {
+                #body
             }
         }
     }
