@@ -2,10 +2,10 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use super::parse::Configuration;
-use super::parse::Field;
-use super::parse::Naming;
-use super::parse::Variant;
+use super::configuration::Configuration;
+use super::configuration::Field;
+use super::configuration::Naming;
+use super::configuration::Variant;
 
 // Functions
 

@@ -1,5 +1,6 @@
 // Modules
 
+mod configuration;
 mod load;
 mod parse;
 mod readable;
@@ -27,7 +28,5 @@ pub fn readable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 pub fn writable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let configuration = parse::configuration(&input);
-    let output = writable::writable(&configuration).into();
-    println!("{}", output);
-    output
+    writable::writable(&configuration).into()
 }

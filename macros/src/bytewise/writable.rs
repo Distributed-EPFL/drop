@@ -3,8 +3,8 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use super::load;
-use super::parse::Configuration;
-use super::parse::Naming;
+use super::configuration::Configuration;
+use super::configuration::Naming;
 
 // Functions
 

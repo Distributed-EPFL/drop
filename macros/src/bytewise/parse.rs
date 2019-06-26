@@ -1,8 +1,11 @@
 // Dependencies
 
 use proc_macro2::Span;
-use proc_macro2::TokenStream;
 use quote::quote;
+use super::configuration::Configuration;
+use super::configuration::Field;
+use super::configuration::Naming;
+use super::configuration::Variant;
 use syn::Data;
 use syn::DeriveInput;
 use syn::Fields;
@@ -14,39 +17,6 @@ use syn::LitInt;
 
 const MARKER: &str = "bytewise";
 const FIELD_PREFIX: &str = "field_";
-
-// Structs
-
-pub enum Configuration {
-    Struct {
-        ident: TokenStream,
-        naming: Naming,
-        fields: Vec<Field>
-    },
-    Enum {
-        ident: TokenStream,
-        variants: Vec<Variant>
-    }
-}
-
-pub struct Variant {
-    pub ident: TokenStream,
-    pub naming: Naming,
-    pub fields: Vec<Field>
-}
-
-pub enum Naming {
-    Named,
-    Unnamed,
-    Unit
-}
-
-pub struct Field {
-    pub ident: TokenStream,
-    pub destruct: TokenStream,
-    pub ty: TokenStream,
-    pub marked: bool
-}
 
 // Functions
 
