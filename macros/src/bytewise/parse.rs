@@ -26,7 +26,7 @@ pub fn configuration(input: &DeriveInput) -> Configuration {
     match &input.data {
         Data::Struct(data) => Configuration::Struct(Store::new(quote!(#item_ident), naming(&data.fields), fields(&data.fields))),
         Data::Enum(data) => {
-            let variants: Vec<Store> = (&data.variants).into_iter().map(|variant| {
+            let variants: Vec<Store> = data.variants.iter().map(|variant| {
                 let variant_ident = &variant.ident;
                 Store::new(quote!(#item_ident::#variant_ident), naming(&variant.fields), fields(&variant.fields))
             }).collect();
@@ -48,19 +48,21 @@ fn naming(fields: &Fields) -> Naming {
 fn fields(fields: &Fields) -> Vec<Field> {
     match fields {
         Fields::Named(fields) => {
-            (&fields.named).into_iter().map(|field| {
+            fields.named.iter().map(|field| {
                 let ident = &field.ident;
                 let ty = &field.ty;
-                let marked = (&field.attrs).into_iter().any(|attr| attr.path.is_ident(MARKER));
+                let marked = field.attrs.iter().any(|attr| attr.path.is_ident(MARKER));
+
                 Field::new(quote!(#ident), quote!(#ident), quote!(#ty), marked)
             }).collect()
         },
         Fields::Unnamed(fields) => {
-            (&fields.unnamed).into_iter().enumerate().map(|(discriminant, field)| {
+            fields.unnamed.iter().enumerate().map(|(discriminant, field)| {
                 let ident = LitInt::new(discriminant as u64, IntSuffix::None, Span::call_site());
                 let destruct = Ident::new(&format!("{}{}", FIELD_PREFIX, discriminant), Span::call_site());
                 let ty = &field.ty;
-                let marked = (&field.attrs).into_iter().any(|attr| attr.path.is_ident(MARKER));
+                let marked = field.attrs.iter().any(|attr| attr.path.is_ident(MARKER));
+
                 Field::new(quote!(#ident), quote!(#destruct), quote!(#ty), marked)
             }).collect()
         },
