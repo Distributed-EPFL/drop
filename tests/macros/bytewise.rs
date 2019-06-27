@@ -64,7 +64,7 @@ fn write_default<Type: Default + Writable + PartialEq + Debug>(reference: Type, 
     write_on(reference, Type::default(), bytes);
 }
 
-fn write_on<Type: Default + Writable + PartialEq + Debug>(reference: Type, mut item: Type, bytes: &[u8]) {
+fn write_on<Type: Writable + PartialEq + Debug>(reference: Type, mut item: Type, bytes: &[u8]) {
     let mut deserializer = Deserializer(bytes);
     deserializer.visit(&mut item).unwrap();
     assert_eq!(item, reference);
@@ -103,6 +103,22 @@ fn writable() {
 
     write_on(UnnamedPartial(1, 5, 1, "seven".to_string()), UnnamedPartial(1, 4, 1, "six".to_string()), &[5, 0, 0, 0, 5, 115, 101, 118, 101, 110]);
     write_on(NamedPartial{_x: 1, y: 5, _z: 1, w: "seven".to_string()}, NamedPartial{_x: 1, y: 4, _z: 1, w: "six".to_string()}, &[5, 0, 0, 0, 5, 115, 101, 118, 101, 110]);
+
+    write_on(Enum::Unit, Enum::UnnamedEmpty(), &[0]);
+    write_on(Enum::UnnamedEmpty(), Enum::Unit, &[1]);
+    write_on(Enum::UnnamedPartial(0, 5, 0, "seven".to_string()), Enum::Unit, &[2, 5, 0, 0, 0, 5, 115, 101, 118, 101, 110]);
+    write_on(Enum::Unnamed(5, "seven".to_string()), Enum::Unit, &[3, 5, 0, 0, 0, 5, 115, 101, 118, 101, 110]);
+    write_on(Enum::NamedEmpty{}, Enum::Unit, &[4]);
+    write_on(Enum::NamedPartial{_x: 0, y: 5, _z: 0, w: "seven".to_string()}, Enum::Unit, &[5, 5, 0, 0, 0, 5, 115, 101, 118, 101, 110]);
+    write_on(Enum::Named{x: 5, y: "seven".to_string()}, Enum::Unit, &[6, 5, 0, 0, 0, 5, 115, 101, 118, 101, 110]);
+
+    write_on(Enum::Unit, Enum::Unit, &[0]);
+    write_on(Enum::UnnamedEmpty(), Enum::UnnamedEmpty(), &[1]);
+    write_on(Enum::UnnamedPartial(1, 5, 1, "seven".to_string()), Enum::UnnamedPartial(1, 4, 1, "six".to_string()), &[2, 5, 0, 0, 0, 5, 115, 101, 118, 101, 110]);
+    write_on(Enum::Unnamed(5, "seven".to_string()), Enum::Unnamed(2, "eight".to_string()), &[3, 5, 0, 0, 0, 5, 115, 101, 118, 101, 110]);
+    write_on(Enum::NamedEmpty{}, Enum::NamedEmpty{}, &[4]);
+    write_on(Enum::NamedPartial{_x: 1, y: 5, _z: 1, w: "seven".to_string()}, Enum::NamedPartial{_x: 1, y: 4, _z: 1, w: "six".to_string()}, &[5, 5, 0, 0, 0, 5, 115, 101, 118, 101, 110]);
+    write_on(Enum::Named{x: 5, y: "seven".to_string()}, Enum::Named{x: 2, y: "eight".to_string()}, &[6, 5, 0, 0, 0, 5, 115, 101, 118, 101, 110]);
 }
 
 #[test]
