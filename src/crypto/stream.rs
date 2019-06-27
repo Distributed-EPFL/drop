@@ -7,8 +7,8 @@ use crate::bytewise::Reader;
 use crate::bytewise::Serializer;
 use sodiumoxide::crypto::secretstream::HEADERBYTES;
 use sodiumoxide::crypto::secretstream::Header;
-use sodiumoxide::crypto::secretstream::Pull;
-use sodiumoxide::crypto::secretstream::Push;
+use sodiumoxide::crypto::secretstream::Pull as SodiumPull;
+use sodiumoxide::crypto::secretstream::Push as SodiumPush;
 use sodiumoxide::crypto::secretstream::Stream;
 use sodiumoxide::crypto::secretstream::Tag;
 use super::errors::BrokenStream;
@@ -21,34 +21,34 @@ use super::key::Key;
 
 // Enums
 
-enum TxState {
+enum PushState {
     Setup(Key),
     Run {
-        stream: Stream<Push>,
+        stream: Stream<SodiumPush>,
         buffer: Vec<u8>
     }
 }
 
-enum RxState {
+enum PullState {
     Setup(Key),
-    Run(Stream<Pull>),
+    Run(Stream<SodiumPull>),
     Broken
 }
 
 // Structs
 
-pub struct TxStream(TxState);
-pub struct RxStream(RxState);
+pub struct Push(PushState);
+pub struct Pull(PullState);
 
 // Implementations
 
-impl TxStream {
+impl Push {
     pub fn new(key: Key) -> Self {
-        TxStream(TxState::Setup(key))
+        Push(PushState::Setup(key))
     }
 
     pub fn encrypt<Message: Readable>(&mut self, message: &Message) -> Result<Vec<u8>, EncryptError> {
-        let encrypt = |stream: &mut Stream<Push>, buffer: &mut Vec<u8>| {
+        let encrypt = |stream: &mut Stream<SodiumPush>, buffer: &mut Vec<u8>| {
             let mut serializer = Serializer(buffer);
             serializer.visit(message)?;
 
@@ -59,48 +59,48 @@ impl TxStream {
 
         let state = &mut self.0;
         match state {
-            TxState::Setup(key) => {
+            PushState::Setup(key) => {
                 let (mut stream, header) = Stream::init_push(&key.clone().into()).unwrap();
                 let mut buffer = Vec::new();
 
                 let mut ciphertext = encrypt(&mut stream, &mut buffer)?;
                 ciphertext.extend_from_slice(&header[..]);
 
-                *state = TxState::Run{stream, buffer};
+                *state = PushState::Run{stream, buffer};
                 Ok(ciphertext)
             },
-            TxState::Run{stream, buffer} => encrypt(stream, buffer)
+            PushState::Run{stream, buffer} => encrypt(stream, buffer)
         }
     }
 }
 
-impl RxStream {
+impl Pull {
     pub fn new(key: Key) -> Self {
-        RxStream(RxState::Setup(key))
+        Pull(PullState::Setup(key))
     }
 
     pub fn decrypt<Message: Load>(&mut self, ciphertext: &[u8]) -> Result<Message, DecryptError> {
         (|| {
             let state = &mut self.0;
             match state {
-                RxState::Setup(key) => {
+                PullState::Setup(key) => {
                     if ciphertext.len() < HEADERBYTES { return Err(MissingHeader::new().into()); }
                     let (ciphertext, header) = ciphertext.split_at(ciphertext.len() - HEADERBYTES);
 
                     let mut stream = Stream::init_pull(&Header::from_slice(header).unwrap(), &key.clone().into()).map_err(|_| InvalidHeader::new())?;
                     let message = stream.pull(ciphertext, None).map_err(|_| InvalidMac::new())?.0;
 
-                    *state = RxState::Run(stream);
+                    *state = PullState::Run(stream);
                     Ok(bytewise::deserialize::<Message>(&message)?)
                 },
-                RxState::Run(stream) => {
+                PullState::Run(stream) => {
                     let message = stream.pull(ciphertext, None).map_err(|_| InvalidMac::new())?.0;
                     Ok(bytewise::deserialize::<Message>(&message)?)
                 },
-                RxState::Broken => Err(BrokenStream::new().into())
+                PullState::Broken => Err(BrokenStream::new().into())
             }
         })().map_err(|error| {
-            self.0 = RxState::Broken;
+            self.0 = PullState::Broken;
             error
         })
     }
@@ -116,8 +116,8 @@ mod tests {
     #[test]
     fn endpoints() {
         let key = Key::random();
-        let mut transmitter = TxStream::new(key.clone());
-        let mut receiver = RxStream::new(key);
+        let mut transmitter = Push::new(key.clone());
+        let mut receiver = Pull::new(key);
 
         for message in 0u64..128u64 {
             let ciphertext = transmitter.encrypt(&message).unwrap();
@@ -131,23 +131,23 @@ mod tests {
         let key = Key::random();
         let wrong_key = Key::random();
 
-        let mut receiver = RxStream::new(key.clone());
+        let mut receiver = Pull::new(key.clone());
         receiver.decrypt::<u32>(&[]).unwrap_err();
 
-        let mut transmitter = TxStream::new(key.clone());
-        let mut receiver = RxStream::new(key.clone());
+        let mut transmitter = Push::new(key.clone());
+        let mut receiver = Pull::new(key.clone());
         let mut ciphertext = transmitter.encrypt(&0u32).unwrap();
         *ciphertext.last_mut().unwrap() += 1;
         receiver.decrypt::<u32>(&ciphertext).unwrap_err();
 
-        let mut transmitter = TxStream::new(key.clone());
-        let mut receiver = RxStream::new(key.clone());
+        let mut transmitter = Push::new(key.clone());
+        let mut receiver = Pull::new(key.clone());
         let mut ciphertext = transmitter.encrypt(&0u32).unwrap();
         *ciphertext.first_mut().unwrap() += 1;
         receiver.decrypt::<u32>(&ciphertext).unwrap_err();
 
-        let mut transmitter = TxStream::new(key.clone());
-        let mut receiver = RxStream::new(key.clone());
+        let mut transmitter = Push::new(key.clone());
+        let mut receiver = Pull::new(key.clone());
         let ciphertext = transmitter.encrypt(&0u32).unwrap();
         receiver.decrypt::<u32>(&ciphertext).unwrap();
         let mut ciphertext = transmitter.encrypt(&0u32).unwrap();
@@ -156,8 +156,8 @@ mod tests {
         *ciphertext.first_mut().unwrap() -= 1;
         receiver.decrypt::<u32>(&ciphertext).unwrap_err();
 
-        let mut transmitter = TxStream::new(key);
-        let mut receiver = RxStream::new(wrong_key);
+        let mut transmitter = Push::new(key);
+        let mut receiver = Pull::new(wrong_key);
         let ciphertext = transmitter.encrypt(&0u32).unwrap();
         receiver.decrypt::<u32>(&ciphertext).unwrap_err();
     }

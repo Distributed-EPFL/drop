@@ -3,19 +3,16 @@
 mod convert;
 mod errors;
 mod format;
-mod hash;
+pub mod hash;
 mod key;
 mod ops;
 mod parse;
-mod stream;
+pub mod stream;
 
 // Structs
 
 pub use hash::Digest;
-pub use hash::State;
 pub use key::Key;
-pub use stream::RxStream;
-pub use stream::TxStream;
 
 // Functions
 
