@@ -55,14 +55,6 @@ impl Store {
         &self.ident
     }
 
-    pub fn naming(&self) -> &Naming {
-        &self.naming
-    }
-
-    pub fn fields(&self) -> impl Iterator<Item = &Field> {
-        self.fields.iter()
-    }
-
     pub fn marked(&self) -> impl Iterator<Item = &Field> {
         self.fields.iter().filter(|field| field.marked())
     }
@@ -77,6 +69,15 @@ impl Store {
         match self.naming {
             Naming::Named => quote!(#ident{#(#fields),*}),
             Naming::Unnamed => quote!(#ident(#(#fields),*)),
+            Naming::Unit => quote!(#ident)
+        }
+    }
+
+    pub fn case(&self) -> TokenStream {
+        let ident = &self.ident;
+        match self.naming {
+            Naming::Named => quote!(#ident{..}),
+            Naming::Unnamed => quote!(#ident(..)),
             Naming::Unit => quote!(#ident)
         }
     }
