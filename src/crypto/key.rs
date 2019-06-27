@@ -1,5 +1,9 @@
 // Dependencies
 
+use crate as drop;
+use crate::bytewise::Load;
+use crate::bytewise::Readable;
+use crate::bytewise::Writable;
 use sodiumoxide::crypto::secretstream;
 use std::convert::Into;
 
@@ -9,8 +13,8 @@ pub const SIZE: usize = 32;
 
 // Structs
 
-#[derive(Clone)]
-pub struct Key(pub(super) [u8; SIZE]);
+#[derive(Readable, Writable, Load, Clone)]
+pub struct Key(#[bytewise] pub(super) [u8; SIZE]);
 
 // Implemenations
 

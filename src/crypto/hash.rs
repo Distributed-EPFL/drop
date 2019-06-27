@@ -1,8 +1,11 @@
 // Dependencies
 
+use crate as drop;
+use crate::bytewise::Load;
 use crate::bytewise::Readable;
 use crate::bytewise::Reader;
 use crate::bytewise::ReaderError;
+use crate::bytewise::Writable;
 use sodiumoxide::crypto::generichash::State as SodiumState;
 use super::errors::HashError;
 use super::key::Key;
@@ -15,8 +18,8 @@ pub const SIZE: usize = 32;
 
 pub struct State(SodiumState);
 
-#[derive(Hash, PartialOrd)]
-pub struct Digest(pub(super) [u8; SIZE]);
+#[derive(Readable, Writable, Load, Hash, PartialOrd)]
+pub struct Digest(#[bytewise] pub(super) [u8; SIZE]);
 
 // Functions
 
