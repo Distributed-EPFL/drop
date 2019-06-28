@@ -17,23 +17,14 @@ pub trait Context {
 
 impl<Ok, Err: Error> Context for Result<Ok, Err> {
     fn spot(self, spotting: Spotting) -> Self {
-        match self {
-            Ok(ok) => Ok(ok),
-            Err(err) => Err(err.spot(spotting))
-        }
+        self.map_err(|err| err.spot(spotting))
     }
 
     fn add<Text: Into<String>>(self, context: Text) -> Self {
-        match self {
-            Ok(ok) => Ok(ok),
-            Err(err) => Err(err.add(context))
-        }
+        self.map_err(|err| err.add(context))
     }
 
     fn attach<Payload: Any + Typename>(self, attachment: Payload) -> Self {
-        match self {
-            Ok(ok) => Ok(ok),
-            Err(err) => Err(err.attach(attachment))
-        }
+        self.map_err(|err| err.attach(attachment))
     }
 }
