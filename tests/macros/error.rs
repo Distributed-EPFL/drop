@@ -2,7 +2,7 @@
 
 use drop::error::Error;
 use drop::here;
-use macros::error;
+use drop::error::error;
 
 error! {
     type: NoFields,

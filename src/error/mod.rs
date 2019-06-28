@@ -12,3 +12,7 @@ pub use error::Error;
 // Structs
 
 pub use spotting::Spotting;
+
+// Macros
+
+pub use macros::error;
