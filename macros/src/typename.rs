@@ -16,12 +16,12 @@ pub fn typename(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ident = &input.ident;
     let where_clause = &input.generics.where_clause;
 
-    let params: Vec<&TypeParam> = (&input.generics.params).into_iter().map(|param| {
+    let params: Vec<&TypeParam> = input.generics.params.iter().map(|param| {
         if let GenericParam::Type(param) = param { param } else { panic!("Macro `#[derive(Typename)]` only supports type generics."); }
     }).collect();
 
-    let types: Vec<&Ident> = (&params).into_iter().map(|param| &param.ident).collect();
-    let generics: Vec<TokenStream> = (&params).into_iter().map(|param| {
+    let types: Vec<&Ident> = params.iter().map(|param| &param.ident).collect();
+    let generics: Vec<TokenStream> = params.iter().map(|param| {
         let (ident, bounds) = (&param.ident, &param.bounds);
         quote!(#ident: drop::lang::Typename #(+ #bounds)*)
     }).collect();
