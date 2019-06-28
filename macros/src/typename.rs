@@ -1,12 +1,10 @@
 // Dependencies
 
-use proc_macro2::TokenStream;
 use quote::quote;
 use std::vec::Vec;
 use syn::DeriveInput;
 use syn::GenericParam;
 use syn::Ident;
-use syn::TypeParam;
 use syn::parse_macro_input;
 
 // Functions
@@ -16,17 +14,15 @@ pub fn typename(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ident = &input.ident;
     let where_clause = &input.generics.where_clause;
 
-    let params: Vec<&TypeParam> = input.generics.params.iter().map(|param| {
+    let params = input.generics.params.iter().map(|param| {
         if let GenericParam::Type(param) = param { param } else { panic!("Macro `#[derive(Typename)]` only supports type generics."); }
-    }).collect();
+    });
 
-    let types: Vec<&Ident> = params.iter().map(|param| &param.ident).collect();
-    let generics: Vec<TokenStream> = params.iter().map(|param| {
+    let types: &Vec<&Ident> = &params.clone().map(|param| &param.ident).collect();
+    let generics = params.map(|param| {
         let (ident, bounds) = (&param.ident, &param.bounds);
         quote!(#ident: drop::lang::Typename #(+ #bounds)*)
-    }).collect();
-
-    let (types, generics) = (&types, &generics);
+    });
 
     let format = if types.len() > 0 {
         quote! {
