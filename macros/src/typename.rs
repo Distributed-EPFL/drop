@@ -1,7 +1,6 @@
 // Dependencies
 
 use quote::quote;
-use std::vec::Vec;
 use syn::DeriveInput;
 use syn::GenericParam;
 use syn::Ident;
@@ -26,7 +25,7 @@ pub fn typename(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let format = if types.len() > 0 {
         quote! {
-            format!("{}<{}>", stringify!(#ident), vec![#(#types::typename()),*].join(", "))
+            format!("{}<{}>", stringify!(#ident), [#(#types::typename()),*].join(", "))
         }
     } else { quote!(stringify!(#ident).to_string()) };
 
