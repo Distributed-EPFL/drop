@@ -1,11 +1,14 @@
 use crate as drop;
 use crate::bytewise::Readable;
-use crate::crypto::hash::{Digest, hash, SIZE as HASH_SIZE};
+use crate::crypto::hash::{Digest, hash};
 use std::cell::RefCell;
 use std::mem;
 
 pub mod syncerror;
-use syncerror::*;
+pub use syncerror::*;
+
+mod path;
+use path::*;
 
 pub struct SyncSet<Data: Readable> {
     root: Node<Data>,
@@ -32,31 +35,6 @@ enum Node<Data: Readable> {
     }
 }
 
-struct Path (Digest);
-
-#[derive(Eq, PartialEq)]
-enum Direction {
-    Left,
-    Right,
-}
-
-impl Path {
-    const BITS_IN_BYTE: usize = 8;
-    const NUM_BITS: usize = HASH_SIZE * Self::BITS_IN_BYTE;
-    fn at(&self, idx: usize) -> Direction {
-        debug_assert!(idx < Self::NUM_BITS, "Out of bounds on path");
-        let byte_idx = idx/Self::BITS_IN_BYTE;
-        let bit_idx = idx%Self::BITS_IN_BYTE;
-        let byte = (self.0).0[byte_idx];
-        let mask = 1 << bit_idx;
-        let masked = byte & mask;
-        if masked == 0 {
-            Direction::Left
-        } else {
-            Direction::Right
-        }
-    }
-}
 
 impl <Data: Readable> Node<Data> {
     // Inserts data into the node
