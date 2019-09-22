@@ -54,6 +54,7 @@ impl <Data: Readable> Node<Data> {
                     if let Node::Leaf{data: old_data,..} = old {
                         let old_path = Path(old_hash);
                         let new_node = Node::make_tree(old_data, old_path, data, path, depth);
+                        // No need to invalidate cache here, because we're discarding the old node anyway
                         self.swap(new_node);
                         Ok(())
                     } else {
@@ -69,9 +70,21 @@ impl <Data: Readable> Node<Data> {
                     left.insert(data, depth+1, path)
                 } else {
                     right.insert(data, depth+1, path)
-                }
+                }?;
+                // If insertion was successful, invalidate cache and propagate success up
+                self.invalidate_cache();
+                Ok(())
             }
         }
+    }
+
+    fn invalidate_cache(&self) {
+        use Node::*;
+        match self {
+            Empty => (),
+            Leaf{ref cached_hash,..} => {cached_hash.replace(None);},
+            Branch{ref cached_hash,..} => {cached_hash.replace(None);}
+        };
     }
 
     // Makes a tree with 2 leaves. Do not call with path0=path1
