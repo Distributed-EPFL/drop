@@ -14,7 +14,7 @@ error! {
 
 error! {
     type: CollisionError,
-    description: "A hash collision has occurred (note that this could mean you tried inserting the same element twice)"
+    description: "A hash collision has occurred"
 }
 error! {
     type: SyncError,

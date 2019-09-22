@@ -13,7 +13,7 @@ pub struct SyncSet<Data: Readable + PartialEq> {
 }
 
 impl <Data: Readable + PartialEq> SyncSet<Data> {
-    pub fn insert(&mut self, data: Data) -> Result<(), SyncError> {
+    pub fn insert(&mut self, data: Data) -> Result<bool, SyncError> {
         let path = Path::new(&data)?;
         self.root.insert(data, 0, path)
     }
@@ -91,17 +91,22 @@ impl <Data: Readable + PartialEq> Node<Data> {
     }
 
     // Inserts data into the node
-    fn insert(&mut self, data: Data, depth: usize, path: Path) -> Result<(), SyncError> {
+    fn insert(&mut self, data: Data, depth: usize, path: Path) -> Result<bool, SyncError> {
         match self {
             Node::Empty => {
                 self.swap(Node::new_leaf(data));
-                Ok(())
+                Ok(true)
             }
             Node::Leaf{..} => {
                 let old_hash = self.hash()?;
                 // Collision
                 if old_hash == path.0 {
-                    Err(CollisionError::new().into())
+                    // Hash collision or same element inserted twice?
+                    if self.cmp_data(&data) {
+                        Ok(false)
+                    } else {
+                        Err(CollisionError::new().into())
+                    }
                 } else {
                     let old = self.swap(Node::Empty);
                     if let Node::Leaf{data: old_data,..} = old {
@@ -109,7 +114,7 @@ impl <Data: Readable + PartialEq> Node<Data> {
                         let new_node = Node::make_tree(old_data, old_path, data, path, depth);
                         // No need to invalidate cache here, because we're discarding the old node anyway
                         self.swap(new_node);
-                        Ok(())
+                        Ok(true)
                     } else {
                         // Note: the pattern is irrefutable, but rust thinks it is refutable
                         // The reason we don't bind in the match arm is because we want to take ownership
@@ -119,15 +124,26 @@ impl <Data: Readable + PartialEq> Node<Data> {
                 }
             }
             Node::Branch{ref mut left, ref mut right, ..} => {
-                if path.at(depth) == Direction::Left {
+                let success = if path.at(depth) == Direction::Left {
                     left.insert(data, depth+1, path)
                 } else {
                     right.insert(data, depth+1, path)
                 }?;
                 // If insertion was successful, invalidate cache and propagate success up
-                self.invalidate_cache();
-                Ok(())
+                if success {
+                    self.invalidate_cache();
+                };
+
+                Ok(success)
             }
+        }
+    }
+
+    // Compare the data. Returns false for non-leaves
+    fn cmp_data(&self, other: &Data) -> bool {
+        match self {
+            Node::Leaf{data,..} => data == other,
+            _ => false
         }
     }
 
