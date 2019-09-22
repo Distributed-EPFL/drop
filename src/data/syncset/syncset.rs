@@ -8,14 +8,19 @@ use super::path::*;
 use super::syncerror::*;
 
 // Syncset
-pub struct SyncSet<Data: Readable> {
+pub struct SyncSet<Data: Readable + PartialEq> {
     root: Node<Data>,
 }
 
-impl <Data: Readable> SyncSet<Data> {
+impl <Data: Readable + PartialEq> SyncSet<Data> {
     pub fn insert(&mut self, data: Data) -> Result<(), SyncError> {
-        let path = Path(hash(&data)?);
+        let path = Path::new(&data)?;
         self.root.insert(data, 0, path)
+    }
+
+    pub fn delete(&mut self, data_to_delete: &Data) -> Result<bool, SyncError> {
+        let path = Path::new(data_to_delete)?;
+        Ok(self.root.delete(data_to_delete, path, 0))
     }
 }
 
@@ -36,7 +41,55 @@ enum Node<Data: Readable> {
 }
 
 
-impl <Data: Readable> Node<Data> {
+impl <Data: Readable + PartialEq> Node<Data> {
+    fn delete(&mut self, data_to_delete: &Data, path: Path, depth: usize) -> bool {
+        let deletion_successful = match self {
+            Node::Empty => false,
+            Node::Branch{ref mut left, ref mut right, ..} => {
+                if path.at(depth) == Direction::Left {
+                    left.delete(data_to_delete, path, depth+1)
+                } else {
+                    right.delete(data_to_delete, path, depth+1)
+                }
+            },
+            Node::Leaf{ref data,..} => {
+                if data == data_to_delete {
+                    true
+                } else {
+                    false
+                }
+            }
+        };
+
+        if deletion_successful {
+            // Acquire ownership
+            let tmp = self.swap(Node::Empty);
+            let new = tmp.clean_up_node();
+
+            // Give back ownership
+            self.swap(new);
+        };
+
+        deletion_successful
+    }
+
+    // Helper function for delete()
+    // Cleans up branches, and transforms leaves into Empty leaves
+    fn clean_up_node(self) -> Node<Data> {
+        use Node::*;
+        match self {
+            Branch{left, right, ..} => {
+                match (*left, *right) {
+                    (Empty, Empty) => Empty,
+                    (new @ Leaf{..}, Empty) => new,
+                    (Empty, new @ Leaf{..}) => new,
+                    (old_l, old_r) => Node::new_branch(old_l, old_r)
+                }
+            },
+            _ => Empty
+        }
+    }
+
     // Inserts data into the node
     fn insert(&mut self, data: Data, depth: usize, path: Path) -> Result<(), SyncError> {
         match self {
