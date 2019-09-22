@@ -1,4 +1,7 @@
-use crate::crypto::hash::{Digest, SIZE as HASH_SIZE};
+use crate::crypto::hash::{Digest, hash, SIZE as HASH_SIZE};
+use crate::bytewise::Readable;
+use super::syncerror::SyncError;
+
 pub(super) struct Path (pub(super) Digest);
 
 #[derive(Eq, PartialEq)]
@@ -22,5 +25,10 @@ impl Path {
         } else {
             Direction::Right
         }
+    }
+
+    pub(super) fn new<Data: Readable>(data: &Data) -> Result<Path, SyncError> {
+        let digest = hash(data)?;
+        Ok(Path(digest))
     }
 }
