@@ -2,7 +2,15 @@ use crate::crypto::hash::{Digest, hash, SIZE as HASH_SIZE};
 use crate::bytewise::Readable;
 use super::syncerror::SyncError;
 
-pub(super) struct Path (pub(super) Digest);
+const BITS_IN_BYTE: usize = 8;
+const NUM_BITS: usize = HASH_SIZE * BITS_IN_BYTE;
+
+// Structs 
+pub(super) struct HashPath (pub(super) Digest);
+pub(super) struct PrefixedPath {
+    inner: Vec<u8>,
+    depth: usize
+}
 
 #[derive(Eq, PartialEq)]
 pub(super) enum Direction {
@@ -10,25 +18,54 @@ pub(super) enum Direction {
     Right,
 }
 
-impl Path {
-    const BITS_IN_BYTE: usize = 8;
-    const NUM_BITS: usize = HASH_SIZE * Self::BITS_IN_BYTE;
-    pub(super) fn at(&self, idx: usize) -> Direction {
-        debug_assert!(idx < Self::NUM_BITS, "Out of bounds on path");
-        let byte_idx = idx/Self::BITS_IN_BYTE;
-        let bit_idx = idx%Self::BITS_IN_BYTE;
-        let byte = (self.0).0[byte_idx];
-        let mask = 1 << bit_idx;
-        let masked = byte & mask;
-        if masked == 0 {
-            Direction::Left
-        } else {
+// Implementations
+
+impl Direction {
+    pub fn from_bit(byte: u8, bit_idx: usize) -> Direction {
+        if is_bit_set(byte, bit_idx) {
             Direction::Right
+        } else {
+            Direction::Left
+        }
+    }
+}
+
+impl HashPath {
+    pub(super) fn at(&self, idx: usize) -> Direction {
+        debug_assert!(idx < NUM_BITS, "Out of bounds on path");
+        let (byte_idx, bit_idx) = split_bits(idx);
+        let byte = (self.0).0[byte_idx];
+
+        if is_bit_set(byte, bit_idx) {
+            Direction::Right
+        } else {
+            Direction::Left
         }
     }
 
-    pub(super) fn new<Data: Readable>(data: &Data) -> Result<Path, SyncError> {
+    pub(super) fn new<Data: Readable>(data: &Data) -> Result<HashPath, SyncError> {
         let digest = hash(data)?;
-        Ok(Path(digest))
+        Ok(HashPath(digest))
     }
+}
+
+impl PrefixedPath {
+    pub(super) fn at(&self, idx: usize) -> Option<Direction> {
+        let (byte_idx, bit_idx) = split_bits(idx);
+        self.inner.get(byte_idx).map(|byte| Direction::from_bit(*byte, bit_idx))
+    }
+}
+
+// Helper Functions
+
+// Converts a given index to base 2^8
+fn split_bits(to_split: usize) -> (usize, usize) {
+    (to_split/BITS_IN_BYTE, to_split%BITS_IN_BYTE)
+}
+
+// Checks if the i-th bit is set in a byte
+fn is_bit_set(byte: u8, bit_idx: usize) -> bool {
+    let mask = 1 << bit_idx;
+    let masked = byte & mask;
+    masked != 0
 }
