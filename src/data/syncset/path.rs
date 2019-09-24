@@ -6,8 +6,8 @@ const BITS_IN_BYTE: usize = 8;
 const NUM_BITS: usize = HASH_SIZE * BITS_IN_BYTE;
 
 // Structs 
-pub(super) struct HashPath (pub(super) Digest);
-pub(super) struct PrefixedPath {
+pub struct HashPath (pub(super) Digest);
+pub struct PrefixedPath {
     inner: Vec<u8>,
     depth: usize
 }
