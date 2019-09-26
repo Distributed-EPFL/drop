@@ -4,6 +4,8 @@ use crate::crypto::hash::{Digest, hash};
 
 use super::path::*;
 use super::syncerror::*;
+use super::Set;
+use super::DUMP_THRESHOLD;
 
 use std::mem;
 use std::cell::{RefCell, Cell};
@@ -24,10 +26,52 @@ pub(super) enum Node<Data: Readable + PartialEq> {
 }
 
 
-impl <Data: Readable + PartialEq> Node<Data> {
 
-    pub fn traverse<F>(&self, mut f: F) 
-    where F: FnMut(&Data) + Copy {
+
+impl <Data: Readable + PartialEq + Clone> Node<Data> {
+
+    pub fn get(&self, prefix: PrefixedPath, depth: usize, dump: bool) -> Result<Set<Data>, SyncError> {
+        use Node::*;
+        if let Some(dir) = prefix.at(depth) {
+            match self {
+                Empty => Ok(Set::new_empty_dataset(prefix, dump)),
+                Branch{left, right, ..} => {
+                    if dir == Direction::Left {
+                        left.get(prefix, depth+1, dump)
+                    } else {
+                        right.get(prefix, depth+1, dump)
+                    }
+                },
+                Leaf{..} => {
+                    let self_path = HashPath(self.hash()?);
+                    if prefix.is_prefix_of(&self_path) {
+                        Ok(Set::new_dataset(prefix, &self, dump))
+                    } else {
+                        Ok(Set::new_empty_dataset(prefix, dump))
+                    }
+                }
+            }
+        } else {
+            match self {
+                Branch{..} => {
+                        if dump || self.size() < DUMP_THRESHOLD {
+                        Ok(Set::new_dataset(prefix, self, dump))
+                    } else {
+                        Ok(Set::LabelSet{label: self.hash()?, prefix})
+                    }
+                }
+                Leaf{..} => {
+                    Ok(Set::new_dataset(prefix, self, dump))
+                }
+                Empty => {
+                    Ok(Set::new_empty_dataset(prefix, dump))
+                }
+            }
+        }
+    }
+
+    pub fn traverse<F>(&self, f: &mut F) 
+    where F: FnMut(&Data) {
         use Node::*;
         match self {
             Empty => (),
@@ -264,3 +308,38 @@ impl <Data: Readable + PartialEq> Node<Data> {
 
 #[derive(Readable)]
 struct ConcatDigest(#[bytewise] Digest, #[bytewise] Digest);
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::set::Set;
+    #[test]
+    fn get_returns_in_order() {
+        let mut root: Node<u64> = Node::Empty;
+        let num_iters = 50000;
+        for i in 0..num_iters {
+            let hash = hash(&i).unwrap();
+            root.insert(i, 0, HashPath(hash)).unwrap();
+        }
+        if let Set::DataSet{underlying, ..} = root.get(PrefixedPath::new(0, Vec::new()).unwrap(), 0, true).unwrap() {
+            let mut previous = hash(underlying.get(0).expect("Get returned no elements")).unwrap();
+            for i in 1..num_iters {
+                let current = hash(underlying.get(i as usize).unwrap()).unwrap();
+                assert!(previous < current);
+                previous = current;
+            }
+        } else {
+            assert!(false, "Get returned a LabelSet")
+        }
+    }
+
+    #[test]
+    fn inserting_twice_returns_false() {
+        let mut root: Node<u64> = Node::Empty;
+        let elem = 13;
+        let path = HashPath(hash(&elem).unwrap());
+        assert_eq!(root.insert(elem, 0, path.clone()).unwrap(), true, "First insertion failed");
+        assert_eq!(root.insert(elem, 0, path).unwrap(), false, "Second insertion succeeded");
+    }
+}
