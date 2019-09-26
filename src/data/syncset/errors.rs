@@ -16,8 +16,14 @@ error! {
     type: CollisionError,
     description: "A hash collision has occurred"
 }
+
 error! {
     type: SyncError,
     description: "An error has occurred in the SyncSet",
     causes: (HashError, EmptyHashError, CollisionError)
+}
+
+error! {
+    type: PathLengthError,
+    description: "The provided vector was shorter than expected"
 }

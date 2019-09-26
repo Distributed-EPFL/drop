@@ -1,7 +1,7 @@
 mod syncset;
 
 // Modules
-mod syncerror;
+mod errors;
 mod path;
 mod set;
 mod node;
@@ -10,7 +10,7 @@ mod node;
 pub use set::Set;
 pub use syncset::SyncSet;
 pub use path::*;
-pub use syncerror::*;
+pub use errors::*;
 use node::Node;
 
 

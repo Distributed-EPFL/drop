@@ -3,7 +3,7 @@ use crate::bytewise::Readable;
 use crate::crypto::hash::{Digest, hash};
 
 use super::path::*;
-use super::syncerror::*;
+use super::errors::*;
 use super::Set;
 use super::DUMP_THRESHOLD;
 
