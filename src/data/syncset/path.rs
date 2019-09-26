@@ -1,6 +1,6 @@
 use crate::crypto::hash::{Digest, hash, SIZE as HASH_SIZE};
 use crate::bytewise::Readable;
-use super::syncerror::{SyncError, PathLengthError};
+use super::errors::{SyncError, PathLengthError};
 
 const BITS_IN_BYTE: usize = 8;
 
