@@ -81,9 +81,9 @@ impl PrefixedPath {
            if overflow_bits > 0 {
                if let Some(last_byte_left) = self.inner.get(num_full_bytes) {
                    let last_byte_right = (rhs.0).0[num_full_bytes];
-                   let shift_amount = BITS_IN_BYTE - overflow_bits;
-                   let left_masked = last_byte_left << shift_amount;
-                   let right_masked = last_byte_right << shift_amount;
+                   let shift_amount = overflow_bits;
+                   let left_masked = last_byte_left >> shift_amount;
+                   let right_masked = last_byte_right >> shift_amount;
                    if left_masked != right_masked {
                        return false;
                    }
@@ -108,4 +108,26 @@ fn is_bit_set(byte: u8, bit_idx: usize) -> bool {
     let mask = 1 << (BITS_IN_BYTE - bit_idx - 1);
     let masked = byte & mask;
     masked != 0
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::convert::TryFrom;
+    #[test]
+    fn prefixes() {
+        let full = HashPath(Digest::try_from("0101010101000000000000000000000000000000000000000000000000000000").unwrap());
+        assert_eq!((full.0).0[0], 0b00000001);
+
+        let pref = PrefixedPath::new(7, vec!(0)).expect("Prefixed path coudn't be created");
+        assert_eq!(*pref.inner.get(0).unwrap(), 0b00000000);
+
+        assert!(pref.is_prefix_of(&full), "prefix didn't return true");
+
+        let pref2 = PrefixedPath::new(8, vec!(1)).unwrap();
+        assert_eq!(pref2.inner[0], 0b00000001);
+
+        assert!(pref.is_prefix_of(&full), "prefix returned false");
+    }
 }
