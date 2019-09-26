@@ -12,3 +12,8 @@ pub use syncset::SyncSet;
 pub use path::*;
 pub use syncerror::*;
 use node::Node;
+
+
+// Constants
+
+const DUMP_THRESHOLD: usize = 5;
