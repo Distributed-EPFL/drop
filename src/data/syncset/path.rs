@@ -12,7 +12,7 @@ pub struct PrefixedPath {
     depth: usize
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Direction {
     Left,
     Right,
@@ -115,6 +115,20 @@ fn is_bit_set(byte: u8, bit_idx: usize) -> bool {
 mod tests {
     use super::*;
     use std::convert::TryFrom;
+
+    #[test]
+    fn bits() {
+        let ones: u8 = 0xFF;
+        let zeroes: u8 = 0x00;
+        let mishmash: u8 = 0xAA;
+        for i in 0..BITS_IN_BYTE {
+            assert!(is_bit_set(ones, i));
+            assert!(!is_bit_set(zeroes, i));
+            let b = i%2==0;
+            assert_eq!(is_bit_set(mishmash, i), b);
+        }
+    }
+
     #[test]
     fn prefixes() {
         let full = HashPath(Digest::try_from("0101010101000000000000000000000000000000000000000000000000000000").unwrap());
@@ -129,5 +143,13 @@ mod tests {
         assert_eq!(pref2.inner[0], 0b00000001);
 
         assert!(pref.is_prefix_of(&full), "prefix returned false");
+    }
+
+    #[test]
+    fn indices() {
+        let prefix = PrefixedPath::new(0, Vec::new()).unwrap();
+        assert_eq!(prefix.at(0), None);
+        assert_eq!(prefix.at(7), None);
+        assert_eq!(prefix.at(64), None);
     }
 }
