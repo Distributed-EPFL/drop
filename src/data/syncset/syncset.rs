@@ -1,15 +1,16 @@
 // Dependencies
-use crate::bytewise::Readable;
 use super::path::*;
 use super::errors::*;
 use super::{Node, Set};
+use super::Syncable;
 
 // Syncset
-pub struct SyncSet<Data: Readable + PartialEq> {
+pub struct SyncSet<Data: Syncable> {
     root: Node<Data>,
 }
 
-impl <Data: Readable + PartialEq + Clone> SyncSet<Data> {
+// Syncset implementation
+impl <Data: Syncable> SyncSet<Data> {
     pub fn insert(&mut self, data: Data) -> Result<bool, SyncError> {
         let path = HashPath::new(&data)?;
         self.root.insert(data, 0, path)

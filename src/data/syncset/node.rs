@@ -5,12 +5,12 @@ use crate::crypto::hash::{Digest, hash};
 use super::path::*;
 use super::errors::*;
 use super::Set;
-use super::DUMP_THRESHOLD;
+use super::{DUMP_THRESHOLD, Syncable};
 
 use std::mem;
 use std::cell::{RefCell, Cell};
 
-pub(super) enum Node<Data: Readable + PartialEq> {
+pub(super) enum Node<Data: Syncable> {
     Empty,
     Leaf {
         data: Data,
@@ -28,7 +28,7 @@ pub(super) enum Node<Data: Readable + PartialEq> {
 
 
 
-impl <Data: Readable + PartialEq + Clone> Node<Data> {
+impl <Data: Syncable> Node<Data> {
 
     pub fn get(&self, prefix: PrefixedPath, depth: usize, dump: bool) -> Result<Set<Data>, SyncError> {
         use Node::*;
