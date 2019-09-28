@@ -37,8 +37,11 @@ impl Direction {
 
 impl HashPath {
     pub const NUM_BITS: usize = HASH_SIZE * BITS_IN_BYTE;
+    /// Returns the direction at a given bit index
+    /// Note that this function will panic if given an index
+    /// greater or equal to the number of bits in a hash digest
     pub fn at(&self, idx: usize) -> Direction {
-        debug_assert!(idx < Self::NUM_BITS, "Out of bounds on path");
+        assert!(idx < Self::NUM_BITS, "Out of bounds on path");
         let (byte_idx, bit_idx) = split_bits(idx);
         let byte = (self.0).0[byte_idx];
         Direction::from_bit(byte, bit_idx)
@@ -51,8 +54,11 @@ impl HashPath {
 }
 
 impl PrefixedPath {
-    pub fn add_one(&self, dir: Direction) -> PrefixedPath {
-        debug_assert!(self.depth <= HashPath::NUM_BITS);
+    fn add_one(&self, dir: Direction) -> Result<PrefixedPath, PathLengthError> {
+        if self.depth > HashPath::NUM_BITS {
+            return Err(PathLengthError::new())
+        }
+
         let mut new_inner = self.inner.clone();
         let new_depth = self.depth+1;
         if self.depth % BITS_IN_BYTE == 0 {
@@ -72,14 +78,14 @@ impl PrefixedPath {
             let mask = !get_mask(bit_idx);
             *current_byte = *current_byte & mask;
         }
-        PrefixedPath{inner: new_inner, depth: new_depth}
+        Ok(PrefixedPath{inner: new_inner, depth: new_depth})
     }
 
-    pub fn left(&self) -> PrefixedPath {
+    pub fn left(&self) -> Result<PrefixedPath, PathLengthError> {
         self.add_one(Direction::Left)
     }
 
-    pub fn right(&self) -> PrefixedPath {
+    pub fn right(&self) -> Result<PrefixedPath, PathLengthError> {
         self.add_one(Direction::Right)
     }
 
@@ -158,9 +164,9 @@ mod tests {
         for i in 0..HashPath::NUM_BITS {
             assert_eq!(path.inner.len(), (i+BITS_IN_BYTE-1)/BITS_IN_BYTE);
             if i % 2 == 1 {
-                path = path.left()
+                path = path.left().unwrap()
             } else {
-                path = path.right()
+                path = path.right().unwrap()
             }
         }
 
