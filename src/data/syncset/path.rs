@@ -5,8 +5,9 @@ use super::errors::{SyncError, PathLengthError};
 const BITS_IN_BYTE: usize = 8;
 
 // Structs 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct HashPath (pub(super) Digest);
+
 #[derive(Clone)]
 pub struct PrefixedPath {
     inner: Vec<u8>,
@@ -55,7 +56,7 @@ impl HashPath {
 
 impl PrefixedPath {
     fn add_one(&self, dir: Direction) -> Result<PrefixedPath, PathLengthError> {
-        if self.depth > HashPath::NUM_BITS {
+        if self.depth >= HashPath::NUM_BITS {
             return Err(PathLengthError::new())
         }
 
@@ -137,7 +138,7 @@ impl PrefixedPath {
 
 // Helper Functions
 
-// Converts a given index to base 2^8
+// Converts a bit index into byte index + bit-in-byte index
 fn split_bits(to_split: usize) -> (usize, usize) {
     (to_split/BITS_IN_BYTE, to_split%BITS_IN_BYTE)
 }
@@ -157,6 +158,112 @@ fn get_mask(bit_idx: usize) -> u8 {
 mod tests {
     use super::*;
     use std::convert::TryFrom;
+
+    // Direction tests
+
+    #[test]
+    fn from_bit() {
+        assert_eq!(Direction::from_bit(0xFF, 0), Direction::Right);
+        assert_eq!(Direction::from_bit(0, 0), Direction::Left);
+    }
+
+    #[test]
+    fn to_bit() {
+        assert_eq!(Direction::Right.to_bit(), true);
+        assert_eq!(Direction::Left.to_bit(), false);
+    }
+
+    // Helper functions tests
+
+    #[test]
+    fn split() {
+        let a = 9;
+        let b = 64;
+        let c = 258;
+        assert_eq!(split_bits(a), (1,1));
+        assert_eq!(split_bits(b), (8,0));
+        assert_eq!(split_bits(c), (32, 2));
+    }
+
+    #[test]
+    fn bits() {
+        let ones: u8 = 0xFF;
+        let zeroes: u8 = 0x00;
+        let mishmash: u8 = 0xAA;
+        for i in 0..BITS_IN_BYTE {
+            assert!(is_bit_set(ones, i));
+            assert!(!is_bit_set(zeroes, i));
+            let b = i%2==0;
+            assert_eq!(is_bit_set(mishmash, i), b);
+        }
+
+        let byte = 0b10000100;
+        for i in 0..BITS_IN_BYTE {
+            if i != 0 && i != 5 {
+                assert!(!is_bit_set(byte, i))
+            } else {
+                assert!(is_bit_set(byte, i))
+            }
+        }
+    }
+
+    // Full Path tests
+    #[test]
+    fn hashpath() {
+        use Direction::*;
+        // hash(15092) = 0101 1010 0001 1111
+        let path = HashPath::new(&15092).unwrap();
+
+        let expected_vec = vec!(
+            Left, Right, Left, Right,
+            Right, Left, Right, Left,
+            Left, Left, Left, Right,
+            Right, Right, Right, Right
+        );
+
+        for (idx, expected) in expected_vec.iter().enumerate() {
+            assert_eq!(expected, &path.at(idx));
+        }
+    }
+
+    // Prefixed tests
+
+    #[test]
+    fn prefixes() {
+        let full = HashPath(Digest::try_from("0101010101000000000000000000000000000000000000000000000000000000").unwrap());
+
+        let pref1 = PrefixedPath::new(7, vec!(0)).unwrap();
+        assert!(pref1.is_prefix_of(&full), "prefix1 returned false");
+
+        let pref2 = PrefixedPath::new(8, vec!(0b0000_0001)).unwrap();
+        assert!(pref2.is_prefix_of(&full), "prefix2 returned false");
+
+        let pref3 = PrefixedPath::new(1, vec!(0b1111_1111)).unwrap();
+        assert!(!pref3.is_prefix_of(&full), "prefix3 returned true");
+
+        let empty = PrefixedPath::new(0, Vec::new()).unwrap();
+        assert!(empty.is_prefix_of(&full), "empty prefix returned false");
+    }
+
+    #[test]
+    fn serialization() {
+        // TODO
+    }
+
+    #[test]
+    fn add_one_errors() {
+        let mut inner = Vec::with_capacity(HASH_SIZE);
+        for _ in 0..HASH_SIZE {
+            inner.push(0);
+        };
+        let pref = PrefixedPath::new(HashPath::NUM_BITS, inner).unwrap();
+
+        if let Err(e) = pref.add_one(Direction::Left) {
+            println!("{:?}", e)
+        } else {
+            panic!("Expected an error in adding one to direction")
+        }
+    }
 
     #[test]
     fn extension() {
@@ -180,39 +287,24 @@ mod tests {
     }
 
     #[test]
-    fn bits() {
-        let ones: u8 = 0xFF;
-        let zeroes: u8 = 0x00;
-        let mishmash: u8 = 0xAA;
-        for i in 0..BITS_IN_BYTE {
-            assert!(is_bit_set(ones, i));
-            assert!(!is_bit_set(zeroes, i));
-            let b = i%2==0;
-            assert_eq!(is_bit_set(mishmash, i), b);
+    fn prefixed_nav() {
+        let inner = vec!(0xAA, 0x55);
+        let inner_len = inner.len();
+        let path = PrefixedPath::new(16, inner).unwrap();
+        for i in 0..inner_len {
+            for j in 0..BITS_IN_BYTE {
+                let expected_bit = (i+j)%2 == 0;
+                let actual_dir = path.at(BITS_IN_BYTE*i+j).unwrap();
+                assert_eq!(actual_dir.to_bit(), expected_bit)
+            }
         }
     }
 
     #[test]
-    fn prefixes() {
-        let full = HashPath(Digest::try_from("0101010101000000000000000000000000000000000000000000000000000000").unwrap());
-
-        let pref1 = PrefixedPath::new(7, vec!(0)).expect("Prefixed path coudn't be created");
-        assert!(pref1.is_prefix_of(&full), "prefix1 returned false");
-
-        let pref2 = PrefixedPath::new(8, vec!(0b0000_0001)).unwrap();
-        assert!(pref2.is_prefix_of(&full), "prefix2 returned false");
-
-        let pref3 = PrefixedPath::new(1, vec!(0b1111_1111)).unwrap();
-        assert!(!pref3.is_prefix_of(&full), "prefix3 returned true");
-
-        let empty = PrefixedPath::new(0, Vec::new()).unwrap();
-        assert!(empty.is_prefix_of(&full), "empty prefix returned false");
-    }
-
-    #[test]
     fn indices() {
-        let prefix = PrefixedPath::new(0, Vec::new()).unwrap();
-        assert_eq!(prefix.at(0), None);
+        let prefix = PrefixedPath::new(2, vec!(0b10000000)).unwrap();
+        assert_eq!(prefix.at(0), Some(Direction::Right));
+        assert_eq!(prefix.at(1), Some(Direction::Left));
         assert_eq!(prefix.at(7), None);
         assert_eq!(prefix.at(64), None);
     }
