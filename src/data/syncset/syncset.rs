@@ -89,11 +89,18 @@ impl <Data: Syncable> SyncSet<Data> {
                                 let remote_hash = remote_hash_opt.as_ref().unwrap();
 
                                 if remote_hash < local_hash {
-                                    to_add.push(remote_data.get(i).unwrap().clone());
+                                    let new = unsafe {
+                                        remote_data.get_unchecked(i)
+                                        }.clone();
+                                    to_add.push(new);
                                     i+=1;
                                     remote_hash_opt = None;
                                 } else if remote_hash > local_hash {
-                                    to_remove.push(local_data.get(i).unwrap().clone());
+                                    let new = unsafe {
+                                        local_data.get_unchecked(i)
+                                    }.clone();
+
+                                    to_remove.push(new);
                                     j+=1;
                                     local_hash_opt = None;
                                 } else {
