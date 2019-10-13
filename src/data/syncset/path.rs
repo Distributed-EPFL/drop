@@ -1,5 +1,12 @@
 use crate::crypto::hash::{Digest, hash, SIZE as HASH_SIZE};
 use crate::bytewise::Readable;
+use crate::bytewise::Writable;
+use crate::bytewise::Writer;
+use crate::bytewise::Reader;
+use crate::bytewise::Load;
+use crate::bytewise::Size;
+use crate::bytewise::ReadError;
+use crate::bytewise::WriteError;
 use crate::data::Varint;
 use super::errors::{SyncError, PathLengthError};
 
@@ -15,7 +22,7 @@ pub struct HashPath (pub(super) Digest);
 
 /// Navigator class
 /// Guaranteed to have 0 <= n <= HASH_SIZE * 8 bits of depth
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrefixedPath {
     inner: Vec<u8>,
     depth: Varint 
@@ -62,6 +69,7 @@ impl HashPath {
 }
 
 impl PrefixedPath {
+
     fn add_one(&self, dir: Direction) -> Result<PrefixedPath, PathLengthError> {
         if self.depth.0 >= HashPath::NUM_BITS as u32 {
             return Err(PathLengthError::new())
@@ -150,6 +158,36 @@ impl PrefixedPath {
     }
 }
 
+// Trait Implementations
+
+impl Readable for PrefixedPath {
+    const SIZE: Size = Size::variable();
+
+    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
+        self.depth.accept(visitor)?;
+        visitor.push(self.inner.as_slice())?;
+        Ok(())
+    }
+}
+
+impl Writable for PrefixedPath {
+    const SIZE: Size = Size::variable();
+
+    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
+        *self = PrefixedPath::load(visitor)?;
+        Ok(())
+    }
+}
+
+impl Load for PrefixedPath {
+    fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
+        let depth = Varint::load(from)?;
+        let num_bytes = bytes_needed(depth.0);
+        let inner: Vec<u8> = from.pop(num_bytes)?.into();
+        Ok(PrefixedPath{inner, depth})
+    }
+}
+
 // Helper Functions
 
 // Converts a bit index into byte index + bit-in-byte index
@@ -165,6 +203,10 @@ fn is_bit_set(byte: u8, bit_idx: u32) -> bool {
 
 fn get_mask(bit_idx: u32) -> u8 {
     1 << (BITS_IN_BYTE - bit_idx as u32 - 1)
+}
+
+fn bytes_needed(depth: u32) -> usize {
+    ((depth + BITS_IN_BYTE - 1) / BITS_IN_BYTE) as usize
 }
 
 
@@ -221,6 +263,14 @@ mod tests {
         }
     }
 
+    #[test]
+    fn bytes_needed_test() {
+        assert_eq!(bytes_needed(3), 1);
+        assert_eq!(bytes_needed(0), 0);
+        assert_eq!(bytes_needed(32), 4);
+        assert_eq!(bytes_needed(1), 1);
+    }
+
     // Full Path tests
     #[test]
     fn hashpath() {
@@ -259,17 +309,45 @@ mod tests {
         assert!(empty.is_prefix_of(&full), "empty prefix returned false");
     }
 
-    /*
+
     #[test]
     fn serialization() {
-        use crate::bytewise::serialize;
+        use crate::bytewise::{serialize, deserialize};
         for depth in 0..=HashPath::NUM_BITS {
 
             let prefix = PrefixedPath::new(&15092, depth).unwrap();
-            let serialized = serialize(&prefix);
+            let serialized = serialize(&prefix).unwrap();
+
+
+            let expected_depth_size: usize = min_bytes_to_represent(depth);
+
+            println!("{:?}", prefix);
+            println!("{:?}", serialized);
+
+            let expected_vec_len = bytes_needed(depth);
+            let expected_vec_size = expected_vec_len as usize;
+            assert_eq!(serialized.len(), expected_depth_size + expected_vec_size, "Serialized version too long");
+
+
+            let deserialized: PrefixedPath = deserialize(serialized.as_slice()).unwrap();
+
+            assert_eq!(deserialized.depth, prefix.depth, "Depths didn't match");
+            for i in 0..depth {
+                assert_eq!(deserialized.at(i), prefix.at(i), "Deserialized didn't match original");
+            }
+
         }
     }
-    */
+
+    fn min_bytes_to_represent(elem: u32) -> usize {
+        if elem >= 16384 {
+            4
+        } else if elem >= 128 {
+            2
+        } else {
+            1
+        }
+    }
 
     #[test]
     fn add_one_errors() {
