@@ -1,8 +1,9 @@
 use crate::crypto::hash::{Digest, hash, SIZE as HASH_SIZE};
 use crate::bytewise::Readable;
+use crate::data::Varint;
 use super::errors::{SyncError, PathLengthError};
 
-const BITS_IN_BYTE: usize = 8;
+const BITS_IN_BYTE: u32 = 8;
 
 // Structs 
 
@@ -17,7 +18,7 @@ pub struct HashPath (pub(super) Digest);
 #[derive(Clone)]
 pub struct PrefixedPath {
     inner: Vec<u8>,
-    depth: usize
+    depth: Varint 
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -29,7 +30,7 @@ pub enum Direction {
 // Implementations
 
 impl Direction {
-    pub fn from_bit(byte: u8, bit_idx: usize) -> Direction {
+    pub fn from_bit(byte: u8, bit_idx: u32) -> Direction {
         if is_bit_set(byte, bit_idx) {
             Direction::Right
         } else {
@@ -43,14 +44,14 @@ impl Direction {
 }
 
 impl HashPath {
-    pub const NUM_BITS: usize = HASH_SIZE * BITS_IN_BYTE;
+    pub const NUM_BITS: u32 = HASH_SIZE as u32 * BITS_IN_BYTE;
     /// Returns the direction at a given bit index
     /// Note that this function will panic if given an index
     /// greater or equal to the number of bits in a hash digest
-    pub fn at(&self, idx: usize) -> Direction {
+    pub fn at(&self, idx: u32) -> Direction {
         assert!(idx < Self::NUM_BITS, "Out of bounds on path");
         let (byte_idx, bit_idx) = split_bits(idx);
-        let byte = (self.0).0[byte_idx];
+        let byte = (self.0).0[byte_idx as usize];
         Direction::from_bit(byte, bit_idx)
     }
 
@@ -62,17 +63,17 @@ impl HashPath {
 
 impl PrefixedPath {
     fn add_one(&self, dir: Direction) -> Result<PrefixedPath, PathLengthError> {
-        if self.depth >= HashPath::NUM_BITS {
+        if self.depth.0 >= HashPath::NUM_BITS as u32 {
             return Err(PathLengthError::new())
         }
 
         let mut new_inner = self.inner.clone();
-        let new_depth = self.depth+1;
-        if self.depth % BITS_IN_BYTE == 0 {
+        let new_depth = self.depth.0+1;
+        if self.depth.0 % BITS_IN_BYTE == 0 {
             new_inner.push(0)
         };
         let (byte_idx, bit_idx) = split_bits(new_depth-1);
-        let current_byte = new_inner.get_mut(byte_idx).unwrap();
+        let current_byte = new_inner.get_mut(byte_idx as usize).unwrap();
 
         let new_bit = dir.to_bit();
 
@@ -85,7 +86,7 @@ impl PrefixedPath {
             let mask = !get_mask(bit_idx);
             *current_byte = *current_byte & mask;
         }
-        Ok(PrefixedPath{inner: new_inner, depth: new_depth})
+        Ok(PrefixedPath{inner: new_inner, depth: Varint(new_depth)})
     }
 
     pub fn left(&self) -> Result<PrefixedPath, PathLengthError> {
@@ -96,35 +97,36 @@ impl PrefixedPath {
         self.add_one(Direction::Right)
     }
 
-    pub fn at(&self, idx: usize) -> Option<Direction> {
-        if idx < self.depth {
+    pub fn at(&self, idx: u32) -> Option<Direction> {
+        if idx < self.depth.0 {
             let (byte_idx, bit_idx) = split_bits(idx);
-            self.inner.get(byte_idx).map(|byte| Direction::from_bit(*byte, bit_idx))
+            self.inner.get(byte_idx as usize)
+                .map(|byte| Direction::from_bit(*byte, bit_idx))
         } else {
             None
         }
     }
 
     pub fn empty() -> PrefixedPath {
-        PrefixedPath{inner: Vec::new(), depth: 0}
+        PrefixedPath{inner: Vec::new(), depth: Varint(0)}
     }
 
-    pub fn new<Data: Readable>(data: &Data, depth: usize) -> Result<PrefixedPath, SyncError> {
+    pub fn new<Data: Readable>(data: &Data, depth: u32) -> Result<PrefixedPath, SyncError> {
         let digest = hash(data)?;
         let needed_bytes = (depth + BITS_IN_BYTE - 1) / BITS_IN_BYTE;
-        let mut inner = Vec::with_capacity(needed_bytes);
+        let mut inner = Vec::with_capacity(needed_bytes as usize);
         for i in 0..needed_bytes {
-            inner.push(digest.0[i])
+            inner.push(digest.0[i as usize])
         };
-        Ok(PrefixedPath{inner, depth})
+        Ok(PrefixedPath{inner, depth: Varint(depth)})
     }
 
     // TODO clean up?
     pub fn is_prefix_of(&self, rhs: &HashPath) -> bool {
-        let (num_full_bytes, overflow_bits) = split_bits(self.depth);
+        let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
         for i in 0..num_full_bytes {
-            if let Some(byte) = self.inner.get(i) {
-                if *byte != (rhs.0).0[i] {
+            if let Some(byte) = self.inner.get(i as usize) {
+                if *byte != (rhs.0).0[i as usize] {
                     return false;
                 }
             } else {
@@ -132,8 +134,8 @@ impl PrefixedPath {
             };
         }
         if overflow_bits > 0 {
-            if let Some(last_byte_left) = self.inner.get(num_full_bytes) {
-                let last_byte_right = (rhs.0).0[num_full_bytes];
+            if let Some(last_byte_left) = self.inner.get(num_full_bytes as usize) {
+                let last_byte_right = (rhs.0).0[num_full_bytes as usize];
                 let shift_amount = overflow_bits;
                 let left_masked = last_byte_left >> shift_amount;
                 let right_masked = last_byte_right >> shift_amount;
@@ -151,18 +153,18 @@ impl PrefixedPath {
 // Helper Functions
 
 // Converts a bit index into byte index + bit-in-byte index
-fn split_bits(to_split: usize) -> (usize, usize) {
+fn split_bits(to_split: u32) -> (u32, u32) {
     (to_split/BITS_IN_BYTE, to_split%BITS_IN_BYTE)
 }
 
 // Checks if the i-th bit is set in a byte
-fn is_bit_set(byte: u8, bit_idx: usize) -> bool {
+fn is_bit_set(byte: u8, bit_idx: u32) -> bool {
     let masked = byte & get_mask(bit_idx);
     masked != 0
 }
 
-fn get_mask(bit_idx: usize) -> u8 {
-    1 << (BITS_IN_BYTE - bit_idx - 1)
+fn get_mask(bit_idx: u32) -> u8 {
+    1 << (BITS_IN_BYTE - bit_idx as u32 - 1)
 }
 
 
@@ -234,7 +236,7 @@ mod tests {
         );
 
         for (idx, expected) in expected_vec.iter().enumerate() {
-            assert_eq!(expected, &path.at(idx));
+            assert_eq!(expected, &path.at(idx as u32));
         }
     }
 
@@ -244,23 +246,30 @@ mod tests {
     fn prefixes() {
         let full = HashPath(Digest::try_from("0101010101000000000000000000000000000000000000000000000000000000").unwrap());
 
-        let pref1 = PrefixedPath{depth: 7, inner: vec!(0)};
+        let pref1 = PrefixedPath{inner: vec!(0), depth: Varint(7)};
         assert!(pref1.is_prefix_of(&full), "prefix1 returned false");
 
-        let pref2 = PrefixedPath{inner: vec!(0b0000_0001), depth: 8};
+        let pref2 = PrefixedPath{inner: vec!(0b0000_0001), depth: Varint(8)};
         assert!(pref2.is_prefix_of(&full), "prefix2 returned false");
 
-        let pref3 = PrefixedPath{inner: vec!(0b1111_1111), depth: 1};
+        let pref3 = PrefixedPath{inner: vec!(0b1111_1111), depth: Varint(1)};
         assert!(!pref3.is_prefix_of(&full), "prefix3 returned true");
 
-        let empty = PrefixedPath{inner: Vec::new(), depth: 0};
+        let empty = PrefixedPath{inner: Vec::new(), depth: Varint(0)};
         assert!(empty.is_prefix_of(&full), "empty prefix returned false");
     }
 
+    /*
     #[test]
     fn serialization() {
-        // TODO
+        use crate::bytewise::serialize;
+        for depth in 0..=HashPath::NUM_BITS {
+
+            let prefix = PrefixedPath::new(&15092, depth).unwrap();
+            let serialized = serialize(&prefix);
+        }
     }
+    */
 
     #[test]
     fn add_one_errors() {
@@ -268,7 +277,7 @@ mod tests {
         for _ in 0..HASH_SIZE {
             inner.push(0);
         };
-        let pref = PrefixedPath{inner: inner, depth: HashPath::NUM_BITS};
+        let pref = PrefixedPath{inner: inner, depth: Varint(HashPath::NUM_BITS as u32)};
 
         if let Err(e) = pref.add_one(Direction::Left) {
             println!("{:?}", e)
@@ -279,9 +288,9 @@ mod tests {
 
     #[test]
     fn extension() {
-        let mut path = PrefixedPath{inner: Vec::new(), depth: 0};
+        let mut path = PrefixedPath{inner: Vec::new(), depth: Varint(0)};
         for i in 0..HashPath::NUM_BITS {
-            assert_eq!(path.inner.len(), (i+BITS_IN_BYTE-1)/BITS_IN_BYTE);
+            assert_eq!(path.inner.len() as u32, (i+BITS_IN_BYTE-1)/BITS_IN_BYTE);
             if i % 2 == 1 {
                 path = path.left().unwrap()
             } else {
@@ -301,8 +310,8 @@ mod tests {
     #[test]
     fn prefixed_nav() {
         let inner = vec!(0xAA, 0x55);
-        let inner_len = inner.len();
-        let path = PrefixedPath{inner: inner, depth: 16};
+        let inner_len = inner.len() as u32;
+        let path = PrefixedPath{inner: inner, depth: Varint(16)};
         for i in 0..inner_len {
             for j in 0..BITS_IN_BYTE {
                 let expected_bit = (i+j)%2 == 0;
@@ -314,7 +323,7 @@ mod tests {
 
     #[test]
     fn indices() {
-        let prefix = PrefixedPath{inner: vec!(0b10000000), depth: 2};
+        let prefix = PrefixedPath{inner: vec!(0b10000000), depth: Varint(2)};
         assert_eq!(prefix.at(0), Some(Direction::Right));
         assert_eq!(prefix.at(1), Some(Direction::Left));
         assert_eq!(prefix.at(7), None);

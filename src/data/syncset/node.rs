@@ -30,7 +30,7 @@ pub(super) enum Node<Data: Syncable> {
 
 impl <Data: Syncable> Node<Data> {
 
-    pub fn get(&self, prefix: PrefixedPath, depth: usize, dump: bool) -> Result<Set<Data>, SyncError> {
+    pub fn get(&self, prefix: PrefixedPath, depth: u32, dump: bool) -> Result<Set<Data>, SyncError> {
         use Node::*;
         if let Some(dir) = prefix.at(depth) {
             match self {
@@ -98,7 +98,7 @@ impl <Data: Syncable> Node<Data> {
         }
     }
 
-    pub fn delete(&mut self, data_to_delete: &Data, path: HashPath, depth: usize) -> bool {
+    pub fn delete(&mut self, data_to_delete: &Data, path: HashPath, depth: u32) -> bool {
         let deletion_successful = match self {
             Node::Empty => false,
             Node::Branch{ref mut left, ref mut right, ..} => {
@@ -147,7 +147,7 @@ impl <Data: Syncable> Node<Data> {
     }
 
     // Inserts data into the node
-    pub fn insert(&mut self, data: Data, depth: usize, path: HashPath) -> Result<bool, SyncError> {
+    pub fn insert(&mut self, data: Data, depth: u32, path: HashPath) -> Result<bool, SyncError> {
         match self {
             Node::Empty => {
                 self.swap(Node::new_leaf(data));
@@ -216,7 +216,7 @@ impl <Data: Syncable> Node<Data> {
     }
 
     // Makes a tree with 2 leaves. Do not call with path0=path1
-    fn make_tree(data0: Data, path0: HashPath, data1: Data, path1: HashPath, depth: usize) -> Node<Data> {
+    fn make_tree(data0: Data, path0: HashPath, data1: Data, path1: HashPath, depth: u32) -> Node<Data> {
         use Direction::*;
         if path0.at(depth) == Left {
             // Differing paths: exit condition
