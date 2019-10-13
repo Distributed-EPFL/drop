@@ -5,9 +5,15 @@ use super::errors::{SyncError, PathLengthError};
 const BITS_IN_BYTE: usize = 8;
 
 // Structs 
+
+/// Navigator wrapper for Digest
+/// Guaranteed to have HASH_SIZE * 8 bits of depth
 #[derive(Clone, Debug)]
 pub struct HashPath (pub(super) Digest);
 
+
+/// Navigator class
+/// Guaranteed to have 0 <= n <= HASH_SIZE * 8 bits of depth
 #[derive(Clone)]
 pub struct PrefixedPath {
     inner: Vec<u8>,
@@ -99,12 +105,18 @@ impl PrefixedPath {
         }
     }
 
-    pub fn new(depth: usize, inner: Vec<u8>) -> Result<PrefixedPath, PathLengthError> {
-        if inner.len() != (depth+BITS_IN_BYTE-1)/BITS_IN_BYTE {
-            Err(PathLengthError::new())
-        } else {
-            Ok(PrefixedPath{depth, inner})
-        }
+    pub fn empty() -> PrefixedPath {
+        PrefixedPath{inner: Vec::new(), depth: 0}
+    }
+
+    pub fn new<Data: Readable>(data: &Data, depth: usize) -> Result<PrefixedPath, SyncError> {
+        let digest = hash(data)?;
+        let needed_bytes = (depth + BITS_IN_BYTE - 1) / BITS_IN_BYTE;
+        let mut inner = Vec::with_capacity(needed_bytes);
+        for i in 0..needed_bytes {
+            inner.push(digest.0[i])
+        };
+        Ok(PrefixedPath{inner, depth})
     }
 
     // TODO clean up?
@@ -232,16 +244,16 @@ mod tests {
     fn prefixes() {
         let full = HashPath(Digest::try_from("0101010101000000000000000000000000000000000000000000000000000000").unwrap());
 
-        let pref1 = PrefixedPath::new(7, vec!(0)).unwrap();
+        let pref1 = PrefixedPath{depth: 7, inner: vec!(0)};
         assert!(pref1.is_prefix_of(&full), "prefix1 returned false");
 
-        let pref2 = PrefixedPath::new(8, vec!(0b0000_0001)).unwrap();
+        let pref2 = PrefixedPath{inner: vec!(0b0000_0001), depth: 8};
         assert!(pref2.is_prefix_of(&full), "prefix2 returned false");
 
-        let pref3 = PrefixedPath::new(1, vec!(0b1111_1111)).unwrap();
+        let pref3 = PrefixedPath{inner: vec!(0b1111_1111), depth: 1};
         assert!(!pref3.is_prefix_of(&full), "prefix3 returned true");
 
-        let empty = PrefixedPath::new(0, Vec::new()).unwrap();
+        let empty = PrefixedPath{inner: Vec::new(), depth: 0};
         assert!(empty.is_prefix_of(&full), "empty prefix returned false");
     }
 
@@ -256,7 +268,7 @@ mod tests {
         for _ in 0..HASH_SIZE {
             inner.push(0);
         };
-        let pref = PrefixedPath::new(HashPath::NUM_BITS, inner).unwrap();
+        let pref = PrefixedPath{inner: inner, depth: HashPath::NUM_BITS};
 
         if let Err(e) = pref.add_one(Direction::Left) {
             println!("{:?}", e)
@@ -267,7 +279,7 @@ mod tests {
 
     #[test]
     fn extension() {
-        let mut path = PrefixedPath::new(0, Vec::new()).unwrap();
+        let mut path = PrefixedPath{inner: Vec::new(), depth: 0};
         for i in 0..HashPath::NUM_BITS {
             assert_eq!(path.inner.len(), (i+BITS_IN_BYTE-1)/BITS_IN_BYTE);
             if i % 2 == 1 {
@@ -290,7 +302,7 @@ mod tests {
     fn prefixed_nav() {
         let inner = vec!(0xAA, 0x55);
         let inner_len = inner.len();
-        let path = PrefixedPath::new(16, inner).unwrap();
+        let path = PrefixedPath{inner: inner, depth: 16};
         for i in 0..inner_len {
             for j in 0..BITS_IN_BYTE {
                 let expected_bit = (i+j)%2 == 0;
@@ -302,7 +314,7 @@ mod tests {
 
     #[test]
     fn indices() {
-        let prefix = PrefixedPath::new(2, vec!(0b10000000)).unwrap();
+        let prefix = PrefixedPath{inner: vec!(0b10000000), depth: 2};
         assert_eq!(prefix.at(0), Some(Direction::Right));
         assert_eq!(prefix.at(1), Some(Direction::Left));
         assert_eq!(prefix.at(7), None);

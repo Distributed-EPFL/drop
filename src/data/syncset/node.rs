@@ -322,7 +322,7 @@ mod tests {
             let hash = hash(&i).unwrap();
             root.insert(i, 0, HashPath(hash)).unwrap();
         }
-        if let Set::DataSet{underlying, ..} = root.get(PrefixedPath::new(0, Vec::new()).unwrap(), 0, true).unwrap() {
+        if let Set::DataSet{underlying, ..} = root.get(PrefixedPath::empty(), 0, true).unwrap() {
             let mut previous = hash(underlying.get(0).expect("Get returned no elements")).unwrap();
             for i in 1..num_iters {
                 let current = hash(underlying.get(i as usize).unwrap()).unwrap();
@@ -330,9 +330,11 @@ mod tests {
                 previous = current;
             }
         } else {
-            assert!(false, "Get returned a LabelSet")
+            panic!("Get returned a LabelSet")
         }
     }
+
+    
 
     #[test]
     fn inserting_twice_returns_false() {
