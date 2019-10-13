@@ -35,7 +35,7 @@ impl <Data: Syncable> SyncSet<Data> {
 
 
     pub fn start_sync(&self) -> Result<Round<Data>, SyncError> {
-        let root_view = self.get(PrefixedPath::new(0, vec!()).unwrap(), false)?;
+        let root_view = self.get(PrefixedPath::empty(), false)?;
         Ok(Round{view: vec!(root_view), add: Vec::new(), remove: Vec::new()})
     }
 
