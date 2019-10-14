@@ -10,6 +10,8 @@ use crate::bytewise::WriteError;
 use crate::data::Varint;
 use super::errors::{SyncError, PathLengthError};
 
+use std::convert::TryInto;
+
 const BITS_IN_BYTE: u32 = 8;
 
 // Structs 
@@ -132,30 +134,29 @@ impl PrefixedPath {
     // TODO clean up?
     pub fn is_prefix_of(&self, rhs: &HashPath) -> bool {
         let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
+        let num_full_bytes = num_full_bytes.try_into().expect("Couldn't cast 32-bit integer to usize.");
 
-        // First, iterate over the full bytes
-        for i in 0..num_full_bytes {
-            if let Some(byte) = self.inner.get(i as usize) {
-                if *byte != (rhs.0).0[i as usize] {
-                    return false;
-                }
-            } else {
-                return false
-            };
+        // overflow_bits = 0 -> num_full_bytes == inner.len
+        debug_assert!(overflow_bits > 0 || num_full_bytes == self.inner.len());
+        // overflow_bits > 0 -> num_full_bytes + 1 == inner.len
+        debug_assert!(overflow_bits == 0 || num_full_bytes + 1 == self.inner.len());
+
+        if self.inner[0..num_full_bytes] != (rhs.0).0[0..num_full_bytes] {
+            return false;
         }
 
         // If there are some bits left to individually compare in the last byte
         if overflow_bits > 0 {
-            if let Some(last_byte_left) = self.inner.get(num_full_bytes as usize) {
-                let last_byte_right = (rhs.0).0[num_full_bytes as usize];
-                let shift_amount = BITS_IN_BYTE - overflow_bits;
-                let left_masked = last_byte_left >> shift_amount;
-                let right_masked = last_byte_right >> shift_amount;
-                if left_masked != right_masked {
-                    return false;
-                }
-            } else {
-                return false
+            let last_byte_left = unsafe{self.inner.get_unchecked(num_full_bytes)};
+            let last_byte_right = (rhs.0).0[num_full_bytes as usize];
+            let shift_amount = BITS_IN_BYTE - overflow_bits;
+
+            // Right shift to truncate irrelevant bits
+            let left_masked = last_byte_left >> shift_amount;
+            let right_masked = last_byte_right >> shift_amount;
+
+            if left_masked != right_masked {
+                return false;
             }
         }
         true
