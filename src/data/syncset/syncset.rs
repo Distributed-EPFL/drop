@@ -33,6 +33,9 @@ impl <Data: Syncable> SyncSet<Data> {
         self.root.get(prefix, 0, dump)
     }
 
+    pub fn new() -> SyncSet<Data> {
+        SyncSet{root: Node::Empty}
+    }
 
     pub fn start_sync(&self) -> Result<Round<Data>, SyncError> {
         let root_view = self.get(PrefixedPath::empty(), false)?;
@@ -45,7 +48,7 @@ impl <Data: Syncable> SyncSet<Data> {
         let mut to_remove: Vec<Data> = Vec::new();
         for set in view {
             match set {
-                Set::LabelSet{label: remote_label, prefix: remote_prefix} => {
+                Set::LabelSet{label: remote_label, path: remote_prefix} => {
                     let local_set = self.get(remote_prefix.clone(), false)?;
                     match &local_set {
                         Set::LabelSet{label: local_label,..} => {
@@ -134,4 +137,126 @@ impl <Data: Syncable> SyncSet<Data> {
         }
         Ok(Round{add: to_add, remove: to_remove, view: new_view})
     }
+}
+
+#[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
+mod tests {
+
+    use super::*;
+    extern crate rand;
+
+    const NUM_ITERS: u32 = 50000;
+    #[test]
+    fn get_returns_in_order() {
+        let mut set = SyncSet::new();
+
+        for i in 0..NUM_ITERS {
+            set.insert(i).unwrap();
+        }
+
+        assert_eq!(set.root.size(), NUM_ITERS as usize, "Root has wrong size");
+
+        if let Set::DataSet{underlying, ..} = set.get(PrefixedPath::empty(), true).unwrap() {
+            let mut previous = hash(underlying.get(0).expect("get() returns no elements")).unwrap();
+            for i in 1..NUM_ITERS {
+                let current = hash(underlying.get(i as usize).unwrap()).expect("get() returns too few elements");
+                assert!(previous < current);
+                previous = current;
+            }
+        } else {
+            panic!("get() returns a LabelSet")
+        }
+    }
+
+    #[test]
+    fn get() {
+        let mut syncset = SyncSet::new();
+        let arbitrary_elem = rand::random::<u32>()%NUM_ITERS;
+        for i in 0..NUM_ITERS {
+            syncset.insert(i).unwrap();
+        }
+
+        let arbitrary_elem_path = HashPath::new(&arbitrary_elem).unwrap();
+
+        for depth in 0..HashPath::NUM_BITS {
+            let prefix = arbitrary_elem_path.prefix(depth);
+            let set = syncset.get(prefix.clone(), false).unwrap();
+            match &set {
+                Set::LabelSet{path, label} => {
+                    assert!(path.is_prefix_of(&arbitrary_elem_path));
+                    assert_eq!(path, &prefix, "Returned path does not match prefix");
+                    if let n @ Node::Branch{..} = syncset.root.node_at(prefix, 0) {
+                        assert_eq!(&n.hash().unwrap(), label);
+                    } else {
+                        panic!("get returns a labelset of a leaf or empty, {:?}", set)
+                    }
+                },
+                Set::DataSet{underlying, prefix: actual_prefix, dump} => {
+                    assert!(underlying.len() <= super::super::DUMP_THRESHOLD, "Number of elements received exceeds the threshold");
+                    assert!(actual_prefix.is_prefix_of(&arbitrary_elem_path), "Prefix isn't a prefix of the full hash");
+                    assert_eq!(&prefix, actual_prefix, "Prefix doesn't match expected");
+                    assert!(!dump, "get returns wrong value for dump")
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn inserting_twice_returns_false() {
+        let mut syncset: SyncSet<u64> = SyncSet::new();
+        let elem = 13;
+        assert!(syncset.insert(elem).unwrap(), "First insertion failed");
+        assert!(!syncset.insert(elem).unwrap(), "Second insertion succeeded");
+    }
+
+    /* Removed because the feature tested has not been implemented yet
+    #[test]
+    fn add_find() {
+        let mut expected_size = 0;
+        let mut set = HashSet::new();
+        let mut syncset = SyncSet::new();
+        let mut generator = rand::thread_rng();
+        for i in 0..NUM_ITERS {
+            if generator.gen() {
+                expected_size+=1;
+                set.insert(i);
+                syncset.insert(i, 0, HashPath::new(&i).unwrap()).unwrap();
+            }
+        }
+
+        assert_eq!(syncset.size(), expected_size, "syncset has wrong size");
+        for i in 0..2*NUM_ITERS {
+            let should_find = set.contains(&i);
+            let path = HashPath.new(&i).unwrap()
+            let found = syncset.contains(&i, 0, path);
+            assert_eq!(should_find, found, "Element ")
+        }
+    }
+
+    fn remove_find() {
+        let mut expected_size = NUM_ITERS;
+        let mut set = HashSet::new();
+        let mut syncset = Node::Empty;
+        let mut generator = rand::thread_rng();
+        for i in 0..NUM_ITERS {
+            set.insert(i);
+            syncset.insert(i, 0, HashPath::new(&i).unwrap())
+        }
+
+        for i in 0..NUM_ITERS {
+            if generator.gen() {
+                set.remove(&i);
+                syncset.delete(&i, HashPath::new(&i).unwrap(), 0);
+                expected_size-=1;
+            }
+        }
+
+        for i in 0..2*NUM_ITERS {
+            let should_find = set.contains(&i);
+            let found = set.contains(&i);
+        }
+    }
+    */
+
 }
