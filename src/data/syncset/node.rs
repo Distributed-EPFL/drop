@@ -10,6 +10,7 @@ use super::{DUMP_THRESHOLD, Syncable};
 use std::mem;
 use std::cell::{RefCell, Cell};
 
+#[derive(Debug)]
 pub(super) enum Node<Data: Syncable> {
     Empty,
     Leaf {
@@ -30,8 +31,25 @@ pub(super) enum Node<Data: Syncable> {
 
 impl <Data: Syncable> Node<Data> {
 
+    pub fn node_at(&self, prefix: PrefixedPath, depth: u32) -> &Node<Data> {
+        if let Some(dir) = prefix.at(depth) {
+            if let Node::Branch{left, right, ..} = &self {
+                if dir == Direction::Left {
+                    left.node_at(prefix, depth+1)
+                } else {
+                    right.node_at(prefix, depth+1)
+                }
+            } else {
+                &self
+            }
+        } else {
+            &self
+        }
+    }
+
     pub fn get(&self, prefix: PrefixedPath, depth: u32, dump: bool) -> Result<Set<Data>, SyncError> {
         use Node::*;
+        // todo: refactor to use node_at
         if let Some(dir) = prefix.at(depth) {
             match self {
                 Empty => Ok(Set::new_empty_dataset(prefix, dump)),
@@ -57,7 +75,7 @@ impl <Data: Syncable> Node<Data> {
                         if dump || self.size() < DUMP_THRESHOLD {
                         Ok(Set::new_dataset(prefix, self, dump))
                     } else {
-                        Ok(Set::LabelSet{label: self.hash()?, prefix})
+                        Ok(Set::LabelSet{label: self.hash()?, path: prefix})
                     }
                 }
                 Leaf{..} => {
@@ -166,8 +184,10 @@ impl <Data: Syncable> Node<Data> {
                 } else {
                     let old = self.swap(Node::Empty);
                     if let Node::Leaf{data: old_data,..} = old {
+                        // Insert both elements into a new tree
                         let old_path = HashPath(old_hash);
                         let new_node = Node::make_tree(old_data, old_path, data, path, depth);
+
                         // No need to invalidate cache here, because we're discarding the old node anyway
                         self.swap(new_node);
                         Ok(true)
@@ -218,6 +238,7 @@ impl <Data: Syncable> Node<Data> {
     // Makes a tree with 2 leaves. Do not call with path0=path1
     fn make_tree(data0: Data, path0: HashPath, data1: Data, path1: HashPath, depth: u32) -> Node<Data> {
         use Direction::*;
+        debug_assert_ne!(path0, path1);
         if path0.at(depth) == Left {
             // Differing paths: exit condition
             if path1.at(depth) == Right {
@@ -307,42 +328,134 @@ impl <Data: Syncable> Node<Data> {
 }
 
 #[derive(Readable)]
-struct ConcatDigest(#[bytewise] Digest, #[bytewise] Digest);
+pub(super) struct ConcatDigest(#[bytewise] Digest, #[bytewise] Digest);
 
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
 mod tests {
     use super::*;
-    use super::super::set::Set;
+
+    const NUM_ITERS: u32 = 50000;
+
+
     #[test]
-    fn get_returns_in_order() {
-        let mut root: Node<u64> = Node::Empty;
-        let num_iters = 50000;
-        for i in 0..num_iters {
-            let hash = hash(&i).unwrap();
-            root.insert(i, 0, HashPath(hash)).unwrap();
+    fn get_returns_correct_set() {
+
+    }
+
+    #[test]
+    fn label() {
+        use Node::*;
+        let mut root = Empty;
+        // hash(15092) = 0101 1010 0001 1111 ...
+        let elem_l = 15092;
+        let hash_left = hash(&elem_l).unwrap();
+        // hash(13) = 1101 ...
+        let elem_r = 13;
+        let hash_right = hash(&elem_r).unwrap();
+        root.insert(elem_l, 0, HashPath(hash_left.clone())).unwrap();
+        root.insert(elem_r, 0, HashPath(hash_right.clone())).unwrap();
+
+        let expected_label = hash(&ConcatDigest(hash_left, hash_right)).unwrap();
+        assert_eq!(root.hash().unwrap(), expected_label);
+    }
+
+    #[test]
+    fn traverse() {
+        use Node::*;
+        let mut root = Empty;
+        // hash(15092) = 0101 1010 0001 1111 ...
+        let elem_l = 15092;
+        let hash_left = hash(&elem_l).unwrap();
+        // hash(13) = 1101 ...
+        let elem_r = 13;
+        let hash_right = hash(&elem_r).unwrap();
+        root.insert(elem_l, 0, HashPath(hash_left.clone())).unwrap();
+        root.insert(elem_r, 0, HashPath(hash_right.clone())).unwrap();
+        let mut total = 1;
+        root.traverse(&mut |el| total*=el);
+        assert_eq!(total, elem_l*elem_r, "Traversal fails for two elements");
+
+        assert!(root.delete(&elem_l, HashPath(hash_left), 0), "Deletion fails for left element");
+
+        total = 1;
+        root.traverse(&mut |el| total*=el);
+        assert_eq!(total, elem_r, "Traversal fails for one element");
+    }
+
+    #[test]
+    fn insert() {
+        use Node::*;
+        let mut root = Empty;
+        // hash(15092) = 0101 1010 0001 1111 ...
+        let elem_l = 15092;
+        let hash_left = hash(&elem_l).unwrap();
+        // hash(13) = 1101 ...
+        let elem_r = 13;
+        let hash_right = hash(&elem_r).unwrap();
+        root.insert(elem_l, 0, HashPath(hash_left.clone())).unwrap();
+        if let Leaf{data, ..} = root {
+            assert_eq!(data, elem_l, "Inserted element doesn't match");
+            // Success!
+        } else {
+            panic!("Root is not of type Leaf. {:?}", root)
         }
-        if let Set::DataSet{underlying, ..} = root.get(PrefixedPath::empty(), 0, true).unwrap() {
-            let mut previous = hash(underlying.get(0).expect("Get returned no elements")).unwrap();
-            for i in 1..num_iters {
-                let current = hash(underlying.get(i as usize).unwrap()).unwrap();
-                assert!(previous < current);
-                previous = current;
+
+        root.insert(elem_r, 0, HashPath(hash_right.clone())).unwrap();
+        if let Branch{left, right, ..} = &root {
+            let left: &Node<_> = left;
+            let right: &Node<_> = right;
+            if let (Leaf{data: data_l,..}, Leaf{data: data_r, ..}) = (left, right) {
+                assert_eq!(*data_l, elem_l, "Left branch doesn't match");
+                assert_eq!(*data_r, elem_r, "Right branch doesn't match");
+            } else {
+                panic!("Left and right branches aren't leaves, ({:?}, {:?})", left, right)
             }
         } else {
-            panic!("Get returned a LabelSet")
+            panic!("Root is not of type Branch. {:?}", root)
         }
     }
 
-    
-
     #[test]
-    fn inserting_twice_returns_false() {
-        let mut root: Node<u64> = Node::Empty;
-        let elem = 13;
-        let path = HashPath(hash(&elem).unwrap());
-        assert_eq!(root.insert(elem, 0, path.clone()).unwrap(), true, "First insertion failed");
-        assert_eq!(root.insert(elem, 0, path).unwrap(), false, "Second insertion succeeded");
+    fn delete() {
+        let mut root: Node<u32> = Node::Empty;
+        for i in 0..NUM_ITERS {
+            assert!(root.insert(i, 0, HashPath::new(&i).unwrap()).unwrap());
+        }
+
+
+        for i in 0..NUM_ITERS {
+            let elem_path = HashPath::new(&i).unwrap();
+            assert!(root.delete(&i, elem_path.clone(), 0), "Deletion fails");
+
+            let mut nav = &root;
+            for idx in 0..HashPath::NUM_BITS {
+                match nav {
+                    Node::Empty => break,
+                    Node::Leaf{data,..} => {
+                        if *data == idx as u32 {
+                            panic!("Element wasn't deleted, but is supposed to have been")
+                        } else {
+                            break
+                        }
+                    },
+                    Node::Branch{left, right, ..} => {
+                        if left.is_empty() && right.is_empty() {
+                            panic!("Dead branch encountered! Delete failed")
+                        }
+
+                        if elem_path.at(idx) == Direction::Left {
+                            nav = left
+                        } else {
+                            nav = right
+                        }
+                    }
+                }
+            }
+        }
+
+        assert!(root.is_empty(), "Root is not empty after deleting all elements")
     }
+
 }

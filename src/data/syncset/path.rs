@@ -58,9 +58,12 @@ impl HashPath {
     /// Note that this function will panic if given an index
     /// greater or equal to the number of bits in a hash digest
     pub fn at(&self, idx: u32) -> Direction {
-        assert!(idx < Self::NUM_BITS, "Out of bounds on path");
+        assert!(idx < Self::NUM_BITS, "Out of bounds on HashPath");
         let (byte_idx, bit_idx) = split_bits(idx);
+
+        debug_assert!(HASH_SIZE > byte_idx as usize, "Out of bounds byte index");
         let byte = (self.0).0[byte_idx as usize];
+
         Direction::from_bit(byte, bit_idx)
     }
 
@@ -131,11 +134,11 @@ impl PrefixedPath {
         Ok(PrefixedPath{inner, depth: Varint(depth)})
     }
 
-    // TODO clean up?
     pub fn is_prefix_of(&self, rhs: &HashPath) -> bool {
         let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
         let num_full_bytes = num_full_bytes.try_into().expect("Couldn't cast 32-bit integer to usize.");
 
+        debug_assert!(self.inner.len() <= HASH_SIZE);
         // overflow_bits = 0 -> num_full_bytes == inner.len
         debug_assert!(overflow_bits > 0 || num_full_bytes == self.inner.len());
         // overflow_bits > 0 -> num_full_bytes + 1 == inner.len
@@ -148,7 +151,7 @@ impl PrefixedPath {
         // If there are some bits left to individually compare in the last byte
         if overflow_bits > 0 {
             let last_byte_left = unsafe{self.inner.get_unchecked(num_full_bytes)};
-            let last_byte_right = (rhs.0).0[num_full_bytes as usize];
+            let last_byte_right = (rhs.0).0[num_full_bytes];
             let shift_amount = BITS_IN_BYTE - overflow_bits;
 
             // Right shift to truncate irrelevant bits
@@ -179,17 +182,20 @@ impl Writable for PrefixedPath {
     const SIZE: Size = Size::variable();
 
     fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
-        *self = PrefixedPath::load(visitor)?;
+        let depth = Varint::load(visitor)?;
+        let num_bytes = bytes_needed(depth.0);
+        let inner: Vec<u8> = visitor.pop(num_bytes)?.into();
+        self.depth = depth;
+        self.inner = inner;
         Ok(())
     }
 }
 
 impl Load for PrefixedPath {
     fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
-        let depth = Varint::load(from)?;
-        let num_bytes = bytes_needed(depth.0);
-        let inner: Vec<u8> = from.pop(num_bytes)?.into();
-        Ok(PrefixedPath{inner, depth})
+        let mut res = PrefixedPath::empty();
+        Writable::accept(&mut res, from)?;
+        Ok(res)
     }
 }
 
@@ -281,7 +287,7 @@ mod tests {
     #[test]
     fn hashpath() {
         use Direction::*;
-        // hash(15092) = 0101 1010 0001 1111
+        // hash(15092) = 0101 1010 0001 1111 ...
         let path = HashPath::new(&15092).unwrap();
 
         let expected_vec = vec!(
@@ -294,6 +300,13 @@ mod tests {
         for (idx, expected) in expected_vec.iter().enumerate() {
             assert_eq!(expected, &path.at(idx as u32));
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "Out of bounds on HashPath")]
+    fn depth_overflow() {
+        let full = HashPath::new(&15092).unwrap();
+        full.at(HashPath::NUM_BITS);
     }
 
     // Prefixed tests
@@ -332,6 +345,9 @@ mod tests {
 
         let pref3 = PrefixedPath{inner: vec!(0b1111_1111), depth: Varint(1)};
         assert!(!pref3.is_prefix_of(&full), "prefix3 returned true");
+
+        let pref4 = PrefixedPath{inner: vec!(0b1111_1111, 0x01), depth: Varint(9)};
+        assert!(!pref4.is_prefix_of(&full), "prefix4 returned true");
 
         let empty = PrefixedPath{inner: Vec::new(), depth: Varint(0)};
         assert!(empty.is_prefix_of(&full), "empty prefix returned false");
