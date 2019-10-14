@@ -311,6 +311,7 @@ struct ConcatDigest(#[bytewise] Digest, #[bytewise] Digest);
 
 
 #[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
 mod tests {
     use super::*;
     use super::super::set::Set;

@@ -215,6 +215,7 @@ fn bytes_needed(depth: u32) -> usize {
 
 
 #[cfg(test)]
+#[cfg_attr(tarpaulin, skip)]
 mod tests {
     use super::*;
     use std::convert::TryFrom;
