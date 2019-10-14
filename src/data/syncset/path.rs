@@ -132,6 +132,8 @@ impl PrefixedPath {
     // TODO clean up?
     pub fn is_prefix_of(&self, rhs: &HashPath) -> bool {
         let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
+
+        // First, iterate over the full bytes
         for i in 0..num_full_bytes {
             if let Some(byte) = self.inner.get(i as usize) {
                 if *byte != (rhs.0).0[i as usize] {
@@ -141,10 +143,12 @@ impl PrefixedPath {
                 return false
             };
         }
+
+        // If there are some bits left to individually compare in the last byte
         if overflow_bits > 0 {
             if let Some(last_byte_left) = self.inner.get(num_full_bytes as usize) {
                 let last_byte_right = (rhs.0).0[num_full_bytes as usize];
-                let shift_amount = overflow_bits;
+                let shift_amount = BITS_IN_BYTE - overflow_bits;
                 let left_masked = last_byte_left >> shift_amount;
                 let right_masked = last_byte_right >> shift_amount;
                 if left_masked != right_masked {
@@ -293,6 +297,28 @@ mod tests {
     // Prefixed tests
 
     #[test]
+    fn extension_prefixes() {
+        let mut prefix = PrefixedPath::empty();
+        let full = HashPath::new(&15092).unwrap();
+        for depth in 0..HashPath::NUM_BITS {
+
+            assert!(prefix.is_prefix_of(&full), "Prefix isn't prefix of full path");
+
+            if full.at(depth) == Direction::Left {
+                prefix = prefix.left().unwrap();
+            } else {
+                prefix = prefix.right().unwrap();
+            }
+
+            assert_eq!(depth+1, prefix.depth.0, "Prefix has wrong depth");
+            for i in 0..=depth {
+                assert_eq!(full.at(i),prefix.at(i).unwrap(), "Prefix doesn't match full path");
+            }
+        }
+        assert!(prefix.is_prefix_of(&full), "Prefix isn't prefix of full path");
+    }
+
+    #[test]
     fn prefixes() {
         let full = HashPath(Digest::try_from("0101010101000000000000000000000000000000000000000000000000000000").unwrap());
 
@@ -309,7 +335,6 @@ mod tests {
         assert!(empty.is_prefix_of(&full), "empty prefix returned false");
     }
 
-
     #[test]
     fn serialization() {
         use crate::bytewise::{serialize, deserialize};
@@ -320,9 +345,6 @@ mod tests {
 
 
             let expected_depth_size: usize = min_bytes_to_represent(depth);
-
-            println!("{:?}", prefix);
-            println!("{:?}", serialized);
 
             let expected_vec_len = bytes_needed(depth);
             let expected_vec_size = expected_vec_len as usize;
@@ -351,38 +373,11 @@ mod tests {
 
     #[test]
     fn add_one_errors() {
-        let mut inner = Vec::with_capacity(HASH_SIZE);
-        for _ in 0..HASH_SIZE {
-            inner.push(0);
-        };
-        let pref = PrefixedPath{inner: inner, depth: Varint(HashPath::NUM_BITS as u32)};
+        let pref = PrefixedPath::new(&15092, HashPath::NUM_BITS).unwrap();
 
-        if let Err(e) = pref.add_one(Direction::Left) {
-            println!("{:?}", e)
-        } else {
+        if let Ok(_) = pref.add_one(Direction::Left) {
             panic!("Expected an error in adding one to direction")
-        }
-    }
-
-    #[test]
-    fn extension() {
-        let mut path = PrefixedPath{inner: Vec::new(), depth: Varint(0)};
-        for i in 0..HashPath::NUM_BITS {
-            assert_eq!(path.inner.len() as u32, (i+BITS_IN_BYTE-1)/BITS_IN_BYTE);
-            if i % 2 == 1 {
-                path = path.left().unwrap()
-            } else {
-                path = path.right().unwrap()
-            }
-        }
-
-        for i in 0..HASH_SIZE {
-            if let Some(b) = path.inner.get(i) {
-                assert_eq!(b, &0xAA)
-            } else {
-                panic!("Inner vector was too short")
-            }
-        }
+        } 
     }
 
     #[test]
