@@ -4,8 +4,7 @@ use crate::crypto::hash::{Digest, hash};
 
 use super::path::*;
 use super::errors::*;
-use super::Set;
-use super::{DUMP_THRESHOLD, Syncable};
+use super::Syncable;
 
 use std::mem;
 use std::cell::{RefCell, Cell};
@@ -31,7 +30,7 @@ pub(super) enum Node<Data: Syncable> {
 
 impl <Data: Syncable> Node<Data> {
 
-    pub fn node_at(&self, prefix: PrefixedPath, depth: u32) -> &Node<Data> {
+    pub fn node_at(&self, prefix: &PrefixedPath, depth: u32) -> &Node<Data> {
         if let Some(dir) = prefix.at(depth) {
             if let Node::Branch{left, right, ..} = &self {
                 if dir == Direction::Left {
@@ -44,47 +43,6 @@ impl <Data: Syncable> Node<Data> {
             }
         } else {
             &self
-        }
-    }
-
-    pub fn get(&self, prefix: PrefixedPath, depth: u32, dump: bool) -> Result<Set<Data>, SyncError> {
-        use Node::*;
-        // todo: refactor to use node_at
-        if let Some(dir) = prefix.at(depth) {
-            match self {
-                Empty => Ok(Set::new_empty_dataset(prefix, dump)),
-                Branch{left, right, ..} => {
-                    if dir == Direction::Left {
-                        left.get(prefix, depth+1, dump)
-                    } else {
-                        right.get(prefix, depth+1, dump)
-                    }
-                },
-                Leaf{..} => {
-                    let self_path = HashPath(self.hash()?);
-                    if prefix.is_prefix_of(&self_path) {
-                        Ok(Set::new_dataset(prefix, &self, dump))
-                    } else {
-                        Ok(Set::new_empty_dataset(prefix, dump))
-                    }
-                }
-            }
-        } else {
-            match self {
-                Branch{..} => {
-                        if dump || self.size() < DUMP_THRESHOLD {
-                        Ok(Set::new_dataset(prefix, self, dump))
-                    } else {
-                        Ok(Set::LabelSet{label: self.hash()?, path: prefix})
-                    }
-                }
-                Leaf{..} => {
-                    Ok(Set::new_dataset(prefix, self, dump))
-                }
-                Empty => {
-                    Ok(Set::new_empty_dataset(prefix, dump))
-                }
-            }
         }
     }
 

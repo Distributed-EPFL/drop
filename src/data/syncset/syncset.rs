@@ -29,8 +29,28 @@ impl <Data: Syncable> SyncSet<Data> {
         Ok(self.root.delete(data_to_delete, path, 0))
     }
 
-    pub fn get(&self, prefix: PrefixedPath, dump: bool) -> Result<Set<Data>, SyncError> {
-        self.root.get(prefix, 0, dump)
+    pub fn get(&self, prefix: &PrefixedPath, dump: bool) -> Result<Set<Data>, SyncError> {
+        use Node::*;
+        let node_at_prefix = self.root.node_at(prefix, 0);
+        match node_at_prefix {
+            Leaf{..} => {
+                // Because this is a leaf, its hash is that of its data element, thus label = path
+                let leaf_path = HashPath(node_at_prefix.hash()?);
+                if prefix.is_prefix_of(&leaf_path) {
+                    Ok(Set::new_dataset(prefix.clone(), node_at_prefix, dump))
+                } else {
+                    Ok(Set::new_empty_dataset(prefix.clone(), dump))
+                }
+            }
+            Branch{..} => {
+                if dump || node_at_prefix.size() <= super::DUMP_THRESHOLD {
+                    Ok(Set::new_dataset(prefix.clone(), node_at_prefix, dump))
+                } else {
+                    Ok(Set::LabelSet{label: node_at_prefix.hash()?, path: prefix.clone()})
+                }
+            }
+            Empty => Ok(Set::new_empty_dataset(prefix.clone(), dump)),
+        }
     }
 
     pub fn new() -> SyncSet<Data> {
@@ -38,7 +58,7 @@ impl <Data: Syncable> SyncSet<Data> {
     }
 
     pub fn start_sync(&self) -> Result<Round<Data>, SyncError> {
-        let root_view = self.get(PrefixedPath::empty(), false)?;
+        let root_view = self.get(&PrefixedPath::empty(), false)?;
         Ok(Round{view: vec!(root_view), add: Vec::new(), remove: Vec::new()})
     }
 
@@ -49,14 +69,14 @@ impl <Data: Syncable> SyncSet<Data> {
         for set in view {
             match set {
                 Set::LabelSet{label: remote_label, path: remote_prefix} => {
-                    let local_set = self.get(remote_prefix.clone(), false)?;
+                    let local_set = self.get(remote_prefix, false)?;
                     match &local_set {
                         Set::LabelSet{label: local_label,..} => {
                             if remote_label != local_label {
                                 // Note: a node at max depth having children would violate invariant
                                 // thus, calling unwrap is appropriate
-                                new_view.push(self.get(remote_prefix.left().unwrap(), false)?);
-                                new_view.push(self.get(remote_prefix.right().unwrap(), false)?);
+                                new_view.push(self.get(&remote_prefix.left().unwrap(), false)?);
+                                new_view.push(self.get(&remote_prefix.right().unwrap(), false)?);
                             }
                         },
                         Set::DataSet{..} => {
@@ -65,7 +85,7 @@ impl <Data: Syncable> SyncSet<Data> {
                     }
                 }
                 Set::DataSet{underlying: remote_data, prefix: remote_prefix, dump: remote_dump} => {
-                    let local_set = self.get(remote_prefix.clone(), true)?;
+                    let local_set = self.get(remote_prefix, true)?;
                     if let Set::DataSet{underlying: local_data, ..} = &local_set {
                         if remote_data != local_data {
                             let mut local_hash_opt = None;
@@ -157,7 +177,7 @@ mod tests {
 
         assert_eq!(set.root.size(), NUM_ITERS as usize, "Root has wrong size");
 
-        if let Set::DataSet{underlying, ..} = set.get(PrefixedPath::empty(), true).unwrap() {
+        if let Set::DataSet{underlying, ..} = set.get(&PrefixedPath::empty(), true).unwrap() {
             let mut previous = hash(underlying.get(0).expect("get() returns no elements")).unwrap();
             for i in 1..NUM_ITERS {
                 let current = hash(underlying.get(i as usize).unwrap()).expect("get() returns too few elements");
@@ -181,12 +201,12 @@ mod tests {
 
         for depth in 0..HashPath::NUM_BITS {
             let prefix = arbitrary_elem_path.prefix(depth);
-            let set = syncset.get(prefix.clone(), false).unwrap();
+            let set = syncset.get(&prefix, false).unwrap();
             match &set {
                 Set::LabelSet{path, label} => {
                     assert!(path.is_prefix_of(&arbitrary_elem_path));
                     assert_eq!(path, &prefix, "Returned path does not match prefix");
-                    if let n @ Node::Branch{..} = syncset.root.node_at(prefix, 0) {
+                    if let n @ Node::Branch{..} = syncset.root.node_at(&prefix, 0) {
                         assert_eq!(&n.hash().unwrap(), label);
                     } else {
                         panic!("get returns a labelset of a leaf or empty, {:?}", set)
