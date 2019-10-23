@@ -4,11 +4,12 @@ use super::Syncable;
 use super::Node;
 
 // Data structure used to synchronize two SyncSets
+#[derive(Debug)]
 pub enum Set<Data> {
     // Lightweight alternative, only contains the hash of 
     // the sub-tree at prefix
     LabelSet {
-        prefix: PrefixedPath,
+        path: PrefixedPath,
         label: Digest
     },
 
