@@ -18,7 +18,7 @@ const BITS_IN_BYTE: u32 = 8;
 
 /// Navigator wrapper for Digest
 /// Guaranteed to have HASH_SIZE * 8 bits of depth
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct HashPath (pub(super) Digest);
 
 
@@ -67,9 +67,53 @@ impl HashPath {
         Direction::from_bit(byte, bit_idx)
     }
 
+    pub fn prefix(&self, depth: u32) -> PrefixedPath {
+        PrefixedPath::from_digest(&self.0, depth)
+    }
+
     pub fn new<Data: Readable>(data: &Data) -> Result<HashPath, SyncError> {
         let digest = hash(data)?;
         Ok(HashPath(digest))
+    }
+}
+
+impl PartialEq for PrefixedPath {
+    fn eq(&self, other: &PrefixedPath) -> bool {
+        if self.depth == other.depth {
+           let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
+           let num_full_bytes = num_full_bytes.try_into().expect("Couldn't cast 32-bit integer to usize.");
+
+            debug_assert!(self.inner.len() <= HASH_SIZE);
+            debug_assert!(other.inner.len() <= HASH_SIZE);
+            // overflow_bits = 0 -> num_full_bytes == inner.len
+            debug_assert!(overflow_bits > 0 || num_full_bytes == self.inner.len());
+            // overflow_bits > 0 -> num_full_bytes + 1 == inner.len
+            debug_assert!(overflow_bits == 0 || num_full_bytes + 1 == self.inner.len());
+
+            for i in 0..num_full_bytes {
+                unsafe {
+                    if self.inner.get_unchecked(i) != other.inner.get_unchecked(i) {
+                        return false
+                    }
+                }
+            }
+
+            if overflow_bits > 0 {
+                let last_byte_self = unsafe{ self.inner.get_unchecked(num_full_bytes)};
+                let last_byte_other = unsafe{ other.inner.get_unchecked(num_full_bytes)};
+                let shift_amount = BITS_IN_BYTE - overflow_bits;
+
+                let masked_self = last_byte_self >> shift_amount;
+                let masked_other = last_byte_other >> shift_amount;
+                if masked_other != masked_self {
+                    return false
+                }
+            }
+
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -124,15 +168,20 @@ impl PrefixedPath {
         PrefixedPath{inner: Vec::new(), depth: Varint(0)}
     }
 
-    pub fn new<Data: Readable>(data: &Data, depth: u32) -> Result<PrefixedPath, SyncError> {
-        let digest = hash(data)?;
+    fn from_digest(digest: &Digest, depth: u32) -> PrefixedPath {
         let needed_bytes = (depth + BITS_IN_BYTE - 1) / BITS_IN_BYTE;
         let mut inner = Vec::with_capacity(needed_bytes as usize);
         for i in 0..needed_bytes {
             inner.push(digest.0[i as usize])
         };
-        Ok(PrefixedPath{inner, depth: Varint(depth)})
+        PrefixedPath{inner, depth: Varint(depth)}
+ 
     }
+
+    pub fn new<Data: Readable>(data: &Data, depth: u32) -> Result<PrefixedPath, SyncError> {
+        let digest = hash(data)?;
+        Ok(PrefixedPath::from_digest(&digest, depth))
+   }
 
     pub fn is_prefix_of(&self, rhs: &HashPath) -> bool {
         let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
