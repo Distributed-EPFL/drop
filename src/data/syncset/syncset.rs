@@ -213,30 +213,72 @@ mod tests {
     fn get() {
         let mut syncset = SyncSet::new();
         let arbitrary_elem = rand::random::<u32>()%NUM_ITERS;
+        let arbitrary_non_elem = rand::random::<u32>()%NUM_ITERS + NUM_ITERS;
+
         for i in 0..NUM_ITERS {
             syncset.insert(i).unwrap();
         }
 
         let arbitrary_elem_path = HashPath::new(&arbitrary_elem).unwrap();
+        let arbitrary_non_elem_path = HashPath::new(&arbitrary_non_elem).unwrap();
+        assert_ne!(arbitrary_elem_path, arbitrary_non_elem_path, "The extremely unlikely case of a hash collision has occurred");
 
         for depth in 0..HashPath::NUM_BITS {
-            let prefix = arbitrary_elem_path.prefix(depth);
-            let set = syncset.get(&prefix, false).unwrap();
-            match &set {
-                Set::LabelSet{path, label} => {
-                    assert!(path.is_prefix_of(&arbitrary_elem_path));
-                    assert_eq!(path, &prefix, "Returned path does not match prefix");
-                    if let n @ Node::Branch{..} = syncset.root.node_at(&prefix, 0) {
-                        assert_eq!(&n.hash().unwrap(), label);
-                    } else {
-                        panic!("get returns a labelset of a leaf or empty, {:?}", set)
+            {
+                // Test if the element is contained
+                let prefix = arbitrary_elem_path.prefix(depth);
+                let set = syncset.get(&prefix, false).unwrap();
+                match &set {
+                    Set::LabelSet{path, label} => {
+                        assert!(path.is_prefix_of(&arbitrary_elem_path));
+                        assert_eq!(path, &prefix, "Returned path does not match prefix");
+                        if let n @ Node::Branch{..} = syncset.root.node_at(&prefix, 0) {
+                            assert_eq!(&n.hash().unwrap(), label);
+                        } else {
+                            panic!("get returns a labelset of a leaf or empty, {:?}", set)
+                        }
+                    },
+                    Set::DataSet{underlying, prefix: actual_prefix, dump} => {
+                        assert!(underlying.len() <= super::super::DUMP_THRESHOLD, "Number of elements received exceeds the threshold");
+                        assert!(actual_prefix.is_prefix_of(&arbitrary_elem_path), "Prefix isn't a prefix of the full hash");
+                        assert_eq!(&prefix, actual_prefix, "Prefix doesn't match expected");
+                        assert!(!dump, "get returns wrong value for dump");
+                        let mut success = false;
+                        for elem in underlying {
+                            if elem == &arbitrary_elem {
+                                success = true
+                            }
+                        }
+                        
+                        assert!(success, "Arbitrarily chosen element not found in the DataSet");
                     }
-                },
-                Set::DataSet{underlying, prefix: actual_prefix, dump} => {
-                    assert!(underlying.len() <= super::super::DUMP_THRESHOLD, "Number of elements received exceeds the threshold");
-                    assert!(actual_prefix.is_prefix_of(&arbitrary_elem_path), "Prefix isn't a prefix of the full hash");
-                    assert_eq!(&prefix, actual_prefix, "Prefix doesn't match expected");
-                    assert!(!dump, "get returns wrong value for dump")
+                }
+            }
+
+            // Test if the non-element is not contained
+            {
+                let prefix = arbitrary_non_elem_path.prefix(depth);
+                let set = syncset.get(&prefix, false).unwrap();
+                match &set {
+                    Set::LabelSet{path, label} => {
+                        assert!(path.is_prefix_of(&arbitrary_non_elem_path));
+                        assert_eq!(path, &prefix, "Returned path does not match prefix");
+                        if let n @ Node::Branch{..} = syncset.root.node_at(&prefix, 0) {
+                            assert_eq!(&n.hash().unwrap(), label);
+                        } else {
+                            panic!("get returns a labelset of a leaf or empty, {:?}", set)
+                        }
+                    }
+                    Set::DataSet{underlying, prefix: actual_prefix, dump} => {
+                        assert!(underlying.len() <= super::super::DUMP_THRESHOLD, "Number of elements received exceeds the threshold");
+                        assert!(actual_prefix.is_prefix_of(&arbitrary_non_elem_path), "Prefix isn't a prefix of the full hash");
+                        assert_eq!(&prefix, actual_prefix, "Prefix doesn't match expected");
+                        assert!(!dump, "get returns wrong value for dump");
+
+                        for elem in underlying {
+                            assert_ne!(elem, &arbitrary_non_elem, "Non-elem found in get()");
+                        }
+                    }
                 }
             }
         }
