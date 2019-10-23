@@ -53,8 +53,25 @@ impl <Data: Syncable> SyncSet<Data> {
         }
     }
 
+    pub fn contains(&self, data: &Data) -> Result<bool, SyncError> {
+        use Node::*;
+        let path = PrefixedPath::new(data, HashPath::NUM_BITS)?;
+        let node_at_path = self.root.node_at(&path, 0);
+        match node_at_path {
+            Leaf{data: leaf_data, ..} => {
+                Ok(data == leaf_data)
+            }
+            Empty => Ok(false),
+            Branch{..} => panic!("Branch at maximum depth!")
+        }
+    }
+
     pub fn new() -> SyncSet<Data> {
         SyncSet{root: Node::Empty}
+    }
+
+    pub fn size(&self) -> usize {
+        self.root.size()
     }
 
     pub fn start_sync(&self) -> Result<Round<Data>, SyncError> {
@@ -165,6 +182,9 @@ mod tests {
 
     use super::*;
     extern crate rand;
+    use rand::Rng;
+
+    use std::collections::HashSet;
 
     const NUM_ITERS: u32 = 50000;
     #[test]
@@ -230,7 +250,6 @@ mod tests {
         assert!(!syncset.insert(elem).unwrap(), "Second insertion succeeded");
     }
 
-    /* Removed because the feature tested has not been implemented yet
     #[test]
     fn add_find() {
         let mut expected_size = 0;
@@ -241,42 +260,44 @@ mod tests {
             if generator.gen() {
                 expected_size+=1;
                 set.insert(i);
-                syncset.insert(i, 0, HashPath::new(&i).unwrap()).unwrap();
+                syncset.insert(i).unwrap();
             }
         }
 
         assert_eq!(syncset.size(), expected_size, "syncset has wrong size");
         for i in 0..2*NUM_ITERS {
             let should_find = set.contains(&i);
-            let path = HashPath.new(&i).unwrap()
-            let found = syncset.contains(&i, 0, path);
-            assert_eq!(should_find, found, "Element ")
+            let found = syncset.contains(&i).unwrap();
+            assert_eq!(should_find, found, "Element {} present in only one of the sets", i);
         }
     }
 
+    #[test]
     fn remove_find() {
-        let mut expected_size = NUM_ITERS;
+        let mut expected_size = NUM_ITERS as usize;
         let mut set = HashSet::new();
-        let mut syncset = Node::Empty;
+        let mut syncset = SyncSet::new();
         let mut generator = rand::thread_rng();
         for i in 0..NUM_ITERS {
             set.insert(i);
-            syncset.insert(i, 0, HashPath::new(&i).unwrap())
+            syncset.insert(i).unwrap();
         }
 
         for i in 0..NUM_ITERS {
             if generator.gen() {
                 set.remove(&i);
-                syncset.delete(&i, HashPath::new(&i).unwrap(), 0);
+                syncset.delete(&i).unwrap();
                 expected_size-=1;
             }
         }
 
+        assert_eq!(syncset.size(), expected_size, "Syncset has wrong size");
+
         for i in 0..2*NUM_ITERS {
             let should_find = set.contains(&i);
             let found = set.contains(&i);
+            assert_eq!(should_find, found, "Element {} present in only one of the sets", i);
         }
     }
-    */
 
 }
