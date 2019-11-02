@@ -22,7 +22,7 @@ const BITS_IN_BYTE: u32 = 8;
 pub struct HashPath (pub(super) Digest);
 
 
-/// Navigator class
+/// Navigator
 /// Guaranteed to have 0 <= n <= HASH_SIZE * 8 bits of depth
 #[derive(Clone, Debug)]
 pub struct PrefixedPath {
@@ -30,6 +30,8 @@ pub struct PrefixedPath {
     depth: Varint 
 }
 
+/// Direction enumeration for abstraction of bit navigation.
+/// 0 is Left, 1 is Right
 #[derive(Eq, PartialEq, Debug)]
 pub enum Direction {
     Left,
@@ -39,6 +41,7 @@ pub enum Direction {
 // Implementations
 
 impl Direction {
+    /// Convert the i-th bit of the byte into a Direction
     pub fn from_bit(byte: u8, bit_idx: u32) -> Direction {
         if is_bit_set(byte, bit_idx) {
             Direction::Right
@@ -47,13 +50,17 @@ impl Direction {
         }
     }
 
+    /// Convert the Direction to a bit
     pub fn to_bit(&self) -> bool {
         self == &Direction::Right
     }
 }
 
 impl HashPath {
+
+    /// The number of bits in a hash digest
     pub const NUM_BITS: u32 = HASH_SIZE as u32 * BITS_IN_BYTE;
+
     /// Returns the direction at a given bit index
     /// Note that this function will panic if given an index
     /// greater or equal to the number of bits in a hash digest
@@ -67,10 +74,12 @@ impl HashPath {
         Direction::from_bit(byte, bit_idx)
     }
 
+    /// Takes the i-th first bits of the digest and turn them into a PrefixedPath
     pub fn prefix(&self, depth: u32) -> PrefixedPath {
         PrefixedPath::from_digest(&self.0, depth)
     }
 
+    /// Standard constructor
     pub fn new<Data: Readable>(data: &Data) -> Result<HashPath, SyncError> {
         let digest = hash(data)?;
         Ok(HashPath(digest))
@@ -146,10 +155,12 @@ impl PrefixedPath {
         Ok(PrefixedPath{inner: new_inner, depth: Varint(new_depth)})
     }
 
+    /// Extends the path with a 0
     pub fn left(&self) -> Result<PrefixedPath, PathLengthError> {
         self.add_one(Direction::Left)
     }
 
+    /// Extends the path with a 1
     pub fn right(&self) -> Result<PrefixedPath, PathLengthError> {
         self.add_one(Direction::Right)
     }
@@ -164,6 +175,7 @@ impl PrefixedPath {
         }
     }
 
+    /// Creates a PrefixedPath of depth 0
     pub fn empty() -> PrefixedPath {
         PrefixedPath{inner: Vec::new(), depth: Varint(0)}
     }
@@ -178,11 +190,13 @@ impl PrefixedPath {
  
     }
 
+    /// Hashes a data element, and creates a path out of the digest
     pub fn new<Data: Readable>(data: &Data, depth: u32) -> Result<PrefixedPath, SyncError> {
         let digest = hash(data)?;
         Ok(PrefixedPath::from_digest(&digest, depth))
    }
 
+    /// Checks if the PrefixedPath is the prefix of the full path
     pub fn is_prefix_of(&self, rhs: &HashPath) -> bool {
         let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
         let num_full_bytes = num_full_bytes.try_into().expect("Couldn't cast 32-bit integer to usize.");

@@ -19,17 +19,37 @@ pub struct Round<Data: Syncable> {
 }
 
 // Syncset implementation
+/// A Set based on Merkle trees, with efficient (O(K log N), K number of differences,
+/// N number of total items) symmetric difference computation. 
+/// Note that the SyncErrors returned by most of the functions here
+/// can almost always only happen due to Read errors. Thus, if you're using the tree to store
+/// something simple like integers, it is safe to assume the operations on this tree will 
+/// never return errors (ignoring edge cases like hash collisions)
+ 
 impl <Data: Syncable> SyncSet<Data> {
+
+    /// Attempts to insert the given element into the set. 
+    /// Returns Ok(true) if the element was successfully inserted,
+    /// Ok(false) if it was already present
+    /// Note that unlike all of the other functions implemented here, this can
+    /// also fail when a hash collision occurs
     pub fn insert(&mut self, data: Data) -> Result<bool, SyncError> {
         let path = HashPath::new(&data)?;
         self.root.insert(data, 0, path)
     }
 
+    /// Attempts to delete the given element from the set, and
+    /// returns Ok(true) if the element was contained in the 
+    /// syncset, Ok(false) if it wasn't
     pub fn delete(&mut self, data_to_delete: &Data) -> Result<bool, SyncError> {
         let path = HashPath::new(data_to_delete)?;
         Ok(self.root.delete(data_to_delete, path, 0))
     }
 
+    /// Returns the Set of nodes at the Path, the dump parameter determines
+    /// if the entire sub-tree at the path should be returned, regardless of size. 
+    /// For instance, calling get(...) with an empty prefix, and dump set to true
+    /// will return all the elements of the set.
     pub fn get(&self, prefix: &PrefixedPath, dump: bool) -> Result<Set<Data>, SyncError> {
         use Node::*;
         let node_at_prefix = self.root.node_at(prefix, 0);
@@ -54,6 +74,7 @@ impl <Data: Syncable> SyncSet<Data> {
         }
     }
 
+    /// Checks if the element is contained in the set
     pub fn contains(&self, data: &Data) -> Result<bool, SyncError> {
         use Node::*;
         let path = PrefixedPath::new(data, HashPath::NUM_BITS)?;
@@ -67,19 +88,27 @@ impl <Data: Syncable> SyncSet<Data> {
         }
     }
 
+    /// Creates a new Set with an empty root
     pub fn new() -> SyncSet<Data> {
         SyncSet{root: Node::Empty}
     }
 
+    /// Returns the number of elements contained in the set
     pub fn size(&self) -> usize {
         self.root.size()
     }
 
+    /// Returns the inital Round
     pub fn start_sync(&self) -> Result<Round<Data>, SyncError> {
         let root_view = self.get(&PrefixedPath::empty(), false)?;
         Ok(Round{view: vec!(root_view), add: Vec::new(), remove: Vec::new()})
     }
 
+    /// Synchronises two sets. Please note that this is a fairly low-level function.
+    /// The view argument contains all the nodes to scrutinize.
+    /// Round.remove will contain the nodes that this SyncSet contains but aren't 
+    /// present in the view, Round.add will contain the nodes that are present in
+    /// the view, but not in this set.
     pub fn sync(&self, view: &Vec<Set<Data>>) -> Result<Round<Data>, SyncError> {
         let mut new_view: Vec<Set<Data>> = Vec::new();
         let mut to_add: Vec<Data> = Vec::new();
