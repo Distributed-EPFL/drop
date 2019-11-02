@@ -4,7 +4,7 @@ use super::Syncable;
 use super::Node;
 
 // Data structure used to synchronize two SyncSets
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Set<Data> {
     // Lightweight alternative, only contains the hash of 
     // the sub-tree at prefix

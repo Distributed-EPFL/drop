@@ -11,6 +11,7 @@ pub struct SyncSet<Data: Syncable> {
 }
 
 // Round, the structure used to sync Syncsets
+#[derive(Debug, Clone)]
 pub struct Round<Data: Syncable> {
     pub view: Vec<Set<Data>>,
     pub add: Vec<Data>,
@@ -339,6 +340,102 @@ mod tests {
             let should_find = set.contains(&i);
             let found = set.contains(&i);
             assert_eq!(should_find, found, "Element {} present in only one of the sets", i);
+        }
+    }
+
+    #[test]
+    fn sync() {
+        use std::collections::HashSet;
+
+        type Set = HashSet<u32>;
+        let mut alice = SyncSet::new();
+        let mut bob = SyncSet::new();
+        for i in 0..NUM_ITERS {
+            assert!(alice.insert(i).unwrap(), "Inserting element {} fails", i);
+            assert!(bob.insert(i).unwrap(), "Inserting element {} fails", i);
+        }
+
+        let mut generator = rand::thread_rng();
+        let num_extra_elems = 5;
+        let mut expected_diff_alice = Set::new();
+        let mut expected_diff_bob = Set::new();
+
+        let mut elems_alice_thinks_bob_hasnt = Set::new();
+        let mut elems_alice_thinks_bob_has = Set::new();
+        let mut elems_bob_thinks_alice_has = Set::new();
+        let mut elems_bob_thinks_alice_hasnt = Set::new();
+
+        for i in NUM_ITERS..num_extra_elems+NUM_ITERS {
+            if generator.gen() {
+                expected_diff_alice.insert(i);
+                assert!(alice.insert(i).unwrap(), "Inserting element {} fails", i);
+            } else {
+                expected_diff_bob.insert(i);
+                assert!(bob.insert(i).unwrap(), "Inserting element {} fails", i)
+            }
+        }
+
+
+        assert_ne!( alice.get(&PrefixedPath::empty(), true).unwrap(),
+                    bob.get(&PrefixedPath::empty(), true).unwrap(),
+                    "Alice and Bob shouldn't have the same elements");
+        let mut round = alice.start_sync().unwrap();
+        let mut alice_turn = false;
+        while round.view.len() != 0 {
+            if alice_turn {
+                round = alice.sync(&round.view).unwrap();
+                insert_all(&mut elems_alice_thinks_bob_hasnt, round.remove);
+                insert_all(&mut elems_alice_thinks_bob_has, round.add);
+            } else {
+                round = bob.sync(&round.view).unwrap();
+                insert_all(&mut elems_bob_thinks_alice_hasnt, round.remove);
+                insert_all(&mut elems_bob_thinks_alice_has, round.add);
+            }
+
+
+            alice_turn = !alice_turn
+        }
+
+        assert_eq!(elems_alice_thinks_bob_has, elems_bob_thinks_alice_hasnt,
+                "Alice and bob don't agree on bob's elements");
+
+        assert_eq!(elems_alice_thinks_bob_hasnt, elems_bob_thinks_alice_has,
+                "Alice and bob don't agree on alice's elements");
+                
+        assert_eq!(elems_alice_thinks_bob_has, expected_diff_bob,
+                "Bob's elements don't match expectations");
+
+        assert_eq!(elems_bob_thinks_alice_has, expected_diff_alice,
+                "Alice's elements don't match expectations");
+
+        for elem in &expected_diff_bob {
+            assert!(alice.insert(*elem).unwrap());
+        }
+
+        // Bob is now a subset of alice
+        let mut diff = Set::new();
+        round = alice.start_sync().unwrap();
+        alice_turn = false;
+        while round.view.len() != 0 {
+            if alice_turn {
+                round = alice.sync(&round.view).unwrap();
+                assert!(round.add.is_empty(), "Round add isn't empty for alice");
+                insert_all(&mut diff, round.remove);
+            } else {
+                round = bob.sync(&round.view).unwrap();
+                assert!(round.remove.is_empty(), "Round remove isn't empty for bob");
+                insert_all(&mut diff, round.add);
+            }
+
+            alice_turn = !alice_turn
+        }
+
+        assert_eq!(diff, expected_diff_alice, "Bob's elements don't match expectations");
+    }
+
+    fn insert_all<T: Eq + std::hash::Hash>(left: &mut std::collections::HashSet<T>, right: Vec<T>) {
+        for elem in right {
+            left.insert(elem);
         }
     }
 
