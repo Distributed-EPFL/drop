@@ -3,18 +3,18 @@ use crate::crypto::hash::Digest;
 use super::Syncable;
 use super::Node;
 
-// Data structure used to synchronize two SyncSets
+/// Data structure used to synchronize two SyncSets
 #[derive(Debug, PartialEq, Clone)]
 pub enum Set<Data> {
-    // Lightweight alternative, only contains the hash of 
-    // the sub-tree at prefix
+    /// Lightweight alternative, only contains the hash of 
+    /// the sub-tree at prefix
     LabelSet {
         path: PrefixedPath,
         label: Digest
     },
 
-    // Heavy alternative, contains all the data of a sub-tree at
-    // a given prefix
+    /// Heavy alternative, contains all the data of a sub-tree at
+    /// a given prefix
     DataSet {
         underlying: Vec<Data>,
         prefix: PrefixedPath,

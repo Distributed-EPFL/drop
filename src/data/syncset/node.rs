@@ -9,6 +9,7 @@ use super::Syncable;
 use std::mem;
 use std::cell::{RefCell, Cell};
 
+/// Private type used for the binary tree
 #[derive(Debug)]
 pub(super) enum Node<Data: Syncable> {
     Empty,
@@ -30,6 +31,10 @@ pub(super) enum Node<Data: Syncable> {
 
 impl <Data: Syncable> Node<Data> {
 
+    /// Finds the first node at a given path. If a (potentially empty) Leaf node is encountered
+    /// prior to the path's max depth, a reference to that node is returned. 
+    /// Otherwise, if the end of the path is reached, then then the iterated node will be returned
+    /// by reference.
     pub fn node_at(&self, prefix: &PrefixedPath, depth: u32) -> &Node<Data> {
         if let Some(dir) = prefix.at(depth) {
             if let Node::Branch{left, right, ..} = &self {
@@ -46,6 +51,8 @@ impl <Data: Syncable> Node<Data> {
         }
     }
 
+    /// Traverses the graph in a depth first manner (priority to left leaves), and applies the
+    /// function to each element encountered.
     pub fn traverse<F>(&self, f: &mut F) 
     where F: FnMut(&Data) {
         use Node::*;
@@ -59,6 +66,7 @@ impl <Data: Syncable> Node<Data> {
         }
     }
 
+    /// Returns the number of children (including itself) a node has.
     pub fn size(&self) -> usize {
         use Node::*;
         match self {
@@ -74,6 +82,7 @@ impl <Data: Syncable> Node<Data> {
         }
     }
 
+    /// Deletes data at the given depth, on the given path, recursively on Nodes
     pub fn delete(&mut self, data_to_delete: &Data, path: HashPath, depth: u32) -> bool {
         let deletion_successful = match self {
             Node::Empty => false,
@@ -122,7 +131,7 @@ impl <Data: Syncable> Node<Data> {
         }
     }
 
-    // Inserts data into the node
+    /// Inserts data into the node, with the given path
     pub fn insert(&mut self, data: Data, depth: u32, path: HashPath) -> Result<bool, SyncError> {
         match self {
             Node::Empty => {
@@ -181,6 +190,7 @@ impl <Data: Syncable> Node<Data> {
         }
     }
 
+    // Invalidates the cache of a node
     fn invalidate_cache(&self) {
         use Node::*;
         match self {
@@ -236,18 +246,22 @@ impl <Data: Syncable> Node<Data> {
         }
     }
 
-    fn swap(&mut self, mut new: Node<Data>) -> Node<Data> {
+    /// Mutates the node into the argument, and returns the old node
+    pub fn swap(&mut self, mut new: Node<Data>) -> Node<Data> {
         mem::swap(self, &mut new);     
         new
     }
 
-    fn is_empty(&self) -> bool {
+    /// Returns true for empty leaves, and false for everything else
+    pub fn is_empty(&self) -> bool {
         match self {
             Node::Empty => true,
             _ => false
         }
     }
 
+    /// Returns the node's label. This is a hash of the hashes for a branch,
+    /// and the data's hash for Leaves. Empty leaves have no hash.
     pub fn hash(&self) -> Result<Digest, SyncError> {
         match self {
             Node::Empty => Err(EmptyHashError::new().into()),
@@ -286,7 +300,7 @@ impl <Data: Syncable> Node<Data> {
 }
 
 #[derive(Readable)]
-pub(super) struct ConcatDigest(#[bytewise] Digest, #[bytewise] Digest);
+struct ConcatDigest(#[bytewise] Digest, #[bytewise] Digest);
 
 
 #[cfg(test)]
