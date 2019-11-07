@@ -1,8 +1,8 @@
 // Dependencies
 
 use crate as drop;
+use crate::crypto::HashError;
 use crate::error::Error;
-use crate::crypto::HashError; 
 use macros::error;
 
 // Errors
