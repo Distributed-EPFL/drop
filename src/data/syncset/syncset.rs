@@ -55,8 +55,10 @@ impl <Data: Syncable> SyncSet<Data> {
         let node_at_prefix = self.root.node_at(prefix, 0);
         match node_at_prefix {
             Leaf{..} => {
-                // Because this is a leaf, its hash is that of its data element, thus label = path
+                // Because this is a leaf, its hash is that of its data element, thus label == path
                 let leaf_path = HashPath(node_at_prefix.hash()?);
+
+                // Check if the prefix actually matches, or if we just ran out of nodes
                 if prefix.is_prefix_of(&leaf_path) {
                     Ok(Set::new_dataset(prefix.clone(), node_at_prefix, dump))
                 } else {
@@ -64,12 +66,15 @@ impl <Data: Syncable> SyncSet<Data> {
                 }
             }
             Branch{..} => {
+                // We either dump the branch, or we return the Label/Path structure corresponding
                 if dump || node_at_prefix.size() <= super::DUMP_THRESHOLD {
                     Ok(Set::new_dataset(prefix.clone(), node_at_prefix, dump))
                 } else {
                     Ok(Set::LabelSet{label: node_at_prefix.hash()?, path: prefix.clone()})
                 }
             }
+
+            // Empty leaf -> empty set
             Empty => Ok(Set::new_empty_dataset(prefix.clone(), dump)),
         }
     }
@@ -110,14 +115,29 @@ impl <Data: Syncable> SyncSet<Data> {
     /// present in the view, Round.add will contain the nodes that are present in
     /// the view, but not in this set.
     pub fn sync(&self, view: &Vec<Set<Data>>) -> Result<Round<Data>, SyncError> {
-        let mut new_view: Vec<Set<Data>> = Vec::new();
-        let mut to_add: Vec<Data> = Vec::new();
-        let mut to_remove: Vec<Data> = Vec::new();
+
+        // Figure out how much to pre-allocate
+        let mut elem_count = 0;
+        for set in view {
+            if let Set::DataSet{underlying,..} = set {
+                elem_count += underlying.len();
+            }
+        }
+
+        let mut new_view: Vec<Set<Data>> = Vec::with_capacity(view.len()*2);
+        let mut to_add: Vec<Data> = Vec::with_capacity(elem_count);
+        let mut to_remove: Vec<Data> = Vec::with_capacity(elem_count);
+
+        // Iterate over the view, and compare each set at each path to this syncset's set at the
+        // same path
         for set in view {
             match set {
+
+                // Label-path structure, check own label, and send back result
                 Set::LabelSet{label: remote_label, path: remote_prefix} => {
                     let local_set = self.get(remote_prefix, false)?;
                     match &local_set {
+                        // Check label, and if it doesn't match, send back the two children
                         Set::LabelSet{label: local_label,..} => {
                             if remote_label != local_label {
                                 // Note: a node at max depth having children would violate invariant
@@ -126,21 +146,34 @@ impl <Data: Syncable> SyncSet<Data> {
                                 new_view.push(self.get(&remote_prefix.right().unwrap(), false)?);
                             }
                         },
+
+                        // Dump threshold reached; send everything
                         Set::DataSet{..} => {
                             new_view.push(local_set)
                         }
                     }
                 }
+
+                // Full-data set structure. Compare everything at the path
                 Set::DataSet{underlying: remote_data, prefix: remote_prefix, dump: remote_dump} => {
+
                     let local_set = self.get(remote_prefix, true)?;
+
+                    // This pattern is irrefutable; get() was called with dump = true
                     if let Set::DataSet{underlying: local_data, ..} = &local_set {
+
                         if remote_data != local_data {
+
+                            // Keep track of hashes to avoid recomputing them at every iteration
                             let mut local_hash_opt = None;
                             let mut remote_hash_opt = None;
+
                             let mut i = 0;
                             let mut j = 0;
                             // Since the data is ordered we can do a merge like in a merge-sort
+                            // While we have elements in both of the arrays, we iterate
                             while i < remote_data.len() && j < local_data.len() {
+
                                 // Update hashes
                                 if local_hash_opt == None {
                                     local_hash_opt = Some(hash(unsafe {
@@ -158,6 +191,7 @@ impl <Data: Syncable> SyncSet<Data> {
                                 let local_hash = local_hash_opt.as_ref().unwrap();
                                 let remote_hash = remote_hash_opt.as_ref().unwrap();
 
+                                // Add elements in order
                                 if remote_hash < local_hash {
                                     let new = unsafe {
                                         remote_data.get_unchecked(i)
@@ -174,6 +208,7 @@ impl <Data: Syncable> SyncSet<Data> {
                                     j+=1;
                                     local_hash_opt = None;
                                 } else {
+                                    // Hashes were equal; here we ignore hash collisions
                                     i+=1;
                                     j+=1;
                                     remote_hash_opt = None;
@@ -181,6 +216,7 @@ impl <Data: Syncable> SyncSet<Data> {
                                 }
                             }
 
+                            // Iterate over the remaining array (since the other one is empty now)
                             while i < remote_data.len() {
                                 to_add.push(unsafe{remote_data.get_unchecked(i)}.clone());
                                 i+=1;
@@ -191,8 +227,8 @@ impl <Data: Syncable> SyncSet<Data> {
                                 j+=1;
                             }
 
-                            // Since the remote syncset wasn't dumping, this means that its set was small enough to send over the network
-                            // Meaning we should give it our entire set at the prefix
+                            // The remote wasn't dumping its set, thus it was below the threshold
+                            // Meaning we didn't get *all* of its elements
                             if !remote_dump {
                                 new_view.push(local_set);
                             }
