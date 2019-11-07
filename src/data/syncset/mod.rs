@@ -2,20 +2,19 @@ mod syncset;
 
 // Modules
 mod errors;
+mod node;
 mod path;
 mod set;
-mod node;
 
 // Imports
-pub use set::Set;
-pub use syncset::SyncSet;
-pub use path::*;
 pub use errors::*;
 use node::Node;
+pub use path::*;
+pub use set::Set;
+pub use syncset::SyncSet;
 
 // Dependancies
 use crate::bytewise::Readable;
-
 
 // Traits
 pub trait Syncable: Clone + Readable + PartialEq {}
