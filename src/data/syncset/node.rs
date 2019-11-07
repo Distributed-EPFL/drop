@@ -12,15 +12,24 @@ use std::cell::{RefCell, Cell};
 /// Private type used for the binary tree
 #[derive(Debug)]
 pub(super) enum Node<Data: Syncable> {
+
+    // Empty leaf
     Empty,
+
+    // Non-empty leaf
     Leaf {
+        // Data contained in the leaf
         data: Data,
+        // Potentially empty cached hash
         cached_hash: RefCell<Option<Digest>>,
     },
 
     Branch {
+        // Pointer to the child nodes
         right: Box<Node<Data>>,
         left: Box<Node<Data>>,
+
+        // Pre-computed values for label and size
         cached_hash: RefCell<Option<Digest>>,
         cached_size: Cell<Option<usize>>,
     }
@@ -31,6 +40,8 @@ pub(super) enum Node<Data: Syncable> {
 
 impl <Data: Syncable> Node<Data> {
 
+    // todo? add node_at_mut? (Node is a private data structure, thus all uses would
+    // have to be within the syncset implementation)
     /// Finds the first node at a given path. If a (potentially empty) Leaf node is encountered
     /// prior to the path's max depth, a reference to that node is returned. 
     /// Otherwise, if the end of the path is reached, then then the iterated node will be returned
@@ -38,15 +49,18 @@ impl <Data: Syncable> Node<Data> {
     pub fn node_at(&self, prefix: &PrefixedPath, depth: u32) -> &Node<Data> {
         if let Some(dir) = prefix.at(depth) {
             if let Node::Branch{left, right, ..} = &self {
+                // Fork -> recurse into left or right
                 if dir == Direction::Left {
                     left.node_at(prefix, depth+1)
                 } else {
                     right.node_at(prefix, depth+1)
                 }
             } else {
+                // Leaf -> this is the node wanted
                 &self
             }
         } else {
+            // End of path reached, this is the node wanted
             &self
         }
     }
@@ -57,12 +71,15 @@ impl <Data: Syncable> Node<Data> {
     where F: FnMut(&Data) {
         use Node::*;
         match self {
+            // Bottom elements
             Empty => (),
+            Leaf{data,..} => f(data),
+
+            // Recursion
             Branch{left, right, ..} => {
                 left.traverse(f);
                 right.traverse(f);
             },
-            Leaf{data,..} => f(data)
         }
     }
 
@@ -70,14 +87,24 @@ impl <Data: Syncable> Node<Data> {
     pub fn size(&self) -> usize {
         use Node::*;
         match self {
+            // Empty leaf has no elements
             Empty => 0,
+            
+            // Branch has the sum of its left and right children's sizes
+            // but a branch does not itself contain any elements
             Branch{left, right, cached_size, ..} => {
+
+                // return cached value, or compute it and update
                 if let Some(s) = cached_size.get() {
                     s
                 } else {
-                    left.size() + right.size()
+                    let size = left.size() + right.size();
+                    cached_size.replace(Some(size));
+                    size
                 }
             },
+
+            // A non-empty leaf has one element
             Leaf{..} => 1
         }
     }
@@ -85,7 +112,11 @@ impl <Data: Syncable> Node<Data> {
     /// Deletes data at the given depth, on the given path, recursively on Nodes
     pub fn delete(&mut self, data_to_delete: &Data, path: HashPath, depth: u32) -> bool {
         let deletion_successful = match self {
+
+            // Can't delete what's not there
             Node::Empty => false,
+
+            // Branch - recurse
             Node::Branch{ref mut left, ref mut right, ..} => {
                 if path.at(depth) == Direction::Left {
                     left.delete(data_to_delete, path, depth+1)
@@ -93,6 +124,8 @@ impl <Data: Syncable> Node<Data> {
                     right.delete(data_to_delete, path, depth+1)
                 }
             },
+
+            // Check for potential collision, and delete if elmnt matches
             Node::Leaf{ref data,..} => {
                 if data == data_to_delete {
                     true
@@ -102,6 +135,7 @@ impl <Data: Syncable> Node<Data> {
             }
         };
 
+        // Pull up the tree's elements
         if deletion_successful {
             // Acquire ownership and delete/clean up
             let tmp = self.swap(Node::Empty);
@@ -116,17 +150,26 @@ impl <Data: Syncable> Node<Data> {
 
     // Helper function for delete()
     // Cleans up branches, and transforms leaves into Empty leaves
+    // Note that this is meant to be used recursively starting at
+    // the bottom
     fn clean_up_node(self) -> Node<Data> {
         use Node::*;
         match self {
             Branch{left, right, ..} => {
                 match (*left, *right) {
+                    // Branches with two empty leaves become an empty leaf
                     (Empty, Empty) => Empty,
+
+                    // Branches with only one non-empty leaf pull up that leaf
                     (new @ Leaf{..}, Empty) => new,
                     (Empty, new @ Leaf{..}) => new,
+
+                    // Everything else doesn't change, but its caches do get reset
                     (old_l, old_r) => Node::new_branch(old_l, old_r)
                 }
             },
+
+            // Leaves just become empty
             _ => Empty
         }
     }
@@ -134,6 +177,8 @@ impl <Data: Syncable> Node<Data> {
     /// Inserts data into the node, with the given path
     pub fn insert(&mut self, data: Data, depth: u32, path: HashPath) -> Result<bool, SyncError> {
         match self {
+
+            // Trivial case
             Node::Empty => {
                 self.swap(Node::new_leaf(data));
                 Ok(true)
@@ -167,6 +212,8 @@ impl <Data: Syncable> Node<Data> {
                 }
             }
             Node::Branch{ref mut left, ref mut right, ..} => {
+
+                // Recurse
                 let success = if path.at(depth) == Direction::Left {
                     left.insert(data, depth+1, path)
                 } else {
@@ -226,6 +273,7 @@ impl <Data: Syncable> Node<Data> {
         }
     }
 
+    // Convenience constructors
     fn new_leaf(data: Data) -> Node<Data> {
         Node::Leaf{data, cached_hash: RefCell::new(None)}
     }
@@ -264,7 +312,10 @@ impl <Data: Syncable> Node<Data> {
     /// and the data's hash for Leaves. Empty leaves have no hash.
     pub fn hash(&self) -> Result<Digest, SyncError> {
         match self {
+            // Error: hash of an empty leaf (should this be a hash of unit instead?) 
             Node::Empty => Err(EmptyHashError::new().into()),
+
+            // Non-empty leaf - label == path == hash
             Node::Leaf{cached_hash, data} => {
                 let mut cached_hash_borrowed = cached_hash.borrow_mut();
                 if let Some(digest) = cached_hash_borrowed.as_ref() {
@@ -275,22 +326,28 @@ impl <Data: Syncable> Node<Data> {
                     Ok(new_hash)
                 }
             }
+
             Node::Branch{left, right, cached_hash,..} => {
                 let mut cached_hash_borrowed = cached_hash.borrow_mut();
                 if let Some(digest) = cached_hash_borrowed.as_ref() {
+                    // Return cached hash
                     Ok(digest.clone())
                 } else {
                     let new_hash = if left.is_empty() {
                         // Note: having two empty children to a branch would violate the invariant
+                        // So we assume that !right.is_empty()
                         right.hash()?
                     } else if right.is_empty() {
                         left.hash()?
                     } else {
+                        // Both elements present
                         let left_hash = left.hash()?;
                         let right_hash = right.hash()?;
                         let concat = ConcatDigest(left_hash, right_hash);
                         hash(&concat)?
                     };
+
+                    // Update cache, return
                     *cached_hash_borrowed = Some(new_hash.clone());
                     Ok(new_hash)
                 }

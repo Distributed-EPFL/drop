@@ -99,6 +99,7 @@ impl PartialEq for PrefixedPath {
             // overflow_bits > 0 -> num_full_bytes + 1 == inner.len
             debug_assert!(overflow_bits == 0 || num_full_bytes + 1 == self.inner.len());
 
+            // Check all full bytes for equality
             for i in 0..num_full_bytes {
                 unsafe {
                     if self.inner.get_unchecked(i) != other.inner.get_unchecked(i) {
@@ -107,6 +108,7 @@ impl PartialEq for PrefixedPath {
                 }
             }
 
+            // Check all the additional bits for equality
             if overflow_bits > 0 {
                 let last_byte_self = unsafe{ self.inner.get_unchecked(num_full_bytes)};
                 let last_byte_other = unsafe{ other.inner.get_unchecked(num_full_bytes)};
@@ -133,11 +135,14 @@ impl PrefixedPath {
             return Err(PathLengthError::new())
         }
 
+        // Copy old path, and increase depth
         let mut new_inner = self.inner.clone();
         let new_depth = self.depth.0+1;
         if self.depth.0 % BITS_IN_BYTE == 0 {
             new_inner.push(0)
         };
+
+        // Prepare to modify last bit of new 
         let (byte_idx, bit_idx) = split_bits(new_depth-1);
         let current_byte = new_inner.get_mut(byte_idx as usize).unwrap();
 
