@@ -1,4 +1,4 @@
-use super::errors::{PathLengthError, SyncError};
+use super::errors::PathLengthError;
 use crate::bytewise::Load;
 use crate::bytewise::ReadError;
 use crate::bytewise::Readable;
@@ -8,6 +8,7 @@ use crate::bytewise::Writable;
 use crate::bytewise::WriteError;
 use crate::bytewise::Writer;
 use crate::crypto::hash::{hash, Digest, SIZE as HASH_SIZE};
+use crate::crypto::HashError;
 use crate::data::Varint;
 
 use std::convert::TryInto;
@@ -81,7 +82,7 @@ impl Path {
 
     /// Standard constructor
     // todo change error type to hash
-    pub fn new<Data: Readable>(data: &Data) -> Result<Path, SyncError> {
+    pub fn new<Data: Readable>(data: &Data) -> Result<Path, HashError> {
         let digest = hash(data)?;
         Ok(Path(digest))
     }
@@ -208,7 +209,7 @@ impl Prefix {
 
     // todo rename
     /// Hashes a data element, and creates a path out of the digest
-    pub fn new<Data: Readable>(data: &Data, depth: u32) -> Result<Prefix, SyncError> {
+    pub fn new<Data: Readable>(data: &Data, depth: u32) -> Result<Prefix, HashError> {
         let digest = hash(data)?;
         Ok(Prefix::from_digest(&digest, depth))
     }
