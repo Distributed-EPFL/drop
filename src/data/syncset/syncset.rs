@@ -33,7 +33,7 @@ impl<Data: Syncable> SyncSet<Data> {
     /// Note that unlike all of the other functions implemented here, this can
     /// also fail when a hash collision occurs
     pub fn insert(&mut self, data: Data) -> Result<bool, SyncError> {
-        let path = HashPath::new(&data)?;
+        let path = Path::new(&data)?;
         self.root.insert(data, 0, path)
     }
 
@@ -41,7 +41,7 @@ impl<Data: Syncable> SyncSet<Data> {
     /// returns Ok(true) if the element was contained in the
     /// syncset, Ok(false) if it wasn't
     pub fn delete(&mut self, data_to_delete: &Data) -> Result<bool, SyncError> {
-        let path = HashPath::new(data_to_delete)?;
+        let path = Path::new(data_to_delete)?;
         Ok(self.root.delete(data_to_delete, path, 0))
     }
 
@@ -49,13 +49,13 @@ impl<Data: Syncable> SyncSet<Data> {
     /// if the entire sub-tree at the path should be returned, regardless of size.
     /// For instance, calling get(...) with an empty prefix, and dump set to true
     /// will return all the elements of the set.
-    pub fn get(&self, prefix: &PrefixedPath, dump: bool) -> Result<Set<Data>, SyncError> {
+    pub fn get(&self, prefix: &Prefix, dump: bool) -> Result<Set<Data>, SyncError> {
         use Node::*;
         let node_at_prefix = self.root.node_at(prefix, 0);
         match node_at_prefix {
             Leaf { .. } => {
                 // Because this is a leaf, its hash is that of its data element, thus label == path
-                let leaf_path = HashPath(node_at_prefix.hash()?);
+                let leaf_path = Path(node_at_prefix.label()?);
 
                 // Check if the prefix actually matches, or if we just ran out of nodes
                 if prefix.is_prefix_of(&leaf_path) {
@@ -64,13 +64,13 @@ impl<Data: Syncable> SyncSet<Data> {
                     Ok(Set::new_empty_dataset(prefix.clone(), dump))
                 }
             }
-            Branch { .. } => {
+            Internal { .. } => {
                 // We either dump the branch, or we return the Label/Path structure corresponding
                 if dump || node_at_prefix.size() <= super::DUMP_THRESHOLD {
                     Ok(Set::new_dataset(prefix.clone(), node_at_prefix, dump))
                 } else {
                     Ok(Set::LabelSet {
-                        label: node_at_prefix.hash()?,
+                        label: node_at_prefix.label()?,
                         path: prefix.clone(),
                     })
                 }
@@ -84,14 +84,14 @@ impl<Data: Syncable> SyncSet<Data> {
     /// Checks if the element is contained in the set
     pub fn contains(&self, data: &Data) -> Result<bool, SyncError> {
         use Node::*;
-        let path = PrefixedPath::new(data, HashPath::NUM_BITS)?;
+        let path = Prefix::new(data, Path::NUM_BITS)?;
         let node_at_path = self.root.node_at(&path, 0);
         match node_at_path {
             Leaf {
-                data: leaf_data, ..
+                item: leaf_data, ..
             } => Ok(data == leaf_data),
             Empty => Ok(false),
-            Branch { .. } => panic!("Branch at maximum depth!"),
+            Internal { .. } => panic!("Branch at maximum depth!"),
         }
     }
 
@@ -107,7 +107,7 @@ impl<Data: Syncable> SyncSet<Data> {
 
     /// Returns the inital Round
     pub fn start_sync(&self) -> Result<Round<Data>, SyncError> {
-        let root_view = self.get(&PrefixedPath::empty(), false)?;
+        let root_view = self.get(&Prefix::empty(), false)?;
         Ok(Round {
             view: vec![root_view],
             add: Vec::new(),
@@ -271,7 +271,7 @@ mod tests {
 
         assert_eq!(set.root.size(), NUM_ITERS as usize, "Root has wrong size");
 
-        if let Set::DataSet { underlying, .. } = set.get(&PrefixedPath::empty(), true).unwrap() {
+        if let Set::DataSet { underlying, .. } = set.get(&Prefix::empty(), true).unwrap() {
             let mut previous = hash(underlying.get(0).expect("get() returns no elements")).unwrap();
             for i in 1..NUM_ITERS {
                 let current = hash(underlying.get(i as usize).unwrap())
@@ -294,14 +294,14 @@ mod tests {
             syncset.insert(i).unwrap();
         }
 
-        let arbitrary_elem_path = HashPath::new(&arbitrary_elem).unwrap();
-        let arbitrary_non_elem_path = HashPath::new(&arbitrary_non_elem).unwrap();
+        let arbitrary_elem_path = Path::new(&arbitrary_elem).unwrap();
+        let arbitrary_non_elem_path = Path::new(&arbitrary_non_elem).unwrap();
         assert_ne!(
             arbitrary_elem_path, arbitrary_non_elem_path,
             "The extremely unlikely case of a hash collision has occurred"
         );
 
-        for depth in 0..HashPath::NUM_BITS {
+        for depth in 0..Path::NUM_BITS {
             {
                 // Test if the element is contained
                 let prefix = arbitrary_elem_path.prefix(depth);
@@ -310,8 +310,8 @@ mod tests {
                     Set::LabelSet { path, label } => {
                         assert!(path.is_prefix_of(&arbitrary_elem_path));
                         assert_eq!(path, &prefix, "Returned path does not match prefix");
-                        if let n @ Node::Branch { .. } = syncset.root.node_at(&prefix, 0) {
-                            assert_eq!(&n.hash().unwrap(), label);
+                        if let n @ Node::Internal { .. } = syncset.root.node_at(&prefix, 0) {
+                            assert_eq!(&n.label().unwrap(), label);
                         } else {
                             panic!("get returns a labelset of a leaf or empty, {:?}", set)
                         }
@@ -354,8 +354,8 @@ mod tests {
                     Set::LabelSet { path, label } => {
                         assert!(path.is_prefix_of(&arbitrary_non_elem_path));
                         assert_eq!(path, &prefix, "Returned path does not match prefix");
-                        if let n @ Node::Branch { .. } = syncset.root.node_at(&prefix, 0) {
-                            assert_eq!(&n.hash().unwrap(), label);
+                        if let n @ Node::Internal { .. } = syncset.root.node_at(&prefix, 0) {
+                            assert_eq!(&n.label().unwrap(), label);
                         } else {
                             panic!("get returns a labelset of a leaf or empty, {:?}", set)
                         }
@@ -484,8 +484,8 @@ mod tests {
         }
 
         assert_ne!(
-            alice.get(&PrefixedPath::empty(), true).unwrap(),
-            bob.get(&PrefixedPath::empty(), true).unwrap(),
+            alice.get(&Prefix::empty(), true).unwrap(),
+            bob.get(&Prefix::empty(), true).unwrap(),
             "Alice and Bob shouldn't have the same elements"
         );
         let mut round = alice.start_sync().unwrap();
