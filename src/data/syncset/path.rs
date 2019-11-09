@@ -27,7 +27,7 @@ pub struct Path(pub(super) Digest);
 #[derive(Clone, Debug)]
 pub struct Prefix {
     // todo change to digest
-    inner: Vec<u8>,
+    inner: [u8; HASH_SIZE],
     depth: Varint,
 }
 
@@ -96,13 +96,6 @@ impl PartialEq for Prefix {
                 .try_into()
                 .expect("Couldn't cast 32-bit integer to usize.");
 
-            debug_assert!(self.inner.len() <= HASH_SIZE);
-            debug_assert!(other.inner.len() <= HASH_SIZE);
-            // overflow_bits = 0 -> num_full_bytes == inner.len
-            debug_assert!(overflow_bits > 0 || num_full_bytes == self.inner.len());
-            // overflow_bits > 0 -> num_full_bytes + 1 == inner.len
-            debug_assert!(overflow_bits == 0 || num_full_bytes + 1 == self.inner.len());
-
             // Check all full bytes for equality
             for i in 0..num_full_bytes {
                 unsafe {
@@ -139,11 +132,8 @@ impl Prefix {
         }
 
         // Copy old path, and increase depth
-        let mut new_inner = self.inner.clone();
+        let mut new_inner = self.inner;
         let new_depth = self.depth.0 + 1;
-        if self.depth.0 % BITS_IN_BYTE == 0 {
-            new_inner.push(0)
-        };
 
         // Prepare to modify last bit of new
         let (byte_idx, bit_idx) = split_bits(new_depth - 1);
@@ -177,11 +167,12 @@ impl Prefix {
     }
 
     pub fn at(&self, idx: u32) -> Option<Direction> {
+        println!("{}, {}", idx, self.depth.0);
         if idx < self.depth.0 {
             let (byte_idx, bit_idx) = split_bits(idx);
-            self.inner
-                .get(byte_idx as usize)
-                .map(|byte| Direction::from_bit(*byte, bit_idx))
+            let byte = self.inner[byte_idx as usize];
+            let dir = Direction::from_bit(byte, bit_idx);
+            Some(dir)
         } else {
             None
         }
@@ -190,19 +181,14 @@ impl Prefix {
     /// Creates a Prefix of depth 0
     pub fn empty() -> Prefix {
         Prefix {
-            inner: Vec::new(),
+            inner: [0; HASH_SIZE],
             depth: Varint(0),
         }
     }
 
     fn from_digest(digest: &Digest, depth: u32) -> Prefix {
-        let needed_bytes = (depth + BITS_IN_BYTE - 1) / BITS_IN_BYTE;
-        let mut inner = Vec::with_capacity(needed_bytes as usize);
-        for i in 0..needed_bytes {
-            inner.push(digest.0[i as usize])
-        }
         Prefix {
-            inner,
+            inner: digest.0,
             depth: Varint(depth),
         }
     }
@@ -220,12 +206,6 @@ impl Prefix {
         let num_full_bytes = num_full_bytes
             .try_into()
             .expect("Couldn't cast 32-bit integer to usize.");
-
-        debug_assert!(self.inner.len() <= HASH_SIZE);
-        // overflow_bits = 0 -> num_full_bytes == inner.len
-        debug_assert!(overflow_bits > 0 || num_full_bytes == self.inner.len());
-        // overflow_bits > 0 -> num_full_bytes + 1 == inner.len
-        debug_assert!(overflow_bits == 0 || num_full_bytes + 1 == self.inner.len());
 
         if self.inner[0..num_full_bytes] != (rhs.0).0[0..num_full_bytes] {
             return false;
@@ -256,7 +236,8 @@ impl Readable for Prefix {
 
     fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
         self.depth.accept(visitor)?;
-        visitor.push(self.inner.as_slice())?;
+        let num_bytes = bytes_needed(self.depth.0);
+        visitor.push(&self.inner[0..num_bytes])?;
         Ok(())
     }
 }
@@ -267,7 +248,11 @@ impl Writable for Prefix {
     fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
         let depth = Varint::load(visitor)?;
         let num_bytes = bytes_needed(depth.0);
-        let inner: Vec<u8> = visitor.pop(num_bytes)?.into();
+        let mut inner: [u8; HASH_SIZE] = [0; HASH_SIZE];
+        let received = visitor.pop(num_bytes)?;
+        for i in 0..num_bytes {
+            inner[i] = received[i];
+        };
         self.depth = depth;
         self.inner = inner;
         Ok(())
@@ -430,31 +415,34 @@ mod tests {
         );
 
         let pref1 = Prefix {
-            inner: vec![0],
+            inner: [0; HASH_SIZE],
             depth: Varint(7),
         };
         assert!(pref1.is_prefix_of(&full), "prefix1 returned false");
 
         let pref2 = Prefix {
-            inner: vec![0b0000_0001],
+            inner: [0x01; HASH_SIZE],
             depth: Varint(8),
         };
         assert!(pref2.is_prefix_of(&full), "prefix2 returned false");
 
         let pref3 = Prefix {
-            inner: vec![0b1111_1111],
+            inner: [0xFF; HASH_SIZE],
             depth: Varint(1),
         };
         assert!(!pref3.is_prefix_of(&full), "prefix3 returned true");
 
         let pref4 = Prefix {
-            inner: vec![0b1111_1111, 0x01],
+            inner: [0xFF, 0x1, 0, 0, 0, 0, 0, 0,
+                       0,   0, 0, 0, 0, 0, 0, 0,
+                       0,   0, 0, 0, 0, 0, 0, 0,
+                       0,   0, 0, 0, 0, 0, 0, 0],
             depth: Varint(9),
         };
         assert!(!pref4.is_prefix_of(&full), "prefix4 returned true");
 
         let empty = Prefix {
-            inner: Vec::new(),
+            inner: [0;HASH_SIZE],
             depth: Varint(0),
         };
         assert!(empty.is_prefix_of(&full), "empty prefix returned false");
@@ -510,9 +498,11 @@ mod tests {
     }
 
     #[test]
-    fn prefixed_nav() {
-        let inner = vec![0xAA, 0x55];
-        let inner_len = inner.len() as u32;
+    fn prefix_nav() {
+        let mut inner = [0; HASH_SIZE];
+        inner[0] = 0xAA;
+        inner[1] = 0x55;
+        let inner_len = 2;
         let path = Prefix {
             inner: inner,
             depth: Varint(16),
@@ -529,7 +519,7 @@ mod tests {
     #[test]
     fn indices() {
         let prefix = Prefix {
-            inner: vec![0b10000000],
+            inner: [0b10000000;HASH_SIZE],
             depth: Varint(2),
         };
         assert_eq!(prefix.at(0), Some(Direction::Right));
