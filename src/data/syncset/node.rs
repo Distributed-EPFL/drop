@@ -42,7 +42,7 @@ impl<Data: Syncable> Node<Data> {
     /// prior to the path's max depth, a reference to that node is returned.
     /// Otherwise, if the end of the path is reached, then then the iterated node will be returned
     /// by reference.
-    pub fn node_at(&self, prefix: &Prefix, depth: u32) -> &Node<Data> {
+    pub fn node_at(&self, prefix: &Prefix, depth: usize) -> &Node<Data> {
         if let Some(dir) = prefix.at(depth) {
             if let Node::Internal { left, right, .. } = &self {
                 // Fork -> recurse into left or right
@@ -112,7 +112,7 @@ impl<Data: Syncable> Node<Data> {
     }
 
     /// Deletes item at the given depth, on the given path, recursively on Nodes
-    pub fn delete(&mut self, item_to_delete: &Data, path: Path, depth: u32) -> bool {
+    pub fn delete(&mut self, item_to_delete: &Data, path: Path, depth: usize) -> bool {
         let deletion_successful = match self {
             // Can't delete what's not there
             Node::Empty => false,
@@ -180,7 +180,7 @@ impl<Data: Syncable> Node<Data> {
     }
 
     /// Inserts item into the node, with the given path
-    pub fn insert(&mut self, item: Data, depth: u32, path: Path) -> Result<bool, SyncError> {
+    pub fn insert(&mut self, item: Data, depth: usize, path: Path) -> Result<bool, SyncError> {
         match self {
             // Trivial case
             Node::Empty => {
@@ -269,7 +269,7 @@ impl<Data: Syncable> Node<Data> {
         path0: Path,
         item1: Data,
         path1: Path,
-        depth: u32,
+        depth: usize,
     ) -> Node<Data> {
         use Direction::*;
         debug_assert_ne!(path0, path1);

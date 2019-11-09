@@ -13,7 +13,7 @@ use crate::data::Varint;
 
 use std::convert::TryInto;
 
-const BITS_IN_BYTE: u32 = 8;
+const BITS_IN_BYTE: usize = 8;
 
 // Structs
 
@@ -26,12 +26,10 @@ pub struct Path(pub(super) Digest);
 /// Guaranteed to have 0 <= n <= HASH_SIZE * 8 bits of depth
 #[derive(Clone, Debug)]
 pub struct Prefix {
-    // todo change to digest
     inner: [u8; HASH_SIZE],
-    depth: Varint,
+    depth: usize,
 }
 
-// todo change all u32 to usize
 /// Direction enumeration for abstraction of bit navigation.
 /// 0 is Left, 1 is Right
 #[derive(Eq, PartialEq, Debug)]
@@ -44,7 +42,7 @@ pub enum Direction {
 
 impl Direction {
     /// Convert the i-th bit of the byte into a Direction
-    pub fn from_bit(byte: u8, bit_idx: u32) -> Direction {
+    pub fn from_bit(byte: u8, bit_idx: usize) -> Direction {
         if is_bit_set(byte, bit_idx) {
             Direction::Right
         } else {
@@ -60,12 +58,12 @@ impl Direction {
 
 impl Path {
     /// The number of bits in a hash digest
-    pub const NUM_BITS: u32 = HASH_SIZE as u32 * BITS_IN_BYTE;
+    pub const NUM_BITS: usize = HASH_SIZE * BITS_IN_BYTE;
 
     /// Returns the direction at a given bit index
     /// Note that this function will panic if given an index
     /// greater or equal to the number of bits in a hash digest
-    pub fn at(&self, idx: u32) -> Direction {
+    pub fn at(&self, idx: usize) -> Direction {
         assert!(idx < Self::NUM_BITS, "Out of bounds on Path");
         let (byte_idx, bit_idx) = split_bits(idx);
 
@@ -76,12 +74,11 @@ impl Path {
     }
 
     /// Takes the i-th first bits of the digest and turn them into a Prefix
-    pub fn prefix(&self, depth: u32) -> Prefix {
+    pub fn prefix(&self, depth: usize) -> Prefix {
         Prefix::from_digest(&self.0, depth)
     }
 
     /// Standard constructor
-    // todo change error type to hash
     pub fn new<Data: Readable>(data: &Data) -> Result<Path, HashError> {
         let digest = hash(data)?;
         Ok(Path(digest))
@@ -91,7 +88,7 @@ impl Path {
 impl PartialEq for Prefix {
     fn eq(&self, other: &Prefix) -> bool {
         if self.depth == other.depth {
-            let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
+            let (num_full_bytes, overflow_bits) = split_bits(self.depth);
             let num_full_bytes = num_full_bytes
                 .try_into()
                 .expect("Couldn't cast 32-bit integer to usize.");
@@ -127,13 +124,13 @@ impl PartialEq for Prefix {
 
 impl Prefix {
     fn add_one(&self, dir: Direction) -> Result<Prefix, PathLengthError> {
-        if self.depth.0 >= Path::NUM_BITS as u32 {
+        if self.depth >= Path::NUM_BITS {
             return Err(PathLengthError::new());
         }
 
         // Copy old path, and increase depth
         let mut new_inner = self.inner;
-        let new_depth = self.depth.0 + 1;
+        let new_depth = self.depth + 1;
 
         // Prepare to modify last bit of new
         let (byte_idx, bit_idx) = split_bits(new_depth - 1);
@@ -152,7 +149,7 @@ impl Prefix {
         }
         Ok(Prefix {
             inner: new_inner,
-            depth: Varint(new_depth),
+            depth: new_depth,
         })
     }
 
@@ -166,9 +163,8 @@ impl Prefix {
         self.add_one(Direction::Right)
     }
 
-    pub fn at(&self, idx: u32) -> Option<Direction> {
-        println!("{}, {}", idx, self.depth.0);
-        if idx < self.depth.0 {
+    pub fn at(&self, idx: usize) -> Option<Direction> {
+        if idx < self.depth {
             let (byte_idx, bit_idx) = split_bits(idx);
             let byte = self.inner[byte_idx as usize];
             let dir = Direction::from_bit(byte, bit_idx);
@@ -182,27 +178,26 @@ impl Prefix {
     pub fn empty() -> Prefix {
         Prefix {
             inner: [0; HASH_SIZE],
-            depth: Varint(0),
+            depth: 0,
         }
     }
 
-    fn from_digest(digest: &Digest, depth: u32) -> Prefix {
+    fn from_digest(digest: &Digest, depth: usize) -> Prefix {
         Prefix {
             inner: digest.0,
-            depth: Varint(depth),
+            depth: depth,
         }
     }
 
-    // todo rename
     /// Hashes a data element, and creates a path out of the digest
-    pub fn new<Data: Readable>(data: &Data, depth: u32) -> Result<Prefix, HashError> {
+    pub fn new<Data: Readable>(data: &Data, depth: usize) -> Result<Prefix, HashError> {
         let digest = hash(data)?;
         Ok(Prefix::from_digest(&digest, depth))
     }
 
     /// Checks if the Prefix is the prefix of the full path
     pub fn is_prefix_of(&self, rhs: &Path) -> bool {
-        let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
+        let (num_full_bytes, overflow_bits) = split_bits(self.depth);
         let num_full_bytes = num_full_bytes
             .try_into()
             .expect("Couldn't cast 32-bit integer to usize.");
@@ -235,8 +230,10 @@ impl Readable for Prefix {
     const SIZE: Size = Size::variable();
 
     fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
-        self.depth.accept(visitor)?;
-        let num_bytes = bytes_needed(self.depth.0);
+        // Either we try_into() or we use as. In practice, depth should always fit into a u32
+        let varint_depth = Varint(self.depth.try_into().expect("Depth couldn't fit into a u32"));
+        varint_depth.accept(visitor)?;
+        let num_bytes = bytes_needed(self.depth);
         visitor.push(&self.inner[0..num_bytes])?;
         Ok(())
     }
@@ -246,8 +243,8 @@ impl Writable for Prefix {
     const SIZE: Size = Size::variable();
 
     fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
-        let depth = Varint::load(visitor)?;
-        let num_bytes = bytes_needed(depth.0);
+        let depth = Varint::load(visitor)?.0 as usize;
+        let num_bytes = bytes_needed(depth);
         let mut inner: [u8; HASH_SIZE] = [0; HASH_SIZE];
         let received = visitor.pop(num_bytes)?;
         for i in 0..num_bytes {
@@ -270,21 +267,21 @@ impl Load for Prefix {
 // Helper Functions
 
 // Converts a bit index into byte index + bit-in-byte index
-fn split_bits(to_split: u32) -> (u32, u32) {
+fn split_bits(to_split: usize) -> (usize, usize) {
     (to_split / BITS_IN_BYTE, to_split % BITS_IN_BYTE)
 }
 
 // Checks if the i-th bit is set in a byte
-fn is_bit_set(byte: u8, bit_idx: u32) -> bool {
+fn is_bit_set(byte: u8, bit_idx: usize) -> bool {
     let masked = byte & get_mask(bit_idx);
     masked != 0
 }
 
-fn get_mask(bit_idx: u32) -> u8 {
-    1 << (BITS_IN_BYTE - bit_idx as u32 - 1)
+fn get_mask(bit_idx: usize) -> u8 {
+    1 << (BITS_IN_BYTE - bit_idx - 1)
 }
 
-fn bytes_needed(depth: u32) -> usize {
+fn bytes_needed(depth: usize) -> usize {
     ((depth + BITS_IN_BYTE - 1) / BITS_IN_BYTE) as usize
 }
 
@@ -363,7 +360,7 @@ mod tests {
         ];
 
         for (idx, expected) in expected_vec.iter().enumerate() {
-            assert_eq!(expected, &path.at(idx as u32));
+            assert_eq!(expected, &path.at(idx));
         }
     }
 
@@ -392,7 +389,7 @@ mod tests {
                 prefix = prefix.right().unwrap();
             }
 
-            assert_eq!(depth + 1, prefix.depth.0, "Prefix has wrong depth");
+            assert_eq!(depth + 1, prefix.depth, "Prefix has wrong depth");
             for i in 0..=depth {
                 assert_eq!(
                     full.at(i),
@@ -416,19 +413,19 @@ mod tests {
 
         let pref1 = Prefix {
             inner: [0; HASH_SIZE],
-            depth: Varint(7),
+            depth: 7,
         };
         assert!(pref1.is_prefix_of(&full), "prefix1 returned false");
 
         let pref2 = Prefix {
             inner: [0x01; HASH_SIZE],
-            depth: Varint(8),
+            depth: 8,
         };
         assert!(pref2.is_prefix_of(&full), "prefix2 returned false");
 
         let pref3 = Prefix {
             inner: [0xFF; HASH_SIZE],
-            depth: Varint(1),
+            depth: 1,
         };
         assert!(!pref3.is_prefix_of(&full), "prefix3 returned true");
 
@@ -437,13 +434,13 @@ mod tests {
                        0,   0, 0, 0, 0, 0, 0, 0,
                        0,   0, 0, 0, 0, 0, 0, 0,
                        0,   0, 0, 0, 0, 0, 0, 0],
-            depth: Varint(9),
+            depth: 9,
         };
         assert!(!pref4.is_prefix_of(&full), "prefix4 returned true");
 
         let empty = Prefix {
             inner: [0;HASH_SIZE],
-            depth: Varint(0),
+            depth: 0,
         };
         assert!(empty.is_prefix_of(&full), "empty prefix returned false");
     }
@@ -478,7 +475,7 @@ mod tests {
         }
     }
 
-    fn min_bytes_to_represent(elem: u32) -> usize {
+    fn min_bytes_to_represent(elem: usize) -> usize {
         if elem >= 16384 {
             4
         } else if elem >= 128 {
@@ -505,7 +502,7 @@ mod tests {
         let inner_len = 2;
         let path = Prefix {
             inner: inner,
-            depth: Varint(16),
+            depth: 16,
         };
         for i in 0..inner_len {
             for j in 0..BITS_IN_BYTE {
@@ -520,7 +517,7 @@ mod tests {
     fn indices() {
         let prefix = Prefix {
             inner: [0b10000000;HASH_SIZE],
-            depth: Varint(2),
+            depth: 2,
         };
         assert_eq!(prefix.at(0), Some(Direction::Right));
         assert_eq!(prefix.at(1), Some(Direction::Left));
