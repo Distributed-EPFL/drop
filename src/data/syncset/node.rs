@@ -18,32 +18,33 @@ pub(super) enum Node<Data: Syncable> {
     // Non-empty leaf
     Leaf {
         // Data contained in the leaf
-        data: Data,
+        item: Data,
         // Potentially empty cached hash
-        cached_hash: RefCell<Option<Digest>>,
+        cached_label: RefCell<Option<Digest>>,
     },
 
-    Branch {
+    Internal {
         // Pointer to the child nodes
         right: Box<Node<Data>>,
         left: Box<Node<Data>>,
 
         // Pre-computed values for label and size
-        cached_hash: RefCell<Option<Digest>>,
+        // todo: rename to label (+function)
+        cached_label: RefCell<Option<Digest>>,
         cached_size: Cell<Option<usize>>,
     },
 }
 
 impl<Data: Syncable> Node<Data> {
-    // todo? add node_at_mut? (Node is a private data structure, thus all uses would
+    // todo? add node_at_mut? (Node is a private item structure, thus all uses would
     // have to be within the syncset implementation)
     /// Finds the first node at a given path. If a (potentially empty) Leaf node is encountered
     /// prior to the path's max depth, a reference to that node is returned.
     /// Otherwise, if the end of the path is reached, then then the iterated node will be returned
     /// by reference.
-    pub fn node_at(&self, prefix: &PrefixedPath, depth: u32) -> &Node<Data> {
+    pub fn node_at(&self, prefix: &Prefix, depth: u32) -> &Node<Data> {
         if let Some(dir) = prefix.at(depth) {
-            if let Node::Branch { left, right, .. } = &self {
+            if let Node::Internal { left, right, .. } = &self {
                 // Fork -> recurse into left or right
                 if dir == Direction::Left {
                     left.node_at(prefix, depth + 1)
@@ -70,10 +71,10 @@ impl<Data: Syncable> Node<Data> {
         match self {
             // Bottom elements
             Empty => (),
-            Leaf { data, .. } => f(data),
+            Leaf { item, .. } => f(item),
 
             // Recursion
-            Branch { left, right, .. } => {
+            Internal { left, right, .. } => {
                 left.traverse(f);
                 right.traverse(f);
             }
@@ -89,7 +90,7 @@ impl<Data: Syncable> Node<Data> {
 
             // Branch has the sum of its left and right children's sizes
             // but a branch does not itself contain any elements
-            Branch {
+            Internal {
                 left,
                 right,
                 cached_size,
@@ -110,28 +111,28 @@ impl<Data: Syncable> Node<Data> {
         }
     }
 
-    /// Deletes data at the given depth, on the given path, recursively on Nodes
-    pub fn delete(&mut self, data_to_delete: &Data, path: HashPath, depth: u32) -> bool {
+    /// Deletes item at the given depth, on the given path, recursively on Nodes
+    pub fn delete(&mut self, item_to_delete: &Data, path: Path, depth: u32) -> bool {
         let deletion_successful = match self {
             // Can't delete what's not there
             Node::Empty => false,
 
             // Branch - recurse
-            Node::Branch {
+            Node::Internal {
                 ref mut left,
                 ref mut right,
                 ..
             } => {
                 if path.at(depth) == Direction::Left {
-                    left.delete(data_to_delete, path, depth + 1)
+                    left.delete(item_to_delete, path, depth + 1)
                 } else {
-                    right.delete(data_to_delete, path, depth + 1)
+                    right.delete(item_to_delete, path, depth + 1)
                 }
             }
 
             // Check for potential collision, and delete if elmnt matches
-            Node::Leaf { ref data, .. } => {
-                if data == data_to_delete {
+            Node::Leaf { ref item, .. } => {
+                if item == item_to_delete {
                     true
                 } else {
                     false
@@ -143,7 +144,7 @@ impl<Data: Syncable> Node<Data> {
         if deletion_successful {
             // Acquire ownership and delete/clean up
             let tmp = self.swap(Node::Empty);
-            let new = tmp.clean_up_node();
+            let new = tmp.pull_up_delete();
 
             // Give back ownership
             self.swap(new);
@@ -156,10 +157,10 @@ impl<Data: Syncable> Node<Data> {
     // Cleans up branches, and transforms leaves into Empty leaves
     // Note that this is meant to be used recursively starting at
     // the bottom
-    fn clean_up_node(self) -> Node<Data> {
+    fn pull_up_delete(self) -> Node<Data> {
         use Node::*;
         match self {
-            Branch { left, right, .. } => {
+            Internal { left, right, .. } => {
                 match (*left, *right) {
                     // Branches with two empty leaves become an empty leaf
                     (Empty, Empty) => Empty,
@@ -169,7 +170,7 @@ impl<Data: Syncable> Node<Data> {
                     (Empty, new @ Leaf { .. }) => new,
 
                     // Everything else doesn't change, but its caches do get reset
-                    (old_l, old_r) => Node::new_branch(old_l, old_r),
+                    (old_l, old_r) => Node::new_internal(old_l, old_r),
                 }
             }
 
@@ -178,30 +179,30 @@ impl<Data: Syncable> Node<Data> {
         }
     }
 
-    /// Inserts data into the node, with the given path
-    pub fn insert(&mut self, data: Data, depth: u32, path: HashPath) -> Result<bool, SyncError> {
+    /// Inserts item into the node, with the given path
+    pub fn insert(&mut self, item: Data, depth: u32, path: Path) -> Result<bool, SyncError> {
         match self {
             // Trivial case
             Node::Empty => {
-                self.swap(Node::new_leaf(data));
+                self.swap(Node::new_leaf(item));
                 Ok(true)
             }
             Node::Leaf { .. } => {
-                let old_hash = self.hash()?;
+                let old_hash = self.label()?;
                 // Collision
                 if old_hash == path.0 {
                     // Hash collision or same element inserted twice?
-                    if self.cmp_data(&data) {
+                    if self.cmp_item(&item) {
                         Ok(false)
                     } else {
                         Err(CollisionError::new().into())
                     }
                 } else {
                     let old = self.swap(Node::Empty);
-                    if let Node::Leaf { data: old_data, .. } = old {
+                    if let Node::Leaf { item: old_item, .. } = old {
                         // Insert both elements into a new tree
-                        let old_path = HashPath(old_hash);
-                        let new_node = Node::make_tree(old_data, old_path, data, path, depth);
+                        let old_path = Path(old_hash);
+                        let new_node = Node::make_tree(old_item, old_path, item, path, depth);
 
                         // No need to invalidate cache here, because we're discarding the old node anyway
                         self.swap(new_node);
@@ -209,21 +210,21 @@ impl<Data: Syncable> Node<Data> {
                     } else {
                         // Note: the pattern is irrefutable, but rust thinks it is refutable
                         // The reason we don't bind in the match arm is because we want to take ownership
-                        // of the data, but we cannot do that because we'd be moving out of borrowed content
+                        // of the item, but we cannot do that because we'd be moving out of borrowed content
                         panic!("Unreachable code reached")
                     }
                 }
             }
-            Node::Branch {
+            Node::Internal {
                 ref mut left,
                 ref mut right,
                 ..
             } => {
                 // Recurse
                 let success = if path.at(depth) == Direction::Left {
-                    left.insert(data, depth + 1, path)
+                    left.insert(item, depth + 1, path)
                 } else {
-                    right.insert(data, depth + 1, path)
+                    right.insert(item, depth + 1, path)
                 }?;
                 // If insertion was successful, invalidate cache and propagate success up
                 if success {
@@ -235,10 +236,10 @@ impl<Data: Syncable> Node<Data> {
         }
     }
 
-    // Compare the data. Returns false for non-leaves
-    fn cmp_data(&self, other: &Data) -> bool {
+    // Compare the item. Returns false for non-leaves
+    fn cmp_item(&self, other: &Data) -> bool {
         match self {
-            Node::Leaf { data, .. } => data == other,
+            Node::Leaf { item, .. } => item == other,
             _ => false,
         }
     }
@@ -248,15 +249,15 @@ impl<Data: Syncable> Node<Data> {
         use Node::*;
         match self {
             Empty => (),
-            Leaf { cached_hash, .. } => {
-                cached_hash.replace(None);
+            Leaf { cached_label, .. } => {
+                cached_label.replace(None);
             }
-            Branch {
-                cached_hash,
+            Internal {
+                cached_label,
                 cached_size,
                 ..
             } => {
-                cached_hash.replace(None);
+                cached_label.replace(None);
                 cached_size.replace(None);
             }
         };
@@ -264,10 +265,10 @@ impl<Data: Syncable> Node<Data> {
 
     // Makes a tree with 2 leaves. Do not call with path0=path1
     fn make_tree(
-        data0: Data,
-        path0: HashPath,
-        data1: Data,
-        path1: HashPath,
+        item0: Data,
+        path0: Path,
+        item1: Data,
+        path1: Path,
         depth: u32,
     ) -> Node<Data> {
         use Direction::*;
@@ -275,59 +276,59 @@ impl<Data: Syncable> Node<Data> {
         if path0.at(depth) == Left {
             // Differing paths: exit condition
             if path1.at(depth) == Right {
-                Node::new_branch_from_data(data0, path0.0, data1, path1.0)
+                Node::new_internal_from_items(item0, path0.0, item1, path1.0)
             // Same path: recurse
             } else {
-                Node::new_branch(
-                    Node::make_tree(data0, path0, data1, path1, depth + 1),
+                Node::new_internal(
+                    Node::make_tree(item0, path0, item1, path1, depth + 1),
                     Node::Empty,
                 )
             }
         } else {
             // Different paths
             if path1.at(depth) == Left {
-                Node::new_branch_from_data(data1, path1.0, data0, path0.0)
+                Node::new_internal_from_items(item1, path1.0, item0, path0.0)
             // Same path
             } else {
-                Node::new_branch(
+                Node::new_internal(
                     Node::Empty,
-                    Node::make_tree(data0, path0, data1, path1, depth + 1),
+                    Node::make_tree(item0, path0, item1, path1, depth + 1),
                 )
             }
         }
     }
 
     // Convenience constructors
-    fn new_leaf(data: Data) -> Node<Data> {
+    fn new_leaf(item: Data) -> Node<Data> {
         Node::Leaf {
-            data,
-            cached_hash: RefCell::new(None),
+            item,
+            cached_label: RefCell::new(None),
         }
     }
 
-    fn new_branch_from_data(
-        left_data: Data,
+    fn new_internal_from_items(
+        left_item: Data,
         left_hash: Digest,
-        right_data: Data,
+        right_item: Data,
         right_hash: Digest,
     ) -> Node<Data> {
         let left_node = Node::Leaf {
-            data: left_data,
-            cached_hash: RefCell::new(Some(left_hash)),
+            item: left_item,
+            cached_label: RefCell::new(Some(left_hash)),
         };
         let right_node = Node::Leaf {
-            data: right_data,
-            cached_hash: RefCell::new(Some(right_hash)),
+            item: right_item,
+            cached_label: RefCell::new(Some(right_hash)),
         };
-        Node::new_branch(left_node, right_node)
+        Node::new_internal(left_node, right_node)
     }
 
     // Shorthand for creating a new branch
-    fn new_branch(left: Node<Data>, right: Node<Data>) -> Node<Data> {
-        Node::Branch {
+    fn new_internal(left: Node<Data>, right: Node<Data>) -> Node<Data> {
+        Node::Internal {
             left: Box::new(left),
             right: Box::new(right),
-            cached_hash: RefCell::default(),
+            cached_label: RefCell::default(),
             cached_size: Cell::default(),
         }
     }
@@ -347,51 +348,51 @@ impl<Data: Syncable> Node<Data> {
     }
 
     /// Returns the node's label. This is a hash of the hashes for a branch,
-    /// and the data's hash for Leaves. Empty leaves have no hash.
-    pub fn hash(&self) -> Result<Digest, SyncError> {
+    /// and the item's hash for Leaves. Empty leaves have no hash.
+    pub fn label(&self) -> Result<Digest, SyncError> {
         match self {
             // Error: hash of an empty leaf (should this be a hash of unit instead?)
             Node::Empty => Err(EmptyHashError::new().into()),
 
             // Non-empty leaf - label == path == hash
-            Node::Leaf { cached_hash, data } => {
-                let mut cached_hash_borrowed = cached_hash.borrow_mut();
-                if let Some(digest) = cached_hash_borrowed.as_ref() {
+            Node::Leaf { cached_label, item } => {
+                let mut cached_label_borrowed = cached_label.borrow_mut();
+                if let Some(digest) = cached_label_borrowed.as_ref() {
                     Ok(digest.clone())
                 } else {
-                    let new_hash = hash(data)?;
-                    *cached_hash_borrowed = Some(new_hash.clone());
+                    let new_hash = hash(item)?;
+                    *cached_label_borrowed = Some(new_hash.clone());
                     Ok(new_hash)
                 }
             }
 
-            Node::Branch {
+            Node::Internal {
                 left,
                 right,
-                cached_hash,
+                cached_label,
                 ..
             } => {
-                let mut cached_hash_borrowed = cached_hash.borrow_mut();
-                if let Some(digest) = cached_hash_borrowed.as_ref() {
+                let mut cached_label_borrowed = cached_label.borrow_mut();
+                if let Some(digest) = cached_label_borrowed.as_ref() {
                     // Return cached hash
                     Ok(digest.clone())
                 } else {
                     let new_hash = if left.is_empty() {
                         // Note: having two empty children to a branch would violate the invariant
                         // So we assume that !right.is_empty()
-                        right.hash()?
+                        right.label()?
                     } else if right.is_empty() {
-                        left.hash()?
+                        left.label()?
                     } else {
                         // Both elements present
-                        let left_hash = left.hash()?;
-                        let right_hash = right.hash()?;
+                        let left_hash = left.label()?;
+                        let right_hash = right.label()?;
                         let concat = ConcatDigest(left_hash, right_hash);
                         hash(&concat)?
                     };
 
                     // Update cache, return
-                    *cached_hash_borrowed = Some(new_hash.clone());
+                    *cached_label_borrowed = Some(new_hash.clone());
                     Ok(new_hash)
                 }
             }
@@ -422,12 +423,12 @@ mod tests {
         // hash(13) = 1101 ...
         let elem_r = 13;
         let hash_right = hash(&elem_r).unwrap();
-        root.insert(elem_l, 0, HashPath(hash_left.clone())).unwrap();
-        root.insert(elem_r, 0, HashPath(hash_right.clone()))
+        root.insert(elem_l, 0, Path(hash_left.clone())).unwrap();
+        root.insert(elem_r, 0, Path(hash_right.clone()))
             .unwrap();
 
         let expected_label = hash(&ConcatDigest(hash_left, hash_right)).unwrap();
-        assert_eq!(root.hash().unwrap(), expected_label);
+        assert_eq!(root.label().unwrap(), expected_label);
     }
 
     #[test]
@@ -440,15 +441,15 @@ mod tests {
         // hash(13) = 1101 ...
         let elem_r = 13;
         let hash_right = hash(&elem_r).unwrap();
-        root.insert(elem_l, 0, HashPath(hash_left.clone())).unwrap();
-        root.insert(elem_r, 0, HashPath(hash_right.clone()))
+        root.insert(elem_l, 0, Path(hash_left.clone())).unwrap();
+        root.insert(elem_r, 0, Path(hash_right.clone()))
             .unwrap();
         let mut total = 1;
         root.traverse(&mut |el| total *= el);
         assert_eq!(total, elem_l * elem_r, "Traversal fails for two elements");
 
         assert!(
-            root.delete(&elem_l, HashPath(hash_left), 0),
+            root.delete(&elem_l, Path(hash_left), 0),
             "Deletion fails for left element"
         );
 
@@ -467,22 +468,22 @@ mod tests {
         // hash(13) = 1101 ...
         let elem_r = 13;
         let hash_right = hash(&elem_r).unwrap();
-        root.insert(elem_l, 0, HashPath(hash_left.clone())).unwrap();
-        if let Leaf { data, .. } = root {
-            assert_eq!(data, elem_l, "Inserted element doesn't match");
+        root.insert(elem_l, 0, Path(hash_left.clone())).unwrap();
+        if let Leaf { item, .. } = root {
+            assert_eq!(item, elem_l, "Inserted element doesn't match");
         // Success!
         } else {
             panic!("Root is not of type Leaf. {:?}", root)
         }
 
-        root.insert(elem_r, 0, HashPath(hash_right.clone()))
+        root.insert(elem_r, 0, Path(hash_right.clone()))
             .unwrap();
-        if let Branch { left, right, .. } = &root {
+        if let Internal { left, right, .. } = &root {
             let left: &Node<_> = left;
             let right: &Node<_> = right;
-            if let (Leaf { data: data_l, .. }, Leaf { data: data_r, .. }) = (left, right) {
-                assert_eq!(*data_l, elem_l, "Left branch doesn't match");
-                assert_eq!(*data_r, elem_r, "Right branch doesn't match");
+            if let (Leaf { item: item_l, .. }, Leaf { item: item_r, .. }) = (left, right) {
+                assert_eq!(*item_l, elem_l, "Left branch doesn't match");
+                assert_eq!(*item_r, elem_r, "Right branch doesn't match");
             } else {
                 panic!(
                     "Left and right branches aren't leaves, ({:?}, {:?})",
@@ -498,25 +499,25 @@ mod tests {
     fn delete() {
         let mut root: Node<u32> = Node::Empty;
         for i in 0..NUM_ITERS {
-            assert!(root.insert(i, 0, HashPath::new(&i).unwrap()).unwrap());
+            assert!(root.insert(i, 0, Path::new(&i).unwrap()).unwrap());
         }
 
         for i in 0..NUM_ITERS {
-            let elem_path = HashPath::new(&i).unwrap();
+            let elem_path = Path::new(&i).unwrap();
             assert!(root.delete(&i, elem_path.clone(), 0), "Deletion fails");
 
             let mut nav = &root;
-            for idx in 0..HashPath::NUM_BITS {
+            for idx in 0..Path::NUM_BITS {
                 match nav {
                     Node::Empty => break,
-                    Node::Leaf { data, .. } => {
-                        if *data == idx as u32 {
+                    Node::Leaf { item, .. } => {
+                        if *item == idx as u32 {
                             panic!("Element wasn't deleted, but is supposed to have been")
                         } else {
                             break;
                         }
                     }
-                    Node::Branch { left, right, .. } => {
+                    Node::Internal { left, right, .. } => {
                         if left.is_empty() && right.is_empty() {
                             panic!("Dead branch encountered! Delete failed")
                         }

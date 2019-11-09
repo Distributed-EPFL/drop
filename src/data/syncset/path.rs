@@ -19,16 +19,18 @@ const BITS_IN_BYTE: u32 = 8;
 /// Navigator wrapper for Digest
 /// Guaranteed to have HASH_SIZE * 8 bits of depth
 #[derive(Clone, Debug, PartialEq)]
-pub struct HashPath(pub(super) Digest);
+pub struct Path(pub(super) Digest);
 
 /// Navigator
 /// Guaranteed to have 0 <= n <= HASH_SIZE * 8 bits of depth
 #[derive(Clone, Debug)]
-pub struct PrefixedPath {
+pub struct Prefix {
+    // todo change to digest
     inner: Vec<u8>,
     depth: Varint,
 }
 
+// todo change all u32 to usize
 /// Direction enumeration for abstraction of bit navigation.
 /// 0 is Left, 1 is Right
 #[derive(Eq, PartialEq, Debug)]
@@ -55,7 +57,7 @@ impl Direction {
     }
 }
 
-impl HashPath {
+impl Path {
     /// The number of bits in a hash digest
     pub const NUM_BITS: u32 = HASH_SIZE as u32 * BITS_IN_BYTE;
 
@@ -63,7 +65,7 @@ impl HashPath {
     /// Note that this function will panic if given an index
     /// greater or equal to the number of bits in a hash digest
     pub fn at(&self, idx: u32) -> Direction {
-        assert!(idx < Self::NUM_BITS, "Out of bounds on HashPath");
+        assert!(idx < Self::NUM_BITS, "Out of bounds on Path");
         let (byte_idx, bit_idx) = split_bits(idx);
 
         debug_assert!(HASH_SIZE > byte_idx as usize, "Out of bounds byte index");
@@ -72,20 +74,21 @@ impl HashPath {
         Direction::from_bit(byte, bit_idx)
     }
 
-    /// Takes the i-th first bits of the digest and turn them into a PrefixedPath
-    pub fn prefix(&self, depth: u32) -> PrefixedPath {
-        PrefixedPath::from_digest(&self.0, depth)
+    /// Takes the i-th first bits of the digest and turn them into a Prefix
+    pub fn prefix(&self, depth: u32) -> Prefix {
+        Prefix::from_digest(&self.0, depth)
     }
 
     /// Standard constructor
-    pub fn new<Data: Readable>(data: &Data) -> Result<HashPath, SyncError> {
+    // todo change error type to hash
+    pub fn new<Data: Readable>(data: &Data) -> Result<Path, SyncError> {
         let digest = hash(data)?;
-        Ok(HashPath(digest))
+        Ok(Path(digest))
     }
 }
 
-impl PartialEq for PrefixedPath {
-    fn eq(&self, other: &PrefixedPath) -> bool {
+impl PartialEq for Prefix {
+    fn eq(&self, other: &Prefix) -> bool {
         if self.depth == other.depth {
             let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
             let num_full_bytes = num_full_bytes
@@ -128,9 +131,9 @@ impl PartialEq for PrefixedPath {
     }
 }
 
-impl PrefixedPath {
-    fn add_one(&self, dir: Direction) -> Result<PrefixedPath, PathLengthError> {
-        if self.depth.0 >= HashPath::NUM_BITS as u32 {
+impl Prefix {
+    fn add_one(&self, dir: Direction) -> Result<Prefix, PathLengthError> {
+        if self.depth.0 >= Path::NUM_BITS as u32 {
             return Err(PathLengthError::new());
         }
 
@@ -156,19 +159,19 @@ impl PrefixedPath {
             let mask = !get_mask(bit_idx);
             *current_byte = *current_byte & mask;
         }
-        Ok(PrefixedPath {
+        Ok(Prefix {
             inner: new_inner,
             depth: Varint(new_depth),
         })
     }
 
     /// Extends the path with a 0
-    pub fn left(&self) -> Result<PrefixedPath, PathLengthError> {
+    pub fn left(&self) -> Result<Prefix, PathLengthError> {
         self.add_one(Direction::Left)
     }
 
     /// Extends the path with a 1
-    pub fn right(&self) -> Result<PrefixedPath, PathLengthError> {
+    pub fn right(&self) -> Result<Prefix, PathLengthError> {
         self.add_one(Direction::Right)
     }
 
@@ -183,34 +186,35 @@ impl PrefixedPath {
         }
     }
 
-    /// Creates a PrefixedPath of depth 0
-    pub fn empty() -> PrefixedPath {
-        PrefixedPath {
+    /// Creates a Prefix of depth 0
+    pub fn empty() -> Prefix {
+        Prefix {
             inner: Vec::new(),
             depth: Varint(0),
         }
     }
 
-    fn from_digest(digest: &Digest, depth: u32) -> PrefixedPath {
+    fn from_digest(digest: &Digest, depth: u32) -> Prefix {
         let needed_bytes = (depth + BITS_IN_BYTE - 1) / BITS_IN_BYTE;
         let mut inner = Vec::with_capacity(needed_bytes as usize);
         for i in 0..needed_bytes {
             inner.push(digest.0[i as usize])
         }
-        PrefixedPath {
+        Prefix {
             inner,
             depth: Varint(depth),
         }
     }
 
+    // todo rename
     /// Hashes a data element, and creates a path out of the digest
-    pub fn new<Data: Readable>(data: &Data, depth: u32) -> Result<PrefixedPath, SyncError> {
+    pub fn new<Data: Readable>(data: &Data, depth: u32) -> Result<Prefix, SyncError> {
         let digest = hash(data)?;
-        Ok(PrefixedPath::from_digest(&digest, depth))
+        Ok(Prefix::from_digest(&digest, depth))
     }
 
-    /// Checks if the PrefixedPath is the prefix of the full path
-    pub fn is_prefix_of(&self, rhs: &HashPath) -> bool {
+    /// Checks if the Prefix is the prefix of the full path
+    pub fn is_prefix_of(&self, rhs: &Path) -> bool {
         let (num_full_bytes, overflow_bits) = split_bits(self.depth.0);
         let num_full_bytes = num_full_bytes
             .try_into()
@@ -246,7 +250,7 @@ impl PrefixedPath {
 
 // Trait Implementations
 
-impl Readable for PrefixedPath {
+impl Readable for Prefix {
     const SIZE: Size = Size::variable();
 
     fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
@@ -256,7 +260,7 @@ impl Readable for PrefixedPath {
     }
 }
 
-impl Writable for PrefixedPath {
+impl Writable for Prefix {
     const SIZE: Size = Size::variable();
 
     fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
@@ -269,9 +273,9 @@ impl Writable for PrefixedPath {
     }
 }
 
-impl Load for PrefixedPath {
+impl Load for Prefix {
     fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
-        let mut res = PrefixedPath::empty();
+        let mut res = Prefix::empty();
         Writable::accept(&mut res, from)?;
         Ok(res)
     }
@@ -365,7 +369,7 @@ mod tests {
     fn hashpath() {
         use Direction::*;
         // hash(15092) = 0101 1010 0001 1111 ...
-        let path = HashPath::new(&15092).unwrap();
+        let path = Path::new(&15092).unwrap();
 
         let expected_vec = vec![
             Left, Right, Left, Right, Right, Left, Right, Left, Left, Left, Left, Right, Right,
@@ -378,19 +382,19 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Out of bounds on HashPath")]
+    #[should_panic(expected = "Out of bounds on Path")]
     fn depth_overflow() {
-        let full = HashPath::new(&15092).unwrap();
-        full.at(HashPath::NUM_BITS);
+        let full = Path::new(&15092).unwrap();
+        full.at(Path::NUM_BITS);
     }
 
     // Prefixed tests
 
     #[test]
     fn extension_prefixes() {
-        let mut prefix = PrefixedPath::empty();
-        let full = HashPath::new(&15092).unwrap();
-        for depth in 0..HashPath::NUM_BITS {
+        let mut prefix = Prefix::empty();
+        let full = Path::new(&15092).unwrap();
+        for depth in 0..Path::NUM_BITS {
             assert!(
                 prefix.is_prefix_of(&full),
                 "Prefix isn't prefix of full path"
@@ -419,36 +423,36 @@ mod tests {
 
     #[test]
     fn prefixes() {
-        let full = HashPath(
+        let full = Path(
             Digest::try_from("0101010101000000000000000000000000000000000000000000000000000000")
                 .unwrap(),
         );
 
-        let pref1 = PrefixedPath {
+        let pref1 = Prefix {
             inner: vec![0],
             depth: Varint(7),
         };
         assert!(pref1.is_prefix_of(&full), "prefix1 returned false");
 
-        let pref2 = PrefixedPath {
+        let pref2 = Prefix {
             inner: vec![0b0000_0001],
             depth: Varint(8),
         };
         assert!(pref2.is_prefix_of(&full), "prefix2 returned false");
 
-        let pref3 = PrefixedPath {
+        let pref3 = Prefix {
             inner: vec![0b1111_1111],
             depth: Varint(1),
         };
         assert!(!pref3.is_prefix_of(&full), "prefix3 returned true");
 
-        let pref4 = PrefixedPath {
+        let pref4 = Prefix {
             inner: vec![0b1111_1111, 0x01],
             depth: Varint(9),
         };
         assert!(!pref4.is_prefix_of(&full), "prefix4 returned true");
 
-        let empty = PrefixedPath {
+        let empty = Prefix {
             inner: Vec::new(),
             depth: Varint(0),
         };
@@ -458,8 +462,8 @@ mod tests {
     #[test]
     fn serialization() {
         use crate::bytewise::{deserialize, serialize};
-        for depth in 0..=HashPath::NUM_BITS {
-            let prefix = PrefixedPath::new(&15092, depth).unwrap();
+        for depth in 0..=Path::NUM_BITS {
+            let prefix = Prefix::new(&15092, depth).unwrap();
             let serialized = serialize(&prefix).unwrap();
 
             let expected_depth_size: usize = min_bytes_to_represent(depth);
@@ -472,7 +476,7 @@ mod tests {
                 "Serialized version too long"
             );
 
-            let deserialized: PrefixedPath = deserialize(serialized.as_slice()).unwrap();
+            let deserialized: Prefix = deserialize(serialized.as_slice()).unwrap();
 
             assert_eq!(deserialized.depth, prefix.depth, "Depths didn't match");
             for i in 0..depth {
@@ -497,7 +501,7 @@ mod tests {
 
     #[test]
     fn add_one_errors() {
-        let pref = PrefixedPath::new(&15092, HashPath::NUM_BITS).unwrap();
+        let pref = Prefix::new(&15092, Path::NUM_BITS).unwrap();
 
         if let Ok(_) = pref.add_one(Direction::Left) {
             panic!("Expected an error in adding one to direction")
@@ -508,7 +512,7 @@ mod tests {
     fn prefixed_nav() {
         let inner = vec![0xAA, 0x55];
         let inner_len = inner.len() as u32;
-        let path = PrefixedPath {
+        let path = Prefix {
             inner: inner,
             depth: Varint(16),
         };
@@ -523,7 +527,7 @@ mod tests {
 
     #[test]
     fn indices() {
-        let prefix = PrefixedPath {
+        let prefix = Prefix {
             inner: vec![0b10000000],
             depth: Varint(2),
         };
