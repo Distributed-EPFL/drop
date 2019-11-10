@@ -71,7 +71,7 @@ impl<Data: Syncable> SyncSet<Data> {
                 } else {
                     Ok(Set::LabelSet {
                         label: node_at_prefix.label()?,
-                        path: prefix.clone(),
+                        prefix: prefix.clone(),
                     })
                 }
             }
@@ -124,7 +124,7 @@ impl<Data: Syncable> SyncSet<Data> {
         // Figure out how much to pre-allocate
         let mut elem_count = 0;
         for set in view {
-            if let Set::DataSet { underlying, .. } = set {
+            if let Set::ListSet { underlying, .. } = set {
                 elem_count += underlying.len();
             }
         }
@@ -140,7 +140,7 @@ impl<Data: Syncable> SyncSet<Data> {
                 // Label-path structure, check own label, and send back result
                 Set::LabelSet {
                     label: remote_label,
-                    path: remote_prefix,
+                    prefix: remote_prefix,
                 } => {
                     let local_set = self.get(remote_prefix, false)?;
                     match &local_set {
@@ -157,12 +157,12 @@ impl<Data: Syncable> SyncSet<Data> {
                         }
 
                         // Dump threshold reached; send everything
-                        Set::DataSet { .. } => new_view.push(local_set),
+                        Set::ListSet { .. } => new_view.push(local_set),
                     }
                 }
 
                 // Full-data set structure. Compare everything at the path
-                Set::DataSet {
+                Set::ListSet {
                     underlying: remote_data,
                     prefix: remote_prefix,
                     dump: remote_dump,
@@ -170,7 +170,7 @@ impl<Data: Syncable> SyncSet<Data> {
                     let local_set = self.get(remote_prefix, true)?;
 
                     // This pattern is irrefutable; get() was called with dump = true
-                    if let Set::DataSet {
+                    if let Set::ListSet {
                         underlying: local_data,
                         ..
                     } = &local_set
@@ -271,7 +271,7 @@ mod tests {
 
         assert_eq!(set.root.size(), NUM_ITERS as usize, "Root has wrong size");
 
-        if let Set::DataSet { underlying, .. } = set.get(&Prefix::empty(), true).unwrap() {
+        if let Set::ListSet { underlying, .. } = set.get(&Prefix::empty(), true).unwrap() {
             let mut previous = hash(underlying.get(0).expect("get() returns no elements")).unwrap();
             for i in 1..NUM_ITERS {
                 let current = hash(underlying.get(i as usize).unwrap())
@@ -304,21 +304,21 @@ mod tests {
         for depth in 0..Path::NUM_BITS {
             {
                 // Test if the element is contained
-                let prefix = arbitrary_elem_path.prefix(depth);
-                let set = syncset.get(&prefix, false).unwrap();
+                let expected_prefix = arbitrary_elem_path.prefix(depth);
+                let set = syncset.get(&expected_prefix, false).unwrap();
                 match &set {
-                    Set::LabelSet { path, label } => {
-                        assert!(path.is_prefix_of(&arbitrary_elem_path));
-                        assert_eq!(path, &prefix, "Returned path does not match prefix");
+                    Set::LabelSet { prefix, label } => {
+                        assert!(prefix.is_prefix_of(&arbitrary_elem_path));
+                        assert_eq!(prefix, &expected_prefix, "Returned path does not match prefix");
                         if let n @ Node::Internal { .. } = syncset.root.node_at(&prefix, 0) {
                             assert_eq!(&n.label().unwrap(), label);
                         } else {
                             panic!("get returns a labelset of a leaf or empty, {:?}", set)
                         }
                     }
-                    Set::DataSet {
+                    Set::ListSet {
                         underlying,
-                        prefix: actual_prefix,
+                        prefix,
                         dump,
                     } => {
                         assert!(
@@ -326,10 +326,10 @@ mod tests {
                             "Number of elements received exceeds the threshold"
                         );
                         assert!(
-                            actual_prefix.is_prefix_of(&arbitrary_elem_path),
+                            prefix.is_prefix_of(&arbitrary_elem_path),
                             "Prefix isn't a prefix of the full hash"
                         );
-                        assert_eq!(&prefix, actual_prefix, "Prefix doesn't match expected");
+                        assert_eq!(prefix, &expected_prefix, "Prefix doesn't match expected");
                         assert!(!dump, "get returns wrong value for dump");
                         let mut success = false;
                         for elem in underlying {
@@ -340,7 +340,7 @@ mod tests {
 
                         assert!(
                             success,
-                            "Arbitrarily chosen element not found in the DataSet"
+                            "Arbitrarily chosen element not found in the ListSet"
                         );
                     }
                 }
@@ -348,21 +348,21 @@ mod tests {
 
             // Test if the non-element is not contained
             {
-                let prefix = arbitrary_non_elem_path.prefix(depth);
-                let set = syncset.get(&prefix, false).unwrap();
+                let expected_prefix = arbitrary_non_elem_path.prefix(depth);
+                let set = syncset.get(&expected_prefix, false).unwrap();
                 match &set {
-                    Set::LabelSet { path, label } => {
-                        assert!(path.is_prefix_of(&arbitrary_non_elem_path));
-                        assert_eq!(path, &prefix, "Returned path does not match prefix");
+                    Set::LabelSet { prefix, label } => {
+                        assert!(prefix.is_prefix_of(&arbitrary_non_elem_path));
+                        assert_eq!(prefix, &expected_prefix, "Returned path does not match prefix");
                         if let n @ Node::Internal { .. } = syncset.root.node_at(&prefix, 0) {
                             assert_eq!(&n.label().unwrap(), label);
                         } else {
                             panic!("get returns a labelset of a leaf or empty, {:?}", set)
                         }
                     }
-                    Set::DataSet {
+                    Set::ListSet {
                         underlying,
-                        prefix: actual_prefix,
+                        prefix,
                         dump,
                     } => {
                         assert!(
@@ -370,10 +370,10 @@ mod tests {
                             "Number of elements received exceeds the threshold"
                         );
                         assert!(
-                            actual_prefix.is_prefix_of(&arbitrary_non_elem_path),
+                            prefix.is_prefix_of(&arbitrary_non_elem_path),
                             "Prefix isn't a prefix of the full hash"
                         );
-                        assert_eq!(&prefix, actual_prefix, "Prefix doesn't match expected");
+                        assert_eq!(prefix, &expected_prefix, "Prefix doesn't match expected");
                         assert!(!dump, "get returns wrong value for dump");
 
                         for elem in underlying {
