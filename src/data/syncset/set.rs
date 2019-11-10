@@ -8,11 +8,11 @@ use crate::crypto::hash::Digest;
 pub enum Set<Data> {
     /// Lightweight alternative, only contains the hash of
     /// the sub-tree at prefix
-    LabelSet { path: Prefix, label: Digest },
+    LabelSet { prefix: Prefix, label: Digest },
 
     /// Heavy alternative, contains all the data of a sub-tree at
     /// a given prefix
-    DataSet {
+    ListSet {
         underlying: Vec<Data>,
         prefix: Prefix,
         dump: bool,
@@ -25,7 +25,7 @@ impl<Data: Syncable> Set<Data> {
         let mut underlying: Vec<Data> = Vec::with_capacity(node.size());
         node.traverse(&mut |elem| underlying.push(elem.clone()));
 
-        Set::DataSet {
+        Set::ListSet {
             underlying,
             prefix,
             dump,
@@ -34,7 +34,7 @@ impl<Data: Syncable> Set<Data> {
 
     pub(super) fn new_empty_dataset(prefix: Prefix, dump: bool) -> Set<Data> {
         let underlying = Vec::new();
-        Set::DataSet {
+        Set::ListSet {
             underlying,
             prefix,
             dump,
