@@ -61,6 +61,24 @@ impl<Data: Syncable> Node<Data> {
         }
     }
 
+    pub fn dump(&self) -> Vec<&Data> {
+        let mut result = Vec::with_capacity(self.size());
+        self.dump_recursive(&mut result);
+        debug_assert_eq!(result.len(), self.size());
+        result
+    }
+
+    fn dump_recursive<'a>(&'a self, result: &mut Vec<&'a Data>) {
+        match self {
+            Node::Leaf { item, .. } => result.push(item),
+            Node::Empty => (),
+            Node::Internal { left, right, ..} => {
+                left.dump_recursive(result);
+                right.dump_recursive(result);
+            }
+        }
+    }
+
     /// Traverses the graph in a depth first manner (priority to left leaves), and applies the
     /// function to each element encountered.
     pub fn traverse<F>(&self, f: &mut F)
