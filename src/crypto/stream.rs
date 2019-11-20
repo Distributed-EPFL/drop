@@ -108,10 +108,10 @@ impl Pull {
     }
 
     /// Decrypts an arbitrary message from a slice of bytes. <br />
-    /// This method avoid copying data by using a buffer internal
+    /// This method avoids copying data by using a buffer internal
     /// to this `Pull` instance. The resulting value can therefore not
     /// outlive this `Pull` nor can this `Pull` read another message
-    /// as long as the current one has not been dropped.
+    /// until the current one has been dropped.
     pub fn decrypt_ref<'de, T>(
         &'de mut self,
         ciphertext: &[u8],
