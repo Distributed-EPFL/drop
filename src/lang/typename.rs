@@ -1,8 +1,8 @@
 // Dependencies
 
-use std::collections::BinaryHeap;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::LinkedList;
@@ -27,7 +27,10 @@ macro_rules! implement {
     )*);
 }
 
-implement!(i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, isize, usize, f32, f64, str, String);
+implement!(
+    i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, isize, usize, f32, f64,
+    str, String
+);
 
 // Arrays
 
@@ -41,8 +44,11 @@ macro_rules! implement {
     )*);
 }
 
-implement!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-           25, 26, 27, 28, 29, 30, 31, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192);
+implement!(
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+    22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 64, 128, 256, 512, 1024, 2048,
+    4096, 8192
+);
 
 // Tuples
 

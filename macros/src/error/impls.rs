@@ -1,13 +1,9 @@
-// Dependencies
-
+use super::parse::Error;
+use super::parse::ErrorData;
 use proc_macro2::TokenStream;
 use quote::quote;
 use regex::Regex;
-use super::parse::Error;
-use super::parse::ErrorData;
 use syn::Ident;
-
-// Functions
 
 pub fn methods(error: &Error) -> TokenStream {
     let error_ident = &error.idents.error;
@@ -16,12 +12,22 @@ pub fn methods(error: &Error) -> TokenStream {
 
     let (types, values) = &match &error.data {
         ErrorData::Fields(fields) => {
-            let types: Vec<TokenStream> = (&fields.named).into_iter().map(|field| &field.ty).map(|ty| quote!(#ty)).collect();
-            let values: Vec<TokenStream> = (&fields.named).into_iter().map(|field| &field.ident).map(|value| quote!(#value)).collect();
+            let types: Vec<TokenStream> = (&fields.named)
+                .into_iter()
+                .map(|field| &field.ty)
+                .map(|ty| quote!(#ty))
+                .collect();
+            let values: Vec<TokenStream> = (&fields.named)
+                .into_iter()
+                .map(|field| &field.ident)
+                .map(|value| quote!(#value))
+                .collect();
             (types, values)
-        },
-        ErrorData::Causes(_) => (vec![quote!(#cause_ident)], vec![quote!(cause)]),
-        ErrorData::None => (Vec::new(), Vec::new())
+        }
+        ErrorData::Causes(_) => {
+            (vec![quote!(#cause_ident)], vec![quote!(cause)])
+        }
+        ErrorData::None => (Vec::new(), Vec::new()),
     };
 
     // The reason of this redundancy is explained in data.rs
@@ -45,15 +51,23 @@ pub fn methods(error: &Error) -> TokenStream {
 
 fn description(error: &Error) -> TokenStream {
     let error_ident = &error.idents.error;
-    let fields = Regex::new(r"\{([a-zA-Z][a-zA-Z0-9_]*|_[a-zA-Z0-9_]+)\}").unwrap();
+    let fields =
+        Regex::new(r"\{([a-zA-Z][a-zA-Z0-9_]*|_[a-zA-Z0-9_]+)\}").unwrap();
     let description = &error.description.value();
 
-    let arguments: Vec<TokenStream> = fields.captures_iter(description).map(|capture| {
-        let capture = Ident::new(&capture[1], error.description.span());
-        quote!(#capture)
-    }).collect();
+    let arguments: Vec<TokenStream> = fields
+        .captures_iter(description)
+        .map(|capture| {
+            let capture = Ident::new(&capture[1], error.description.span());
+            quote!(#capture)
+        })
+        .collect();
 
-    let format = format!("[{}] {}", error_ident, fields.replace_all(description, "{}"));
+    let format = format!(
+        "[{}] {}",
+        error_ident,
+        fields.replace_all(description, "{}")
+    );
     quote!(format!(#format, #(#arguments),*))
 }
 

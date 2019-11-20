@@ -1,16 +1,11 @@
-// Features
-
 #![feature(const_fn)]
 #![feature(specialization)]
 
-// Modules
-
-pub mod bytewise;
+/// Secure communication channels using sodiumoxide
 pub mod crypto;
-pub mod data;
+/// Error definition and handling
 pub mod error;
+/// Pretty printing typenames for debugging
 pub mod lang;
-
-// External structs
 
 pub use backtrace;

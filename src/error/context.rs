@@ -1,9 +1,10 @@
 // Dependencies
 
-use crate::lang::Typename;
 use std::any::Any;
+
 use super::error::Error;
 use super::spotting::Spotting;
+use crate::lang::Typename;
 
 // Traits
 

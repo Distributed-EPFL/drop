@@ -1,12 +1,13 @@
-// Dependencies
+use std::io::Error as IoError;
 
-use crate as drop;
-use crate::bytewise::ReadError;
-use crate::bytewise::WriteError;
-use crate::error::Error;
 use macros::error;
 
-// Errors
+use crate as drop;
+use crate::error::Error;
+
+use bincode::ErrorKind as BincodeErrorKind;
+
+pub type BincodeError = Box<BincodeErrorKind>;
 
 error! {
     type: UnexpectedSize,
@@ -27,13 +28,24 @@ error! {
 error! {
     type: HashError,
     description: "The object provided was impossible to hash.",
-    causes: (ReadError)
+    causes: (ReadError, BincodeError, SodiumError)
+}
+
+error! {
+    type: SodiumError,
+    description: "Sodium failed",
+}
+
+error! {
+    type: ReadError,
+    description: "Invalid data read",
+    causes: (IoError)
 }
 
 error! {
     type: EncryptError,
     description: "The object provided was impossible to encrypt.",
-    causes: (ReadError)
+    causes: (ReadError, BincodeError)
 }
 
 error! {
@@ -59,5 +71,5 @@ error! {
 error! {
     type: DecryptError,
     description: "The ciphertext provided was impossible to decrypt.",
-    causes: (MissingHeader, InvalidHeader, InvalidMac, WriteError, BrokenStream)
+    causes: (MissingHeader, InvalidHeader, InvalidMac, BrokenStream, BincodeError)
 }

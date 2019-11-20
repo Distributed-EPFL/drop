@@ -1,6 +1,7 @@
 // Dependencies
 
 use std::convert::TryFrom;
+
 use super::errors::MalformedHex;
 use super::errors::ParseHexError;
 use super::errors::UnexpectedSize;
@@ -33,15 +34,18 @@ macro_rules! implement {
     )*);
 }
 
-implement!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-           25, 26, 27, 28, 29, 30, 31, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192);
+implement!(
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+    22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 64, 128, 256, 512, 1024, 2048,
+    4096, 8192
+);
 
 impl TryFrom<&str> for Digest {
-   type Error = ParseHexError;
+    type Error = ParseHexError;
 
-   fn try_from(hex: &str) -> Result<Self, ParseHexError> {
-       Ok(Digest(hex.parse_hex()?))
-   }
+    fn try_from(hex: &str) -> Result<Self, ParseHexError> {
+        Ok(Digest(hex.parse_hex()?))
+    }
 }
 
 impl TryFrom<&str> for Key {
@@ -62,8 +66,14 @@ mod tests {
     // Test cases
     #[test]
     fn reference() {
-        assert_eq!(ParseHex::<[u8; 8]>::parse_hex("0000000000000000").unwrap(), [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        assert_eq!(ParseHex::<[u8; 8]>::parse_hex("0123456789abcdef").unwrap(), [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]);
+        assert_eq!(
+            ParseHex::<[u8; 8]>::parse_hex("0000000000000000").unwrap(),
+            [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        );
+        assert_eq!(
+            ParseHex::<[u8; 8]>::parse_hex("0123456789abcdef").unwrap(),
+            [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef]
+        );
     }
 
     #[test]

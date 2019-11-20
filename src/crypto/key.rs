@@ -1,22 +1,13 @@
-// Dependencies
-
-use crate as drop;
-use crate::bytewise::Load;
-use crate::bytewise::Readable;
-use crate::bytewise::Writable;
-use sodiumoxide::crypto::secretstream;
 use std::convert::Into;
 
-// Constants
+use serde::{Deserialize, Serialize};
+use sodiumoxide::crypto::secretstream;
 
+/// Hardcoded key size
 pub const SIZE: usize = 32;
 
-// Structs
-
-#[derive(Readable, Writable, Load, Clone)]
-pub struct Key(#[bytewise] pub(super) [u8; SIZE]);
-
-// Implemenations
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Key(pub(super) [u8; SIZE]);
 
 impl Key {
     pub fn random() -> Self {

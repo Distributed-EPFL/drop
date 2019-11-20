@@ -1,9 +1,9 @@
 // Dependencies
 
-use sodiumoxide::utils;
-use std::ops::Drop;
 use super::hash::Digest;
 use super::key::Key;
+use sodiumoxide::utils;
+use std::ops::Drop;
 
 // Implementations
 

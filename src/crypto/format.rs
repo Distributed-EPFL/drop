@@ -3,6 +3,7 @@
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Display;
+
 use super::hash::Digest;
 use super::key::Key;
 
@@ -11,7 +12,9 @@ use super::key::Key;
 impl Display for Digest {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "<")?;
-        for byte in &self.0 { write!(fmt, "{:02x}", byte)?; }
+        for byte in &self.0 {
+            write!(fmt, "{:02x}", byte)?;
+        }
         write!(fmt, ">")?;
 
         Ok(())
@@ -27,7 +30,9 @@ impl Debug for Digest {
 impl Display for Key {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "<")?;
-        for byte in &self.0 { write!(fmt, "{:02x}", byte)?; }
+        for byte in &self.0 {
+            write!(fmt, "{:02x}", byte)?;
+        }
         write!(fmt, ">")?;
 
         Ok(())
@@ -45,8 +50,8 @@ impl Debug for Key {
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
 mod tests {
-    use std::convert::TryFrom;
     use super::*;
+    use std::convert::TryFrom;
 
     // Test cases
 
