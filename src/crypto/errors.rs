@@ -73,3 +73,15 @@ error! {
     description: "The ciphertext provided was impossible to decrypt.",
     causes: (MissingHeader, InvalidHeader, InvalidMac, BrokenStream, BincodeError)
 }
+
+error! {
+    type: SignError,
+    description: "failed to sign the data",
+    causes: (BincodeError)
+}
+
+error! {
+    type: VerifyError,
+    description: "unable to verify signature",
+    causes: (SodiumError, BincodeError),
+}

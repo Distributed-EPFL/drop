@@ -8,6 +8,7 @@ mod key;
 mod ops;
 mod parse;
 pub mod seal;
+pub mod sign;
 pub mod stream;
 
 // Structs
