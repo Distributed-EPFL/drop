@@ -7,6 +7,7 @@ pub mod hash;
 mod key;
 mod ops;
 mod parse;
+pub mod seal;
 pub mod stream;
 
 // Structs
