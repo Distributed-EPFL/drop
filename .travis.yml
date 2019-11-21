@@ -15,10 +15,13 @@ addons:
 
 cache: cargo
 rust:
+  - stable
+  - beta
   - nightly
 
 script:
-- cargo test
+  - cargo build
+  - cargo test
 
 after_success: |
     wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
