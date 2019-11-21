@@ -5,16 +5,35 @@ addons:
     apt:
         packages:
             - libssl-dev
+            - libcurl4-openssl-dev
+            - libelf-dev
+            - libdw-dev
+            - cmake
+            - gcc
+            - binutils-dev
+            - libiberty-dev
+
 cache: cargo
 rust:
+  - stable
+  - beta
   - nightly
 
-install: |
-  cargo install cargo-tarpaulin || :
-
 script:
-- cargo test
+  - cargo build
+  - cargo test
 
 after_success: |
-  cargo tarpaulin --all --exclude-files tests/* macros/* --out Xml
-  bash <(curl -s https://codecov.io/bash)
+    wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
+    tar xzf master.tar.gz &&
+    cd kcov-master &&
+    mkdir build &&
+    cd build &&
+    cmake .. &&
+    make &&
+    make install DESTDIR=../../kcov-build &&
+    cd ../.. &&
+    rm -rf kcov-master &&
+    for file in target/debug/drop-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
+    bash <(curl -s https://codecov.io/bash) &&
+    echo "Uploaded code coverage"

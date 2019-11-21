@@ -1,6 +1,3 @@
-#![feature(const_fn)]
-#![feature(specialization)]
-
 /// Secure communication channels using sodiumoxide
 pub mod crypto;
 /// Error definition and handling
