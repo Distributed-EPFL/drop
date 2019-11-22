@@ -4,7 +4,7 @@ mod convert;
 mod errors;
 mod format;
 pub mod hash;
-mod key;
+pub mod key;
 mod ops;
 mod parse;
 pub mod seal;

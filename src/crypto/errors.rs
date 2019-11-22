@@ -75,6 +75,12 @@ error! {
 }
 
 error! {
+    type: ExchangeError,
+    description: "unable to exchange key",
+    causes: (VerifyError)
+}
+
+error! {
     type: SignError,
     description: "failed to sign the data",
     causes: (BincodeError)
