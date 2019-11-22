@@ -1,4 +1,5 @@
 use super::super::errors::{SodiumError, VerifyError};
+use super::super::stream::{Pull, Push};
 use super::Key;
 
 use sodiumoxide::crypto::kx::{
@@ -51,7 +52,11 @@ pub struct Session {
     receive: Key,
 }
 
-impl Session {}
+impl Into<(Push, Pull)> for Session {
+    fn into(self) -> (Push, Pull) {
+        (Push::new(self.transmit), Pull::new(self.receive))
+    }
+}
 
 /// A structure used to compute a shared secret with another
 /// party using a `KeyPair` and the other party's `PublicKey`
