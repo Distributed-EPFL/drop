@@ -1,8 +1,8 @@
-// Dependencies
+use std::any::type_name;
 
+use drop::error::error;
 use drop::error::Error;
 use drop::here;
-use drop::error::error;
 
 error! {
     type: NoFields,

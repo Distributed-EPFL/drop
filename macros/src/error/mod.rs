@@ -1,17 +1,11 @@
-// Modules
-
 mod data;
 mod format;
 mod impls;
 mod nest;
 mod parse;
 
-// Dependencies
-
 use quote::quote;
 use syn::parse_macro_input;
-
-// Functions
 
 pub fn error(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let error = parse_macro_input!(input as parse::Error);

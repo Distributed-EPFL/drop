@@ -1,11 +1,7 @@
-// Dependencies
-
 use super::hash::Digest;
 use super::key::Key;
 use sodiumoxide::utils;
 use std::ops::Drop;
-
-// Implementations
 
 impl PartialEq<Digest> for Digest {
     fn eq(&self, rhs: &Digest) -> bool {

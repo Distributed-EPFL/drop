@@ -1,13 +1,9 @@
-// Dependencies
-
 use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Display;
 
 use super::hash::Digest;
 use super::key::Key;
-
-// Implementations
 
 impl Display for Digest {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
@@ -45,15 +41,11 @@ impl Debug for Key {
     }
 }
 
-// Tests
-
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
 mod tests {
     use super::*;
     use std::convert::TryFrom;
-
-    // Test cases
 
     #[test]
     fn reference() {

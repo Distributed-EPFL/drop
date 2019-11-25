@@ -1,5 +1,3 @@
-// Dependencies
-
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::BinaryHeap;
@@ -9,13 +7,9 @@ use std::collections::LinkedList;
 use std::collections::VecDeque;
 use std::vec::Vec;
 
-// Traits
-
 pub trait Typename {
     fn typename() -> String;
 }
-
-// Primitives
 
 macro_rules! implement {
     ($($type:ty), *) => ($(
@@ -32,8 +26,6 @@ implement!(
     str, String
 );
 
-// Arrays
-
 macro_rules! implement {
     ($($size:expr), *) => ($(
         impl<Type: Typename> Typename for [Type; $size] {
@@ -49,8 +41,6 @@ implement!(
     22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 64, 128, 256, 512, 1024, 2048,
     4096, 8192
 );
-
-// Tuples
 
 macro_rules! implement {
     ($($types:ident),+) => {
@@ -74,8 +64,6 @@ implement!(A, B, C, D, E, F, G, H, I);
 implement!(A, B, C, D, E, F, G, H, I, J);
 implement!(A, B, C, D, E, F, G, H, I, J, K);
 implement!(A, B, C, D, E, F, G, H, I, J, K, L);
-
-// References
 
 impl<Type: Typename> Typename for &'static Type {
     fn typename() -> String {

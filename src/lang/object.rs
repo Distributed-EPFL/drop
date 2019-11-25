@@ -1,17 +1,11 @@
-// Dependencies
-
 use std::any::Any;
 
 use super::typename::Typename;
-
-// Structs
 
 pub struct Object {
     typename: String,
     object: Box<dyn Any>,
 }
-
-// Implementations
 
 impl Object {
     pub fn new<Type: Any + Typename>(object: Type) -> Self {

@@ -1,5 +1,3 @@
-// Dependencies
-
 use proc_macro2::Span;
 use syn::FieldsNamed;
 use syn::FieldsUnnamed;
@@ -11,7 +9,6 @@ use syn::parse::Parse;
 use syn::parse::ParseStream;
 use syn::punctuated::Punctuated;
 
-// Keywords
 
 mod keyword {
     use syn::custom_keyword;
@@ -20,53 +17,49 @@ mod keyword {
     custom_keyword!(causes);
 }
 
-// Data structures
-
 pub struct Error {
     pub idents: Idents,
     pub description: LitStr,
-    pub data: ErrorData
+    pub data: ErrorData,
 }
 
 pub struct Idents {
     pub error: Ident,
-    pub cause: Ident
+    pub cause: Ident,
 }
 
 pub enum ErrorData {
     None,
     Fields(FieldsNamed),
-    Causes(FieldsUnnamed)
+    Causes(FieldsUnnamed),
 }
 
 enum ErrorProperty {
     Type(ErrorType),
     Description(ErrorDescription),
     Fields(ErrorFields),
-    Causes(ErrorCauses)
+    Causes(ErrorCauses),
 }
 
 struct ErrorType {
     type_token: Token![type],
-    ident: Ident
+    ident: Ident,
 }
 
 struct ErrorDescription {
     description_token: keyword::description,
-    description: LitStr
+    description: LitStr,
 }
 
 struct ErrorFields {
     fields_token: keyword::fields,
-    fields: FieldsNamed
+    fields: FieldsNamed,
 }
 
 struct ErrorCauses {
     causes_token: keyword::causes,
-    causes: FieldsUnnamed
+    causes: FieldsUnnamed,
 }
-
-// Implementations
 
 impl Parse for Error {
     fn parse(input: ParseStream) -> Result<Self> {

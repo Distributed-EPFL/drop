@@ -1,12 +1,9 @@
-// Dependencies
-
 use proc_macro2::TokenStream;
 use quote::quote;
 use std::iter;
 use super::parse::Error;
 use super::parse::ErrorData;
 
-// Functions
 
 pub fn display(error: &Error) -> TokenStream {
     let error_ident = &error.idents.error;
