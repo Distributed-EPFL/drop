@@ -166,7 +166,6 @@ impl Seal {
     {
         self.decrypt_ref(sender_key, ciphertext)
             .map(|x: T| x.to_owned())
-            .map_err(|e| e.into())
     }
 }
 
