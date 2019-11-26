@@ -2,12 +2,11 @@ use std::any::Any;
 
 use super::error::Error;
 use super::spotting::Spotting;
-use crate::lang::Typename;
 
 pub trait Context {
     fn spot(self, spotting: Spotting) -> Self;
     fn add<Text: Into<String>>(self, context: Text) -> Self;
-    fn attach<Payload: Any + Typename>(self, attachment: Payload) -> Self;
+    fn attach<Payload: Any>(self, attachment: Payload) -> Self;
 }
 
 impl<Ok, Err: Error> Context for Result<Ok, Err> {
@@ -19,7 +18,7 @@ impl<Ok, Err: Error> Context for Result<Ok, Err> {
         self.map_err(|err| err.add(context))
     }
 
-    fn attach<Payload: Any + Typename>(self, attachment: Payload) -> Self {
+    fn attach<Payload: Any>(self, attachment: Payload) -> Self {
         self.map_err(|err| err.attach(attachment))
     }
 }

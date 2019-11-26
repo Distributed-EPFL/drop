@@ -1,5 +1,5 @@
-use super::parse::Error;
-use super::parse::ErrorData;
+use super::parse::{Error, ErrorData};
+
 use proc_macro2::TokenStream;
 use quote::quote;
 use regex::Regex;
@@ -90,15 +90,15 @@ pub fn error(error: &Error) -> TokenStream {
                 error
             }
 
-            fn add<Text: std::convert::Into<String>>(self, context: Text) -> Self {
+            fn add<Text: Into<String>>(self, context: Text) -> Self {
                 let mut error = self;
                 error.more.push(context.into());
                 error
             }
 
-            fn attach<Payload: std::any::Any + drop::lang::Typename>(self, attachment: Payload) -> Self {
+            fn attach<Payload: std::any::Any>(self, attachment: Payload) -> Self {
                 let mut error = self;
-                error.attachments.push(drop::lang::Object::new(attachment));
+                error.attachments.push((std::any::type_name::<Payload>(), Box::new(attachment)));
                 error
             }
 
@@ -110,7 +110,7 @@ pub fn error(error: &Error) -> TokenStream {
                 &self.more
             }
 
-            fn attachments(&self) -> &Vec<drop::lang::Object> {
+            fn attachments(&self) -> &Vec<(&'static str, Box<std::any::Any>)> {
                 &self.attachments
             }
         }

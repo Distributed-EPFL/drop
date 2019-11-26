@@ -1,14 +1,8 @@
 use proc_macro2::Span;
-use syn::FieldsNamed;
-use syn::FieldsUnnamed;
-use syn::Ident;
-use syn::LitStr;
-use syn::Result;
-use syn::Token;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
-use syn::punctuated::Punctuated;
 
+use syn::parse::{Parse, ParseStream};
+use syn::punctuated::Punctuated;
+use syn::{FieldsNamed, FieldsUnnamed, Ident, LitStr, Result, Token};
 
 mod keyword {
     use syn::custom_keyword;
@@ -63,7 +57,8 @@ struct ErrorCauses {
 
 impl Parse for Error {
     fn parse(input: ParseStream) -> Result<Self> {
-        let properties: Punctuated<ErrorProperty, Token![,]> = input.parse_terminated(ErrorProperty::parse)?;
+        let properties: Punctuated<ErrorProperty, Token![,]> =
+            input.parse_terminated(ErrorProperty::parse)?;
 
         let mut ident = Option::<Ident>::None;
         let mut description = Option::<LitStr>::None;
@@ -78,14 +73,14 @@ impl Parse for Error {
                     } else {
                         return Err(syn::Error::new(property.type_token.span, "Property `type` can only appear once in an `error!`."));
                     }
-                },
+                }
                 ErrorProperty::Description(property) => {
                     if description.is_none() {
                         description = Some(property.description);
                     } else {
                         return Err(syn::Error::new(property.description_token.span, "Property `description` can only appear once in an `error!`."));
                     }
-                },
+                }
                 ErrorProperty::Fields(property) => {
                     if fields.is_none() && causes.is_none() {
                         fields = Some(property.fields);
@@ -94,7 +89,7 @@ impl Parse for Error {
                     } else {
                         return Err(syn::Error::new(property.fields_token.span, "Properties `fields` and `causes` cannot appear together in an `error!`."));
                     }
-                },
+                }
                 ErrorProperty::Causes(property) => {
                     if causes.is_none() && fields.is_none() {
                         causes = Some(property.causes);
@@ -108,17 +103,29 @@ impl Parse for Error {
         }
 
         if ident.is_none() {
-            Err(syn::Error::new(Span::call_site(), "Property `type` is required in an `error!`."))
+            Err(syn::Error::new(
+                Span::call_site(),
+                "Property `type` is required in an `error!`.",
+            ))
         } else if description.is_none() {
-            Err(syn::Error::new(Span::call_site(), "Property `description` is required in an `error!`."))
+            Err(syn::Error::new(
+                Span::call_site(),
+                "Property `description` is required in an `error!`.",
+            ))
         } else {
             let error = ident.unwrap();
             let cause = Ident::new(&format!("{}Cause", error), error.span());
 
-            Ok(Error{
-                idents: Idents{error, cause},
+            Ok(Error {
+                idents: Idents { error, cause },
                 description: description.unwrap(),
-                data: if fields.is_some() { ErrorData::Fields(fields.unwrap()) } else if causes.is_some() { ErrorData::Causes(causes.unwrap()) } else { ErrorData::None }
+                data: if fields.is_some() {
+                    ErrorData::Fields(fields.unwrap())
+                } else if causes.is_some() {
+                    ErrorData::Causes(causes.unwrap())
+                } else {
+                    ErrorData::None
+                },
             })
         }
     }
@@ -147,7 +154,7 @@ impl Parse for ErrorType {
         let _: Token![:] = input.parse()?;
         let ident = input.parse()?;
 
-        Ok(ErrorType{type_token, ident})
+        Ok(ErrorType { type_token, ident })
     }
 }
 
@@ -157,7 +164,10 @@ impl Parse for ErrorDescription {
         let _: Token![:] = input.parse()?;
         let description = input.parse()?;
 
-        Ok(ErrorDescription{description_token, description})
+        Ok(ErrorDescription {
+            description_token,
+            description,
+        })
     }
 }
 
@@ -167,7 +177,10 @@ impl Parse for ErrorFields {
         let _: Token![:] = input.parse()?;
         let fields = input.parse()?;
 
-        Ok(ErrorFields{fields_token, fields})
+        Ok(ErrorFields {
+            fields_token,
+            fields,
+        })
     }
 }
 
@@ -177,6 +190,9 @@ impl Parse for ErrorCauses {
         let _: Token![:] = input.parse()?;
         let causes = input.parse()?;
 
-        Ok(ErrorCauses{causes_token, causes})
+        Ok(ErrorCauses {
+            causes_token,
+            causes,
+        })
     }
 }

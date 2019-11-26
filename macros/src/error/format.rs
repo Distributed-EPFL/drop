@@ -1,9 +1,9 @@
+use std::iter;
+
+use super::parse::{Error, ErrorData};
+
 use proc_macro2::TokenStream;
 use quote::quote;
-use std::iter;
-use super::parse::Error;
-use super::parse::ErrorData;
-
 
 pub fn display(error: &Error) -> TokenStream {
     let error_ident = &error.idents.error;
@@ -21,7 +21,7 @@ pub fn display(error: &Error) -> TokenStream {
                     }),*
                 }
             }
-        },
+        }
         _ => {
             quote! {
                 write!(fmt, "[{}]", stringify!(#error_ident))?;
@@ -55,7 +55,7 @@ pub fn debug(error: &Error) -> TokenStream {
             write!(fmt, "\n  Context: {}", context)?;
         }
         for attachment in self.attachments() {
-            write!(fmt, "\n  Attachment: {}", attachment.typename())?
+            write!(fmt, "\n  Attachment: {}", attachment.0)?
         }
     };
 
@@ -72,8 +72,8 @@ pub fn debug(error: &Error) -> TokenStream {
                     }),*
                 }
             }
-        },
-        _ => TokenStream::new()
+        }
+        _ => TokenStream::new(),
     };
 
     quote! {
