@@ -25,15 +25,16 @@ pub const HEADER_LENGTH: usize = NONCE_LENGTH + TAG_LENGTH;
 
 /// A public key used to exchange message using asymmetric encryption
 /// through a `Seal`
-#[derive(Clone)]
+#[derive(Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct PublicKey(SodiumPublicKey);
+
 /// A secret key used to exchange message using asymmetric encryption
 /// through a `Seal`
-#[derive(Clone)]
+#[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
 pub struct SecretKey(SodiumSecretKey);
 
 /// An asymmetric key pair
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct KeyPair {
     public: PublicKey,
     secret: SecretKey,

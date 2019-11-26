@@ -6,6 +6,7 @@ use bincode::serialize;
 use serde::{Deserialize, Serialize};
 
 use sodiumoxide::crypto::generichash::State as SodiumState;
+use sodiumoxide::utils;
 
 /// Static size for hashes
 pub const SIZE: usize = 32;
@@ -37,8 +38,14 @@ impl Hasher {
 }
 
 /// A hash digest
-#[derive(Serialize, Deserialize, Hash, PartialOrd)]
+#[derive(Deserialize, Hash, Eq, PartialOrd, Serialize)]
 pub struct Digest(pub(super) [u8; SIZE]);
+
+impl PartialEq for Digest {
+    fn eq(&self, rhs: &Digest) -> bool {
+        utils::memcmp(&self.0, &rhs.0)
+    }
+}
 
 fn do_hash<M: Serialize>(
     mut hasher: Hasher,
@@ -67,7 +74,6 @@ pub fn authenticate<Message: Serialize>(
 }
 
 #[cfg(test)]
-#[cfg_attr(tarpaulin, skip)]
 mod tests {
     use std::collections::HashSet;
     use std::convert::TryFrom;

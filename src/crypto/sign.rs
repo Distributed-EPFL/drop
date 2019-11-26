@@ -2,7 +2,7 @@ use super::errors::{SignError, SodiumError, VerifyError};
 
 use bincode::serialize_into;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use sodiumoxide::crypto::sign::{
     gen_keypair, sign_detached, verify_detached, PublicKey as SodiumPublicKey,
@@ -15,15 +15,15 @@ pub use sodiumoxide::crypto::sign::{
 };
 
 /// A public key used for verifying messages
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize)]
 pub struct PublicKey(SodiumPublicKey);
 
 /// A secret key used for signing messages
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SecretKey(SodiumSecretKey);
 
 /// A key pair that can be used for both signing and verifying messages
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct KeyPair {
     public: PublicKey,
     secret: SecretKey,

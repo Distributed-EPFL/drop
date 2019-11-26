@@ -6,7 +6,7 @@ use super::errors::UnexpectedSize;
 use super::hash::Digest;
 use super::key::Key;
 
-pub trait ParseHex<To> {
+trait ParseHex<To> {
     fn parse_hex(&self) -> Result<To, ParseHexError>;
 }
 
@@ -51,7 +51,6 @@ impl TryFrom<&str> for Key {
 }
 
 #[cfg(test)]
-#[cfg_attr(tarpaulin, skip)]
 mod tests {
     use super::*;
 

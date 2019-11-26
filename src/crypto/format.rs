@@ -42,7 +42,6 @@ impl Debug for Key {
 }
 
 #[cfg(test)]
-#[cfg_attr(tarpaulin, skip)]
 mod tests {
     use super::*;
     use std::convert::TryFrom;

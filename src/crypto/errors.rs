@@ -77,7 +77,7 @@ error! {
 error! {
     type: ExchangeError,
     description: "unable to exchange key",
-    causes: (VerifyError)
+    causes: (SodiumError)
 }
 
 error! {

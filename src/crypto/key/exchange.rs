@@ -1,21 +1,23 @@
-use super::super::errors::{SodiumError, VerifyError};
+use super::super::errors::{ExchangeError, SodiumError};
 use super::super::stream::{Pull, Push};
 use super::Key;
+
+use serde::{Deserialize, Serialize};
 
 use sodiumoxide::crypto::kx::{
     client_session_keys, gen_keypair, server_session_keys,
     PublicKey as SodiumPubKey, SecretKey as SodiumSecKey,
 };
 
-#[derive(Clone, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// A `PublicKey` used to compute a shared secret with a remote party
 pub struct PublicKey(SodiumPubKey);
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// A `SecretKey` used to compute a shared secret with a remote party
 pub struct SecretKey(SodiumSecKey);
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 /// A `KeyPair` that can be used to exchange a secret symmetric key
 pub struct KeyPair {
     public: PublicKey,
@@ -82,10 +84,13 @@ impl Exchanger {
         &self.keypair
     }
 
-    /// Exchange keys with a remote peer that will act as a server.
+    /// Exchange keys with a remote peer.
     /// The resulting `SessionKey` can be used to securely encrypt and decrypt
-    /// data to and from the server.
-    pub fn exchange(&self, pubkey: &PublicKey) -> Result<Session, VerifyError> {
+    /// data to and from the remote peer.
+    pub fn exchange(
+        &self,
+        pubkey: &PublicKey,
+    ) -> Result<Session, ExchangeError> {
         if *pubkey < self.keypair.public {
             server_session_keys(
                 &self.keypair.public.0,
