@@ -1,23 +1,18 @@
 use std::fmt;
 
-use super::errors::BrokenStream;
-use super::errors::DecryptError;
-use super::errors::EncryptError;
-use super::errors::InvalidHeader;
-use super::errors::InvalidMac;
-use super::errors::MissingHeader;
+use super::errors::{
+    BrokenStream, DecryptError, EncryptError, InvalidHeader, InvalidMac,
+    MissingHeader,
+};
 use super::key::Key;
 
 use bincode::{deserialize, serialize_into};
 
 use serde::{Deserialize, Serialize};
 
-use sodiumoxide::crypto::secretstream::Header;
-use sodiumoxide::crypto::secretstream::Pull as SodiumPull;
-use sodiumoxide::crypto::secretstream::Push as SodiumPush;
-use sodiumoxide::crypto::secretstream::Stream;
-use sodiumoxide::crypto::secretstream::Tag;
-use sodiumoxide::crypto::secretstream::HEADERBYTES;
+use sodiumoxide::crypto::secretstream::{
+    Header, Pull as SodiumPull, Push as SodiumPush, Stream, Tag, HEADERBYTES,
+};
 
 enum PushState {
     Setup(Key),
