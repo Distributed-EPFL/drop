@@ -52,15 +52,17 @@ fn implementation() {
     assert_eq!(no_fields.spottings()[0].file, file);
     assert_eq!(no_fields.spottings()[0].line, line + 1);
 
-    let no_fields = no_fields.add("hello").add("world");
-    assert_eq!(no_fields.more()[0], "hello");
-    assert_eq!(no_fields.more()[1], "world");
+    let no_fields = no_fields.comment("hello").comment("world");
+    assert_eq!(no_fields.details()[0], "hello");
+    assert_eq!(no_fields.details()[1], "world");
 
     let no_fields = no_fields.attach(vec![1u32, 2u32, 3u32, 4u32]);
-    assert_eq!(no_fields.attachments()[0].0, type_name::<Vec<u32>>());
+    assert_eq!(
+        no_fields.attachments()[0].typename(),
+        type_name::<Vec<u32>>()
+    );
     assert_eq!(
         *no_fields.attachments()[0]
-            .1
             .downcast_ref::<Vec<u32>>()
             .unwrap(),
         vec![1u32, 2u32, 3u32, 4u32]
@@ -71,7 +73,7 @@ fn implementation() {
 fn nesting() {
     let with_fields = WithFields::new(4, "hello");
     let nested: Nested = with_fields.into();
-    let no_fields = NoFields::new().add("wrapped");
+    let no_fields = NoFields::new().comment("wrapped");
     let further_nested: FurtherNested = no_fields.into();
 
     match nested.cause() {
@@ -84,7 +86,7 @@ fn nesting() {
 
     match further_nested.cause() {
         FurtherNestedCause::NoFields(no_fields) => {
-            assert_eq!(no_fields.more()[0], "wrapped")
+            assert_eq!(no_fields.details()[0], "wrapped")
         }
         _ => panic!("Wrong cause for `FurtherNested` error."),
     }
@@ -96,7 +98,7 @@ fn format() {
     let line = line!();
     let with_fields = WithFields::new(4, "hello")
         .spot(here!())
-        .add("context")
+        .comment("context")
         .attach(77u32);
 
     assert_eq!(

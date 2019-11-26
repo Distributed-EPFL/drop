@@ -1,11 +1,11 @@
 use std::io::Error as IoError;
 
-use macros::error;
-
 use crate as drop;
 use crate::error::Error;
 
 use bincode::ErrorKind as BincodeErrorKind;
+
+use macros::error;
 
 pub type BincodeError = Box<BincodeErrorKind>;
 

@@ -13,7 +13,7 @@ pub fn error(error: &Error) -> TokenStream {
         backtrace: drop::backtrace::Backtrace,
         spottings: std::vec::Vec<drop::error::Spotting>,
         more: std::vec::Vec<String>,
-        attachments: std::vec::Vec<(&'static str, Box<std::any::Any>)>
+        attachments: std::vec::Vec<drop::error::Attachment>
     };
 
     let struct_fields = match &error.data {

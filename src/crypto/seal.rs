@@ -5,6 +5,7 @@ use super::errors::{DecryptError, EncryptError, InvalidMac, MissingHeader};
 use bincode::{deserialize, serialize_into};
 
 use serde::{Deserialize, Serialize};
+
 use sodiumoxide::crypto::box_::{
     gen_keypair, gen_nonce, open_detached, seal_detached, Nonce as SodiumNonce,
     PublicKey as SodiumPublicKey, SecretKey as SodiumSecretKey,

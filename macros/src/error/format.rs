@@ -51,11 +51,11 @@ pub fn debug(error: &Error) -> TokenStream {
         for spotting in self.spottings() {
             write!(fmt, "\n  Spotted: {}, line {}", spotting.file, spotting.line)?;
         }
-        for context in self.more() {
+        for context in self.details() {
             write!(fmt, "\n  Context: {}", context)?;
         }
         for attachment in self.attachments() {
-            write!(fmt, "\n  Attachment: {}", attachment.0)?
+            write!(fmt, "\n  Attachment: {}", attachment.typename())?
         }
     };
 
