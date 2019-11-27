@@ -46,6 +46,7 @@ pub struct Push {
 }
 
 impl Push {
+    /// Create a new `Push` using the specified `Key` to encrypt messages
     pub fn new(key: Key) -> Self {
         Push {
             state: PushState::Setup(key),
@@ -53,6 +54,8 @@ impl Push {
         }
     }
 
+    /// Encrypt an arbitrary message into a slice of bytes. <br />
+    /// The resulting slice of bytes is allocated and returned as a `Vec<u8>`
     pub fn encrypt<T>(&mut self, message: &T) -> Result<Vec<u8>, EncryptError>
     where
         T: Serialize,
