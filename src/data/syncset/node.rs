@@ -1,5 +1,3 @@
-use crate as drop;
-use crate::bytewise::Readable;
 use crate::crypto::hash::{hash, Digest};
 
 use super::errors::*;
@@ -418,8 +416,8 @@ impl<Data: Syncable> Node<Data> {
     }
 }
 
-#[derive(Readable)]
-struct ConcatDigest(#[bytewise] Digest, #[bytewise] Digest);
+#[derive(serde::Serialize)]
+struct ConcatDigest(Digest, Digest);
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]

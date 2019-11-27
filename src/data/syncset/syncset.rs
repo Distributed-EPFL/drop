@@ -12,10 +12,10 @@ pub struct SyncSet<Data: Syncable> {
 
 // Round, the structure used to sync Syncsets
 #[derive(Debug, Clone)]
-pub struct Round<Data: Syncable> {
-    pub view: Vec<Set<Data>>,
-    pub add: Vec<Data>,
-    pub remove: Vec<Data>,
+pub struct Round<'a, 'b, Data: Syncable> {
+    pub view: Vec<Set<&'a Data>>,
+    pub add: Vec<&'b Data>,
+    pub remove: Vec<&'a Data>,
 }
 
 // Syncset implementation
@@ -49,7 +49,7 @@ impl<Data: Syncable> SyncSet<Data> {
     /// if the entire sub-tree at the path should be returned, regardless of size.
     /// For instance, calling get(...) with an empty prefix, and dump set to true
     /// will return all the elements of the set.
-    pub fn get(&self, prefix: &Prefix, dump: bool) -> Result<Set<Data>, SyncError> {
+    pub fn get(&self, prefix: &Prefix, dump: bool) -> Result<Set<&Data>, SyncError> {
         use Node::*;
         let node_at_prefix = self.root.node_at(prefix, 0);
         match node_at_prefix {
@@ -120,7 +120,7 @@ impl<Data: Syncable> SyncSet<Data> {
     /// Round.remove will contain the nodes that this SyncSet contains but aren't
     /// present in the view, Round.add will contain the nodes that are present in
     /// the view, but not in this set.
-    pub fn sync(&self, view: &Vec<Set<Data>>) -> Result<Round<Data>, SyncError> {
+    pub fn sync<'a,'b>(&'a self, view: &'b Vec<Set<Data>>) -> Result<Round<'a, 'b, Data>, SyncError> {
         // Figure out how much to pre-allocate
         let mut elem_count = 0;
         for set in view {
@@ -129,9 +129,9 @@ impl<Data: Syncable> SyncSet<Data> {
             }
         }
 
-        let mut new_view: Vec<Set<Data>> = Vec::with_capacity(view.len() * 2);
-        let mut to_add: Vec<Data> = Vec::with_capacity(elem_count);
-        let mut to_remove: Vec<Data> = Vec::with_capacity(elem_count);
+        let mut new_view: Vec<Set<&Data>> = Vec::with_capacity(view.len() * 2);
+        let mut add: Vec<&Data> = Vec::with_capacity(elem_count);
+        let mut remove: Vec<&Data> = Vec::with_capacity(elem_count);
 
         // Iterate over the view, and compare each set at each path to this syncset's set at the
         // same path
@@ -175,7 +175,19 @@ impl<Data: Syncable> SyncSet<Data> {
                         ..
                     } = &local_set
                     {
-                        if remote_data != local_data {
+                        // Cannot use standard vector comparison; one vector owns its data, while the other one not
+                        let mut vectors_equal = remote_data.len() == local_data.len();
+                        for i in 0..remote_data.len() {
+                            if !vectors_equal {
+                                break;
+                            }
+
+                            unsafe {
+                                vectors_equal = remote_data.get_unchecked(i) == *local_data.get_unchecked(i);
+                            }
+                        }
+
+                        if !vectors_equal {
                             // Keep track of hashes to avoid recomputing them at every iteration
                             let mut local_hash_opt = None;
                             let mut remote_hash_opt = None;
@@ -202,14 +214,14 @@ impl<Data: Syncable> SyncSet<Data> {
 
                                 // Add elements in order
                                 if remote_hash < local_hash {
-                                    let new = unsafe { remote_data.get_unchecked(i) }.clone();
-                                    to_add.push(new);
+                                    let new = unsafe { remote_data.get_unchecked(i) };
+                                    add.push(new);
                                     i += 1;
                                     remote_hash_opt = None;
                                 } else if remote_hash > local_hash {
                                     let new = unsafe { local_data.get_unchecked(i) }.clone();
 
-                                    to_remove.push(new);
+                                    remove.push(new);
                                     j += 1;
                                     local_hash_opt = None;
                                 } else {
@@ -223,12 +235,12 @@ impl<Data: Syncable> SyncSet<Data> {
 
                             // Iterate over the remaining array (since the other one is empty now)
                             while i < remote_data.len() {
-                                to_add.push(unsafe { remote_data.get_unchecked(i) }.clone());
+                                add.push(unsafe { remote_data.get_unchecked(i) });
                                 i += 1;
                             }
 
                             while j < local_data.len() {
-                                to_remove.push(unsafe { local_data.get_unchecked(j) }.clone());
+                                remove.push(unsafe { local_data.get_unchecked(j) });
                                 j += 1;
                             }
 
@@ -243,8 +255,8 @@ impl<Data: Syncable> SyncSet<Data> {
             }
         }
         Ok(Round {
-            add: to_add,
-            remove: to_remove,
+            add: add,
+            remove: remove,
             view: new_view,
         })
     }
@@ -333,7 +345,7 @@ mod tests {
                         assert!(!dump, "get returns wrong value for dump");
                         let mut success = false;
                         for elem in underlying {
-                            if elem == &arbitrary_elem {
+                            if *elem == &arbitrary_elem {
                                 success = true
                             }
                         }
@@ -377,7 +389,7 @@ mod tests {
                         assert!(!dump, "get returns wrong value for dump");
 
                         for elem in underlying {
-                            assert_ne!(elem, &arbitrary_non_elem, "Non-elem found in get()");
+                            assert_ne!(*elem, &arbitrary_non_elem, "Non-elem found in get()");
                         }
                     }
                 }
@@ -488,20 +500,35 @@ mod tests {
             bob.get(&Prefix::empty(), true).unwrap(),
             "Alice and Bob shouldn't have the same elements"
         );
-        let mut round = alice.start_sync().unwrap();
-        let mut alice_turn = false;
-        while round.view.len() != 0 {
-            if alice_turn {
-                round = alice.sync(&round.view).unwrap();
-                insert_all(&mut elems_alice_thinks_bob_hasnt, round.remove);
-                insert_all(&mut elems_alice_thinks_bob_has, round.add);
-            } else {
-                round = bob.sync(&round.view).unwrap();
-                insert_all(&mut elems_bob_thinks_alice_hasnt, round.remove);
-                insert_all(&mut elems_bob_thinks_alice_has, round.add);
-            }
+        {
+            let init_round = alice.start_sync().unwrap();
+            let mut view: Vec<_> = init_round.view.iter().map(|e| e.obtain_ownership()).collect();
+            let mut alice_turn = false;
+            while view.len() != 0 {
+                let round = if alice_turn {
+                    let round = alice.sync(&view).unwrap();
+                    insert_all(&mut elems_alice_thinks_bob_hasnt, &round.remove);
+                    insert_all(&mut elems_alice_thinks_bob_has, &round.add);
+                    round
+                } else {
+                    let round = bob.sync(&view).unwrap();
+                    insert_all(&mut elems_bob_thinks_alice_hasnt, &round.remove);
+                    insert_all(&mut elems_bob_thinks_alice_has, &round.add);
+                    round
+                };
 
-            alice_turn = !alice_turn
+
+                // Copy over the elements owned by the sets
+                // Normally this would happen as a serialize -> network -> deserialize process
+                /*
+                view.clear();
+                for elem in &round.view {
+                    let to_insert = elem.obtain_ownership();
+                    view.push(to_insert);
+                }*/
+                view = round.view.iter().map(|e| e.obtain_ownership()).collect();
+                alice_turn = !alice_turn
+            }
         }
 
         assert_eq!(
@@ -530,20 +557,28 @@ mod tests {
 
         // Bob is now a subset of alice
         let mut diff = Set::new();
-        round = alice.start_sync().unwrap();
-        alice_turn = false;
-        while round.view.len() != 0 {
-            if alice_turn {
-                round = alice.sync(&round.view).unwrap();
-                assert!(round.add.is_empty(), "Round add isn't empty for alice");
-                insert_all(&mut diff, round.remove);
-            } else {
-                round = bob.sync(&round.view).unwrap();
-                assert!(round.remove.is_empty(), "Round remove isn't empty for bob");
-                insert_all(&mut diff, round.add);
-            }
+        {
+            let init_round = alice.start_sync().unwrap();
+            let mut view: Vec<_> = init_round.view.iter().map(|e| e.obtain_ownership()).collect();
+            let mut alice_turn = false;
+            while view.len() != 0 {
 
-            alice_turn = !alice_turn
+                let round = if alice_turn {
+                    let round = alice.sync(&view).unwrap();
+                    assert!(round.add.is_empty(), "Round add isn't empty for alice");
+                    insert_all(&mut diff, &round.remove);
+                    round
+                } else {
+                    let round = bob.sync(&view).unwrap();
+                    assert!(round.remove.is_empty(), "Round remove isn't empty for bob");
+                    insert_all(&mut diff, &round.add);
+                    round
+                };
+                // Copy over the elements owned by the sets
+                // Normally this would happen as a serialize -> network -> deserialize process
+                view = round.view.iter().map(|e| e.obtain_ownership()).collect();
+                alice_turn = !alice_turn
+            }
         }
 
         assert_eq!(
@@ -552,9 +587,9 @@ mod tests {
         );
     }
 
-    fn insert_all<T: Eq + std::hash::Hash>(left: &mut std::collections::HashSet<T>, right: Vec<T>) {
+    fn insert_all<T: Eq + std::hash::Hash + Clone>(left: &mut std::collections::HashSet<T>, right: &Vec<&T>) {
         for elem in right {
-            left.insert(elem);
+            left.insert((*elem).clone());
         }
     }
 }

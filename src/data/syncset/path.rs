@@ -1,15 +1,8 @@
 use super::errors::PathLengthError;
-use crate::bytewise::Load;
-use crate::bytewise::ReadError;
-use crate::bytewise::Readable;
-use crate::bytewise::Reader;
-use crate::bytewise::Size;
-use crate::bytewise::Writable;
-use crate::bytewise::WriteError;
-use crate::bytewise::Writer;
 use crate::crypto::hash::{hash, Digest, SIZE as HASH_SIZE};
 use crate::crypto::HashError;
-use crate::data::Varint;
+
+use serde::{Serialize, Deserialize};
 
 use std::convert::TryInto;
 
@@ -24,7 +17,7 @@ pub struct Path(pub(super) Digest);
 
 /// Navigator
 /// Guaranteed to have 0 <= n <= HASH_SIZE * 8 bits of depth
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Prefix {
     inner: [u8; HASH_SIZE],
     depth: usize,
@@ -79,7 +72,7 @@ impl Path {
     }
 
     /// Standard constructor
-    pub fn new<Data: Readable>(data: &Data) -> Result<Path, HashError> {
+    pub fn new<Data: Serialize>(data: &Data) -> Result<Path, HashError> {
         let digest = hash(data)?;
         Ok(Path(digest))
     }
@@ -190,7 +183,7 @@ impl Prefix {
     }
 
     /// Hashes a data element, and creates a path out of the digest
-    pub fn new<Data: Readable>(data: &Data, depth: usize) -> Result<Prefix, HashError> {
+    pub fn new<Data: Serialize>(data: &Data, depth: usize) -> Result<Prefix, HashError> {
         let digest = hash(data)?;
         Ok(Prefix::from_digest(&digest, depth))
     }
@@ -224,45 +217,6 @@ impl Prefix {
     }
 }
 
-// Trait Implementations
-
-impl Readable for Prefix {
-    const SIZE: Size = Size::variable();
-
-    fn accept<Visitor: Reader>(&self, visitor: &mut Visitor) -> Result<(), ReadError> {
-        // Either we try_into() or we use as. In practice, depth should always fit into a u32
-        let varint_depth = Varint(self.depth.try_into().expect("Depth couldn't fit into a u32"));
-        varint_depth.accept(visitor)?;
-        let num_bytes = bytes_needed(self.depth);
-        visitor.push(&self.inner[0..num_bytes])?;
-        Ok(())
-    }
-}
-
-impl Writable for Prefix {
-    const SIZE: Size = Size::variable();
-
-    fn accept<Visitor: Writer>(&mut self, visitor: &mut Visitor) -> Result<(), WriteError> {
-        let depth = Varint::load(visitor)?.0 as usize;
-        let num_bytes = bytes_needed(depth);
-        let mut inner: [u8; HASH_SIZE] = [0; HASH_SIZE];
-        let received = visitor.pop(num_bytes)?;
-        for i in 0..num_bytes {
-            inner[i] = received[i];
-        };
-        self.depth = depth;
-        self.inner = inner;
-        Ok(())
-    }
-}
-
-impl Load for Prefix {
-    fn load<From: Writer>(from: &mut From) -> Result<Self, WriteError> {
-        let mut res = Prefix::empty();
-        Writable::accept(&mut res, from)?;
-        Ok(res)
-    }
-}
 
 // Helper Functions
 
@@ -281,9 +235,7 @@ fn get_mask(bit_idx: usize) -> u8 {
     1 << (BITS_IN_BYTE - bit_idx - 1)
 }
 
-fn bytes_needed(depth: usize) -> usize {
-    ((depth + BITS_IN_BYTE - 1) / BITS_IN_BYTE) as usize
-}
+
 
 #[cfg(test)]
 #[cfg_attr(tarpaulin, skip)]
@@ -337,14 +289,6 @@ mod tests {
                 assert!(is_bit_set(byte, i))
             }
         }
-    }
-
-    #[test]
-    fn bytes_needed_test() {
-        assert_eq!(bytes_needed(3), 1);
-        assert_eq!(bytes_needed(0), 0);
-        assert_eq!(bytes_needed(32), 4);
-        assert_eq!(bytes_needed(1), 1);
     }
 
     // Full Path tests
@@ -443,46 +387,6 @@ mod tests {
             depth: 0,
         };
         assert!(empty.is_prefix_of(&full), "empty prefix returned false");
-    }
-
-    #[test]
-    fn serialization() {
-        use crate::bytewise::{deserialize, serialize};
-        for depth in 0..=Path::NUM_BITS {
-            let prefix = Prefix::new(&15092, depth).unwrap();
-            let serialized = serialize(&prefix).unwrap();
-
-            let expected_depth_size: usize = min_bytes_to_represent(depth);
-
-            let expected_vec_len = bytes_needed(depth);
-            let expected_vec_size = expected_vec_len as usize;
-            assert_eq!(
-                serialized.len(),
-                expected_depth_size + expected_vec_size,
-                "Serialized version too long"
-            );
-
-            let deserialized: Prefix = deserialize(serialized.as_slice()).unwrap();
-
-            assert_eq!(deserialized.depth, prefix.depth, "Depths didn't match");
-            for i in 0..depth {
-                assert_eq!(
-                    deserialized.at(i),
-                    prefix.at(i),
-                    "Deserialized didn't match original"
-                );
-            }
-        }
-    }
-
-    fn min_bytes_to_represent(elem: usize) -> usize {
-        if elem >= 16384 {
-            4
-        } else if elem >= 128 {
-            2
-        } else {
-            1
-        }
     }
 
     #[test]

@@ -14,11 +14,11 @@ pub use set::Set;
 pub use syncset::SyncSet;
 
 // Dependancies
-use crate::bytewise::Readable;
+use serde::Serialize;
 
 // Traits
-pub trait Syncable: Clone + Readable + PartialEq {}
-impl<T: Clone + Readable + PartialEq> Syncable for T {}
+pub trait Syncable: Serialize + PartialEq {}
+impl<T: Serialize + PartialEq> Syncable for T {}
 
 // Constants
 const DUMP_THRESHOLD: usize = 5;
