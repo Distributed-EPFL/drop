@@ -1,5 +1,3 @@
-use std::mem;
-
 use super::errors::{DecryptError, EncryptError, InvalidMac, MissingHeader};
 
 use bincode::{deserialize, serialize_into};
@@ -9,19 +7,22 @@ use serde::{Deserialize, Serialize};
 use sodiumoxide::crypto::box_::{
     gen_keypair, gen_nonce, open_detached, seal_detached, Nonce as SodiumNonce,
     PublicKey as SodiumPublicKey, SecretKey as SodiumSecretKey,
-    Tag as SodiumTag,
+    Tag as SodiumTag, MACBYTES, NONCEBYTES, PUBLICKEYBYTES, SECRETKEYBYTES,
 };
 
 /// Length of the nonce prefixing each message
-pub const NONCE_LENGTH: usize = mem::size_of::<SodiumNonce>();
+pub const NONCE_LENGTH: usize = NONCEBYTES;
 
-/// Length of asymmetric keys used by `Seal`
-pub const KEY_LENGTH: usize = mem::size_of::<SodiumSecretKey>();
+/// Length of asymmetric public keys used by `Seal`
+pub const PUBLIC_LENGTH: usize = PUBLICKEYBYTES;
+
+/// Length of asymmetric secret keys used by `Seal`
+pub const SECRET_LENGTH: usize = SECRETKEYBYTES;
 
 /// Size of the authentication tag used
-pub const TAG_LENGTH: usize = mem::size_of::<SodiumTag>();
+pub const TAG_LENGTH: usize = MACBYTES;
 
-/// Size of the header at the start of each message
+/// Size of the header at the beginning of each message
 pub const HEADER_LENGTH: usize = NONCE_LENGTH + TAG_LENGTH;
 
 /// A public key used to exchange message using asymmetric encryption
@@ -214,7 +215,8 @@ mod tests {
     fn size_assert() {
         assert_eq!(TAG_LENGTH, 16, "sodium tag length has changed");
         assert_eq!(NONCE_LENGTH, 24, "sodium nonce length has changed");
-        assert_eq!(KEY_LENGTH, 32, "sodium key length has changed");
+        assert_eq!(PUBLIC_LENGTH, 32, "sodium key length has changed");
+        assert_eq!(SECRET_LENGTH, 32, "sodium key length has changed");
     }
 
     #[test]
