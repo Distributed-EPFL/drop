@@ -21,9 +21,8 @@ pub enum Set<Data> {
 
 impl<Data: Syncable> Set<Data> {
     // Constructors, for ease of use
-    pub(super) fn new_dataset(prefix: Prefix, node: &Node<Data>, dump: bool) -> Set<Data> {
-        let mut underlying: Vec<Data> = Vec::with_capacity(node.size());
-        node.traverse(&mut |elem| underlying.push(elem.clone()));
+    pub(super) fn new_dataset(prefix: Prefix, node: &Node<Data>, dump: bool) -> Set<&Data> {
+        let underlying = node.dump();
 
         Set::ListSet {
             underlying,
@@ -38,6 +37,24 @@ impl<Data: Syncable> Set<Data> {
             underlying,
             prefix,
             dump,
+        }
+    }
+}
+
+impl<Data: Syncable + Clone> Set<&Data> {
+    /// Clones the inner elements to obtain a Set that owns its data
+    pub fn obtain_ownership(&self) -> Set<Data> {
+        use Set::*;
+        match self {
+            LabelSet { prefix, label } => LabelSet { prefix: prefix.clone(), label: label.clone() },
+            ListSet { underlying, prefix, dump } => {
+                let mut new_underlying: Vec<Data> = Vec::with_capacity(underlying.len());
+                for elem in underlying {
+                    new_underlying.push((*elem).clone());
+                }
+
+                ListSet { underlying: new_underlying, prefix: prefix.clone(), dump: *dump }
+            }
         }
     }
 }
