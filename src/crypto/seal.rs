@@ -129,7 +129,7 @@ impl Seal {
     pub fn decrypt_ref<T>(
         &mut self,
         sender_key: &PublicKey,
-        ciphertext: &mut [u8],
+        ciphertext: &[u8],
     ) -> Result<T, DecryptError>
     where
         for<'de> T: Deserialize<'de>,
@@ -144,8 +144,11 @@ impl Seal {
             SodiumNonce::from_slice(&ciphertext[TAG_LENGTH..HEADER_LENGTH])
                 .ok_or(InvalidMac::new())?;
 
+        self.buffer.clear();
+        self.buffer.extend_from_slice(&ciphertext[HEADER_LENGTH..]);
+
         open_detached(
-            &mut ciphertext[HEADER_LENGTH..],
+            &mut self.buffer,
             &tag,
             &nonce,
             &sender_key.0,
@@ -153,7 +156,7 @@ impl Seal {
         )
         .map_err(|_| InvalidMac::new())?;
 
-        Ok(deserialize(&ciphertext[HEADER_LENGTH..])?)
+        Ok(deserialize(&self.buffer)?)
     }
 
     /// Decrypts a serializable message from a slice of bytes. This method is
@@ -162,7 +165,7 @@ impl Seal {
     pub fn decrypt<T>(
         &mut self,
         sender_key: &PublicKey,
-        ciphertext: &mut [u8],
+        ciphertext: &[u8],
     ) -> Result<T, DecryptError>
     where
         for<'de> T: Deserialize<'de> + ToOwned<Owned = T>,
