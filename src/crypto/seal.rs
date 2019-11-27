@@ -1,6 +1,6 @@
 use super::errors::{DecryptError, EncryptError, InvalidMac, MissingHeader};
 
-use bincode::{deserialize, serialize_into};
+use bincode::{deserialize, serialize_into, serialized_size};
 
 use serde::{Deserialize, Serialize};
 
@@ -96,22 +96,22 @@ impl Seal {
         message: &T,
     ) -> Result<Vec<u8>, EncryptError> {
         let nonce = gen_nonce();
+        let mut output = Vec::new();
+        let size = serialized_size(message)? as usize;
 
-        serialize_into(&mut self.buffer, message)?;
+        output.resize_with(size + NONCE_LENGTH + TAG_LENGTH, || 0);
+
+        serialize_into(&mut output[HEADER_LENGTH..], message)?;
 
         let tag = seal_detached(
-            &mut self.buffer,
+            &mut output[HEADER_LENGTH..],
             &nonce,
             &recipient_key.0,
             &self.keypair.secret.0,
         );
 
-        let mut output =
-            Vec::with_capacity(self.buffer.len() + NONCE_LENGTH + TAG_LENGTH);
-
-        output.extend_from_slice(tag.0.as_ref());
-        output.extend_from_slice(nonce.0.as_ref());
-        output.append(&mut self.buffer);
+        output[..TAG_LENGTH].copy_from_slice(tag.0.as_ref());
+        output[TAG_LENGTH..HEADER_LENGTH].copy_from_slice(nonce.0.as_ref());
 
         debug_assert_eq!(
             output.len(),
