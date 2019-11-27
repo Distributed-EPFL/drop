@@ -16,10 +16,7 @@ use sodiumoxide::crypto::secretstream::{
 
 enum PushState {
     Setup(Key),
-    Run {
-        stream: Stream<SodiumPush>,
-        buffer: Vec<u8>,
-    },
+    Run { stream: Stream<SodiumPush> },
 }
 
 enum PullState {
@@ -45,12 +42,14 @@ impl fmt::Debug for PullState {
 /// The sending end of an encrypted channel
 pub struct Push {
     state: PushState,
+    buffer: Vec<u8>,
 }
 
 impl Push {
     pub fn new(key: Key) -> Self {
         Push {
             state: PushState::Setup(key),
+            buffer: Vec::new(),
         }
     }
 
@@ -71,18 +70,16 @@ impl Push {
             PushState::Setup(key) => {
                 let (mut stream, header) =
                     Stream::init_push(&key.clone().into()).unwrap();
-                let mut buffer = Vec::new();
 
-                let mut ciphertext = encrypt(&mut stream, &mut buffer)?;
+                let mut ciphertext = encrypt(&mut stream, &mut self.buffer)?;
                 ciphertext.extend_from_slice(&header[..]);
 
-                self.state = PushState::Run { stream, buffer };
+                self.state = PushState::Run { stream };
                 Ok(ciphertext)
             }
-            PushState::Run {
-                ref mut stream,
-                ref mut buffer,
-            } => encrypt(stream, buffer),
+            PushState::Run { ref mut stream } => {
+                encrypt(stream, &mut self.buffer)
+            }
         }
     }
 }
