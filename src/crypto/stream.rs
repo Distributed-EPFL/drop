@@ -31,9 +31,9 @@ impl fmt::Debug for PullState {
             f,
             "{}",
             match self {
-                Self::Broken => "broken",
-                Self::Run(_) => "initialized",
                 Self::Setup(_) => "setting up",
+                Self::Run(_) => "initialized",
+                Self::Broken => "broken",
             }
         )
     }

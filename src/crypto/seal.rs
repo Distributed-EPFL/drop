@@ -45,11 +45,11 @@ pub struct KeyPair {
 impl KeyPair {
     /// Generate a new random `KeyPair`
     pub fn random() -> Self {
-        let keypair = gen_keypair();
+        let (public, secret) = gen_keypair();
 
         Self {
-            public: PublicKey(keypair.0),
-            secret: SecretKey(keypair.1),
+            public: PublicKey(public),
+            secret: SecretKey(secret),
         }
     }
 }
@@ -78,14 +78,14 @@ impl Seal {
         Self::new(KeyPair::random())
     }
 
-    /// Get a reference to the `SecretKey` in use within this `Seal`
-    pub fn secret(&self) -> &SecretKey {
-        &self.keypair.secret
-    }
-
     /// Get a reference to the `PublicKey` in use within this `Seal`
     pub fn public(&self) -> &PublicKey {
         &self.keypair.public
+    }
+
+    /// Get a reference to the `SecretKey` in use within this `Seal`
+    pub fn secret(&self) -> &SecretKey {
+        &self.keypair.secret
     }
 
     /// Encrypts a serializable message using the public key
