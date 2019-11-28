@@ -1,66 +1,34 @@
-use std::future::Future;
-
-use crate as drop;
-use macros::error;
-
-use serde::{Deserialize, Serialize};
-
-/// Connectors are used to establish connection to remote peers
-/// in a secure manner.
+/// Utilities to connect to other peers in a secure fashion
 pub mod connector;
 
-/// An abstract `Connection` used to send and receive data from peers
-pub trait Connection {
-    /// The type of `Error` that this `Connection` returns when unable to
-    /// send data
-    type Error;
+/// Utilities to open a listener for incoming connections
+pub mod listener;
 
-    /// Send a `Serialize` message asynchronously onto the network using this
-    /// `Connection`.
-    fn send<T: Serialize>(
-        &mut self,
-        msg: &T,
-    ) -> Box<dyn Future<Output = Result<(), Self::Error>>> {
-        self.send_async(msg)
-    }
+use crate as drop;
+use crate::error::Error;
 
-    /// Send a `Serialize` message onto the network. This method is not allowed
-    /// to block in any case
-    fn send_async<T: Serialize>(
-        &mut self,
-        msg: &T,
-    ) -> Box<dyn Future<Output = Result<(), Self::Error>>>;
+use async_trait::async_trait;
 
-    /// Send a `Serialize` message through this `Connection`. <br />
-    /// This method is allowed to block if the message can't be sent immediately.
-    fn send_sync<T: Serialize>(
-        &mut self,
-        msg: &T,
-    ) -> Box<dyn Future<Output = Result<(), Self::Error>>>;
+use macros::error;
 
-    /// Receive a `Deserialize message from the network asynchronously
-    fn receive<T>(&mut self) -> Box<dyn Future<Output = Result<T, Self::Error>>>
-    where
-        T: for<'de> Deserialize<'de> + Sized,
-    {
-        self.receive_async()
-    }
-
-    /// Receive a `Deserialize message from the network asynchronously
-    fn receive_async<T>(
-        &mut self,
-    ) -> Box<dyn Future<Output = Result<T, Self::Error>>>;
-
-    /// Receive a `Deserialize` message from this `Connection`. This method will
-    /// block if no data is available on this `Connection`
-    fn receive_sync<T>(
-        &mut self,
-    ) -> Box<dyn Future<Output = Result<T, Self::Error>>>
-    where
-        for<'de> T: Deserialize<'de> + Sized;
-}
+use tokio::io::Error as TokioErr;
 
 error! {
     type: TokioError,
     description: "tokio encountered an error",
+    causes: (TokioErr),
+}
+
+/// Trait for structs that are able to asynchronously send and receive data from
+/// the network
+#[async_trait]
+pub trait Connection {
+    /// The type of `Error` returned when this `Connection` fails
+    type Error;
+
+    /// Asynchronously receive a `Deserialize` value from this `Connection`
+    async fn receive(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+
+    /// Asynchronously send a `Serialize` message on this `Connection`
+    async fn send(&mut self, buf: &[u8]) -> Result<usize, Self::Error>;
 }
