@@ -1,8 +1,6 @@
 /// Tcp related listeners utilities
 pub mod tcp;
 
-use super::Connection;
-
 use async_trait::async_trait;
 
 use tokio::net::ToSocketAddrs;
@@ -14,7 +12,7 @@ pub trait Listener {
     type Addr: ToSocketAddrs;
 
     /// Type of incoming `Connection` returned by this `Listener`
-    type Connection: Connection;
+    type Connection;
 
     /// Type of error returned by this `Listener`
     type Error;

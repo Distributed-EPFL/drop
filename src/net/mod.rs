@@ -12,16 +12,21 @@ use crate::crypto::stream::{Pull, Push};
 use crate::crypto::{DecryptError, EncryptError, ExchangeError};
 use crate::error::Error;
 
+use bincode::{deserialize, serialize, ErrorKind as BincodeErrorKind};
+
 use macros::error;
 
 use serde::{Deserialize, Serialize};
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+pub type SerializerError = Box<BincodeErrorKind>;
+
 error! {
     type: ChannelError,
     description: "channel error",
-    causes: (ExchangeError, EncryptError, DecryptError, IoError, NeedsAuthError, CorruptedChannel)
+    causes: (ExchangeError, EncryptError, DecryptError, IoError,
+             NeedsAuthError, SerializerError, CorruptedChannel)
 }
 
 error! {
@@ -85,16 +90,31 @@ impl<C: Connection> Channel<C> {
     }
 
     /// Receive `Deserialize` message on this `Channel` without using encryption
-    pub async fn receive_plain<T>(&mut self) -> Result<T, ChannelError> {
-        unimplemented!()
+    pub async fn receive_plain<T>(&mut self) -> Result<T, ChannelError>
+    where
+        T: for<'de> Deserialize<'de> + Sized,
+    {
+        let mut buf = [0u8; 4096];
+
+        let read = self.connection.read(&mut buf).await?;
+
+        deserialize(&buf[..read]).map_err(|e| e.into())
     }
 
     /// Send a `Serialize` message on this `Channel` without using decryption
     pub async fn send_plain<T>(
         &mut self,
-        message: T,
-    ) -> Result<T, ChannelError> {
-        unimplemented!()
+        message: &T,
+    ) -> Result<usize, ChannelError>
+    where
+        T: Serialize,
+    {
+        let serialized = serialize(message)?;
+
+        self.connection
+            .write(&serialized)
+            .await
+            .map_err(|e| e.into())
     }
 
     /// Receive a `Deserialize` message from the underlying `Connection`
@@ -104,7 +124,7 @@ impl<C: Connection> Channel<C> {
     {
         match &mut self.state {
             ChannelState::Authenticated(ref mut pull, _) => {
-                let mut buf = [0u8; 256]; // FIXME: some saner size for the buffer
+                let mut buf = [0u8; 4096]; // FIXME: some saner size for the buffer
 
                 let read = self.connection.read(&mut buf).await?;
 
@@ -146,6 +166,11 @@ impl<C: Connection> Channel<C> {
         let session = self.exchanger.exchange(&remote_pkey)?;
         let (push, pull): (Push, Pull) = session.into();
 
+        if let ChannelState::ClientPreAuth(_) = self.state {
+            let p = self.exchanger.keypair().public().clone();
+            self.send_plain(&p).await?;
+        }
+
         self.state = ChannelState::Authenticated(pull, push);
 
         Ok(())
@@ -165,5 +190,73 @@ impl<C: Connection> Channel<C> {
             ChannelState::Errored => true,
             _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Channel;
+
+    use crate::crypto::key::exchange::{Exchanger, KeyPair};
+    use crate::net::connector::tcp::TcpDirect;
+    use crate::net::connector::Connector;
+    use crate::net::listener::tcp::TcpListener;
+    use crate::net::listener::Listener;
+
+    use tokio::net::TcpStream;
+
+    pub const LISTENER_ADDR: &str = "127.0.0.1:9999";
+
+    async fn setup_listener_and_client(
+    ) -> (Channel<TcpStream>, Channel<TcpStream>) {
+        let client = KeyPair::random();
+        let server = KeyPair::random();
+        let client_ex = Exchanger::new(client);
+        let server_ex = Exchanger::new(server.clone());
+
+        let mut listener = TcpListener::new(LISTENER_ADDR, server_ex)
+            .await
+            .expect("failed to bind");
+
+        let client_conn = TcpDirect::connect(
+            LISTENER_ADDR.parse().unwrap(),
+            client_ex,
+            server.public(),
+        )
+        .await
+        .expect("failed to connect");
+
+        let listener_conn = listener
+            .accept()
+            .await
+            .expect("failed to accept incoming connection");
+
+        (client_conn, listener_conn)
+    }
+
+    #[tokio::test]
+    async fn tcp_data_exchange() {
+        let (mut client, mut listener) = setup_listener_and_client().await;
+
+        client.authenticate().await.expect("failed to authenticate");
+
+        listener
+            .authenticate()
+            .await
+            .expect("failed to authenticate server side");
+
+        client.send(&0u32).await.expect("failed to send data");
+
+        let recvd = listener.receive::<u32>().await.expect("failed to receive");
+
+        assert_eq!(0u32, recvd, "data received incorrect");
+        assert!(
+            listener.is_authenticated(),
+            "server connection not authenticated"
+        );
+        assert!(
+            client.is_authenticated(),
+            "client connection not authenticated"
+        );
     }
 }

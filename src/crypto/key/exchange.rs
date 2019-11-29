@@ -9,7 +9,9 @@ use sodiumoxide::crypto::kx::{
     PublicKey as SodiumPubKey, SecretKey as SodiumSecKey,
 };
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+)]
 /// A `PublicKey` used to compute a shared secret with a remote party
 pub struct PublicKey(SodiumPubKey);
 
@@ -62,6 +64,7 @@ impl Into<(Push, Pull)> for Session {
 
 /// A structure used to compute a shared secret with another
 /// party using a `KeyPair` and the other party's `PublicKey`
+#[derive(Clone)]
 pub struct Exchanger {
     keypair: KeyPair,
 }
