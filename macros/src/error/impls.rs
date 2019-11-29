@@ -96,7 +96,7 @@ pub fn error(error: &Error) -> TokenStream {
                 error
             }
 
-            fn attach<Payload: std::any::Any>(self, attachment: Payload) -> Self {
+            fn attach<Payload: std::any::Any + Send + Sync>(self, attachment: Payload) -> Self {
                 let mut error = self;
                 let attachment = drop::error::Attachment::new(attachment);
 
