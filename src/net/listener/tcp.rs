@@ -1,23 +1,13 @@
 use std::fmt;
-use std::io::Error as IoError;
+use std::net::SocketAddr;
 
-use super::super::{Connection, SecureError};
-use super::Listener;
-use crate as drop;
+use super::super::Connection;
+use super::{Listener, ListenerError};
 use crate::crypto::key::exchange::Exchanger;
 
 use async_trait::async_trait;
 
-use macros::error;
-
-use tokio::io::Error as TokioError;
 use tokio::net::{TcpListener as TokioListener, ToSocketAddrs};
-
-error! {
-    type: ListenerError,
-    description: "incoming connection error",
-    causes: (TokioError, IoError, SecureError)
-}
 
 /// A plain `TcpListener` that accepts connections on a given IP address and
 /// port
@@ -34,11 +24,11 @@ impl TcpListener {
     ) -> Result<Self, ListenerError> {
         TokioListener::bind(candidate)
             .await
-            .map_err(|e| e.into())
             .map(|listener| Self {
                 listener,
                 exchanger,
             })
+            .map_err(|e| e.into())
     }
 }
 
@@ -53,9 +43,17 @@ impl fmt::Debug for TcpListener {
 
 #[async_trait]
 impl Listener for TcpListener {
+    type Candidate = SocketAddr;
+
+    async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError> {
+        unimplemented!()
+    }
+
+    /// Accept an incoming `Connection` from this `TcpListener` and performs
+    /// key exchange to authenticate the remote peer.
     async fn accept(&mut self) -> Result<Connection, ListenerError> {
-        let stream = Box::new(self.listener.accept().await?.0);
-        let mut connection = Connection::new(stream);
+        let stream = self.listener.accept().await.map(|(stream, _)| stream)?;
+        let mut connection = Connection::new(Box::new(stream));
 
         connection.secure_client(&self.exchanger).await?;
         Ok(connection)

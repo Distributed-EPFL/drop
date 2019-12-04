@@ -1,12 +1,11 @@
 /// Tcp related connectors
 pub mod tcp;
 
-use std::io::Error as IoError;
-
 use super::{Connection, SecureError, Socket};
 use crate as drop;
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
 use crate::crypto::ExchangeError;
+use crate::error::Error;
 
 use async_trait::async_trait;
 
@@ -18,7 +17,7 @@ use tokio::net::ToSocketAddrs;
 error! {
     type: ConnectError,
     description: "error opening connection",
-    causes: (TokioError, ExchangeError, SecureError, IoError)
+    causes: (TokioError, ExchangeError, SecureError)
 }
 
 /// The `Connector` trait is used to connect to peers using some sort of
@@ -26,7 +25,7 @@ error! {
 #[async_trait]
 pub trait Connector {
     /// The target address type used by this connector
-    type Candidate: ToSocketAddrs;
+    type Candidate: ToSocketAddrs + Send + Sync;
 
     /// Connect asynchronously to a given destination with its `PublicKey` and
     /// the local node's `KeyExchanger` that has been passed when constructing
@@ -34,9 +33,9 @@ pub trait Connector {
     async fn connect(
         &self,
         pkey: &PublicKey,
-        candidate: Self::Candidate,
+        candidate: &Self::Candidate,
     ) -> Result<Connection, ConnectError> {
-        let socket = Self::establish(&pkey, candidate).await?;
+        let socket = Self::establish(candidate).await?;
         let mut connection = Connection::new(socket);
 
         connection.secure_server(self.exchanger(), pkey).await?;
@@ -50,17 +49,17 @@ pub trait Connector {
 
     /// Establish a `Socket` to the given `Candidate` destination.
     /// This function should only open the connection and not send any data
-    /// after the connection has been established
+    /// after the connection has been established in order not to make the
+    /// remote end close the connection.
     async fn establish(
-        pkey: &PublicKey,
-        candidate: Self::Candidate,
+        candidate: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError>;
 
     /// Connect to any of the provided `Candidate` that advertise the
     /// given `PublicKey`
     async fn connect_any(
-        pkey: &PublicKey,
-        candidates: &[Self::Candidate],
+        _pkey: &PublicKey,
+        _candidates: &[Self::Candidate],
     ) -> Result<Connection, ConnectError> {
         unimplemented!()
     }

@@ -10,7 +10,7 @@ backtrace = "0.3.30"
 sodiumoxide = "0.2.2"
 serde = { version = "1.0.102", features = [ "derive" ] }
 bincode = "1.2.0"
-tokio = { version = "0.2.0", features = [ "tcp", "dns", "io-util", "macros" ] }
+tokio = { version = "0.2.0", features = [ "full" ] }
 async-trait = "0.1.19"
 
 [dev-dependencies]

@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{
     AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Error as TokioError,
 };
+use tokio::task::block_in_place;
 
 /// Type of errors returned when serializing/deserializing
 pub type SerializerError = Box<BincodeErrorKind>;
@@ -30,14 +31,14 @@ pub type SerializerError = Box<BincodeErrorKind>;
 error! {
     type: SendError,
     description: "error sending data",
-    causes: (EncryptError, SocketError, SerializerError, CorruptedConnection,
+    causes: (EncryptError, SerializerError, CorruptedConnection,
              NeedsAuthError, IoError)
 }
 
 error! {
     type: ReceiveError,
     description: "error receiving data",
-    causes: (DecryptError, SocketError, SerializerError, CorruptedConnection,
+    causes: (DecryptError, SerializerError, CorruptedConnection,
              NeedsAuthError, IoError)
 }
 
@@ -45,12 +46,6 @@ error! {
     type: SecureError,
     description: "error securing channel",
     causes: (ExchangeError, TokioError, ReceiveError, SendError)
-}
-
-error! {
-    type: SocketError,
-    description: "socket error",
-    causes: (TokioError, ExchangeError, IoError)
 }
 
 error! {
@@ -66,12 +61,12 @@ error! {
 /// Trait for structs that are able to asynchronously send and receive data from
 /// the network. Only requirement is asynchronously reading and writing arrays
 /// of bytes
-pub trait Socket: AsyncRead + AsyncWrite + Unpin {
+pub trait Socket: AsyncRead + AsyncWrite + Unpin + Send + Sync {
     /// Address of the remote peer for this `Connection`
-    fn remote(&self) -> Result<SocketAddr, SocketError>;
+    fn remote(&self) -> Result<SocketAddr, IoError>;
 
     /// Local address in use by this `Connection`
-    fn local(&self) -> Result<SocketAddr, SocketError>;
+    fn local(&self) -> Result<SocketAddr, IoError>;
 }
 
 /// Encrypted connection state
@@ -88,7 +83,6 @@ enum ChannelState {
 /// channel between two peers.
 pub struct Connection {
     socket: Box<dyn Socket>,
-    exchanger: Exchanger,
     state: ChannelState,
 }
 
@@ -148,8 +142,20 @@ impl Connection {
         }
     }
 
+    /// Send a `Serialize` message on this `Connection` synchronously.
+    /// This call may block if the data can't be sent immediately.
+    pub fn send_sync<T>(&mut self, _message: &T) -> Result<usize, SendError>
+    where
+        T: Serialize + Send,
+    {
+        block_in_place(|| unimplemented!())
+    }
+
     /// Send a `Serialize` message using the underlying `Connection`.
-    pub async fn send<T>(&mut self, message: &T) -> Result<usize, SendError>
+    pub async fn send_async<T>(
+        &mut self,
+        message: &T,
+    ) -> Result<usize, SendError>
     where
         T: Serialize + Send,
     {
@@ -162,6 +168,15 @@ impl Connection {
             ChannelState::Connected => Err(NeedsAuthError::new().into()),
             ChannelState::Broken => Err(CorruptedConnection::new().into()),
         }
+    }
+
+    /// Send a `Serialize` message in a synchronous fashion. This method may
+    /// block
+    pub async fn send<T>(&mut self, message: &T) -> Result<usize, SendError>
+    where
+        T: Serialize + Send,
+    {
+        self.send_async(message).await
     }
 
     /// Perform the key exchange and create a new `Session`
@@ -236,13 +251,20 @@ impl fmt::Debug for Connection {
             _ => ("unknown".to_string(), "unknown".to_string()),
         };
 
-        write!(f, "secure channel {} -> {}", local, remote)
+        let sec = if self.is_secured() {
+            "secure"
+        } else {
+            "insecure"
+        };
+
+        write!(f, "{} channel {} -> {}", sec, local, remote)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::mem;
 
     use super::*;
 
@@ -269,6 +291,9 @@ mod tests {
             let recvd = listener.receive().await.expect("failed to receive");
 
             assert_eq!(data, recvd, "data is not the same");
+
+            mem::drop(client);
+            mem::drop(listener);
         };
     }
 
@@ -277,6 +302,7 @@ mod tests {
         let server = KeyPair::random();
         let client_ex = Exchanger::new(client.clone());
         let server_ex = Exchanger::new(server.clone());
+        let addr: SocketAddr = LISTENER_ADDR.parse().unwrap();
 
         let mut listener = TcpListener::new(LISTENER_ADDR, server_ex)
             .await
@@ -284,34 +310,67 @@ mod tests {
 
         let connector = TcpDirect::new(client_ex);
 
-        let client = connector
-            .connect(server.public(), LISTENER_ADDR.parse().unwrap())
+        let outgoing = connector
+            .connect(server.public(), &addr)
             .await
             .expect("failed to connect");
 
-        let listener = listener
+        let incoming = listener
             .accept()
             .await
             .expect("failed to accept incoming connection");
 
         assert!(
-            listener.is_secured(),
+            incoming.is_secured(),
             "server coulnd't secure the connection"
         );
-        assert!(client.is_secured(), "client couldn't secure the connection");
 
-        (client, listener)
+        assert!(
+            outgoing.is_secured(),
+            "client couldn't secure the connection"
+        );
+
+        (outgoing, incoming)
     }
 
     #[tokio::test]
-    async fn tcp_data_exchange() {
-        let (mut client, mut listener) = setup_listener_and_client().await;
+    async fn tcp_u8_exchange() {
+        exchange_data_and_compare!(0u8);
+    }
 
-        client.send(&0u32).await.expect("failed to send data");
+    #[tokio::test]
+    async fn tcp_u16_exchange() {
+        exchange_data_and_compare!(0u16);
+    }
 
-        let recvd = listener.receive::<u32>().await.expect("failed to receive");
+    #[tokio::test]
+    async fn tcp_u32_exchange() {
+        exchange_data_and_compare!(0u32);
+    }
 
-        assert_eq!(0u32, recvd, "data received incorrect");
+    #[tokio::test]
+    async fn tcp_u64_exchange() {
+        exchange_data_and_compare!(0u64);
+    }
+
+    #[tokio::test]
+    async fn tcp_i8_exchange() {
+        exchange_data_and_compare!(0i8);
+    }
+
+    #[tokio::test]
+    async fn tcp_i16_exchange() {
+        exchange_data_and_compare!(0i16);
+    }
+
+    #[tokio::test]
+    async fn tcp_i32_exchange() {
+        exchange_data_and_compare!(0i32);
+    }
+
+    #[tokio::test]
+    async fn tcp_i64_exchange() {
+        exchange_data_and_compare!(0i64);
     }
 
     #[tokio::test]
@@ -384,9 +443,10 @@ mod tests {
         let exchanger = Exchanger::random();
         let keypair = KeyPair::random();
         let connector = TcpDirect::new(exchanger);
+        let addr = LISTENER_ADDR.parse().unwrap();
 
         connector
-            .connect(keypair.public(), LISTENER_ADDR.parse().unwrap())
+            .connect(keypair.public(), &addr)
             .await
             .expect_err("connected to non-existent listener");
     }

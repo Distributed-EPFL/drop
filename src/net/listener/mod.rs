@@ -1,10 +1,9 @@
 /// Tcp related listeners utilities
 pub mod tcp;
 
-use std::io::Error as IoError;
-
 use super::{Connection, SecureError};
 use crate as drop;
+use crate::error::Error;
 
 use async_trait::async_trait;
 
@@ -16,14 +15,14 @@ use tokio::net::ToSocketAddrs;
 error! {
     type: ListenerError,
     description: "error accepting incoming connection",
-    causes: (TokioError, SecureError, IoError),
+    causes: (TokioError, SecureError),
 }
 
 /// A trait used to accept incoming `Connection`s from other peers
 #[async_trait]
 pub trait Listener {
     /// The type of address that this `Listener` listens on
-    type Candidate: ToSocketAddrs;
+    type Candidate: ToSocketAddrs + Send + Sync;
 
     /// Asynchronously accept incoming `Connection`s
     async fn accept(&mut self) -> Result<Connection, ListenerError>;
