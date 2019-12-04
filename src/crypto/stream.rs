@@ -166,9 +166,7 @@ impl Pull {
     where
         for<'de> T: Deserialize<'de> + ToOwned<Owned = T>,
     {
-        self.decrypt_ref(ciphertext)
-            .map(|x: T| x.to_owned())
-            .map_err(|e| e.into())
+        self.decrypt_ref(ciphertext).map_err(|e| e)
     }
 }
 

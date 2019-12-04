@@ -37,7 +37,14 @@ impl Hasher {
     }
 }
 
+impl Default for Hasher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A hash digest
+#[allow(clippy::derive_hash_xor_eq)]
 #[derive(Deserialize, Hash, Eq, PartialOrd, Serialize)]
 pub struct Digest(pub(super) [u8; SIZE]);
 
