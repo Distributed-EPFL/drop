@@ -4,7 +4,9 @@ pub mod connector;
 /// Utilities to open a listener for incoming connections
 pub mod listener;
 
+use std::fmt;
 use std::io::Error as IoError;
+use std::net::SocketAddr;
 
 use crate as drop;
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
@@ -18,184 +20,231 @@ use macros::error;
 
 use serde::{Deserialize, Serialize};
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{
+    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Error as TokioError,
+};
 
+/// Type of errors returned when serializing/deserializing
 pub type SerializerError = Box<BincodeErrorKind>;
 
 error! {
-    type: ChannelError,
-    description: "channel error",
-    causes: (ExchangeError, EncryptError, DecryptError, IoError,
-             NeedsAuthError, SerializerError, CorruptedChannel)
+    type: SendError,
+    description: "error sending data",
+    causes: (EncryptError, SocketError, SerializerError, CorruptedConnection,
+             NeedsAuthError, IoError)
+}
+
+error! {
+    type: ReceiveError,
+    description: "error receiving data",
+    causes: (DecryptError, SocketError, SerializerError, CorruptedConnection,
+             NeedsAuthError, IoError)
+}
+
+error! {
+    type: SecureError,
+    description: "error securing channel",
+    causes: (ExchangeError, TokioError, ReceiveError, SendError)
+}
+
+error! {
+    type: SocketError,
+    description: "socket error",
+    causes: (TokioError, ExchangeError, IoError)
 }
 
 error! {
     type: NeedsAuthError,
-    description: "channel needs authentication",
+    description: "connection needs authentication",
 }
 
 error! {
-    type: CorruptedChannel,
+    type: CorruptedConnection,
     description: "channel corrupted"
 }
 
 /// Trait for structs that are able to asynchronously send and receive data from
 /// the network. Only requirement is asynchronously reading and writing arrays
 /// of bytes
-pub trait Connection: AsyncRead + AsyncWrite + Unpin {}
+pub trait Socket: AsyncRead + AsyncWrite + Unpin {
+    /// Address of the remote peer for this `Connection`
+    fn remote(&self) -> Result<SocketAddr, SocketError>;
 
-/// Encrypted channel state
-enum ChannelState {
-    /// Server channel before authentication
-    ServerPreAuth,
-    /// Client channel before authentication
-    ClientPreAuth(PublicKey),
-    /// Channel once authentication has succeeded
-    Authenticated(Pull, Push),
-    /// Channel state after some error has been encountered
-    Errored,
+    /// Local address in use by this `Connection`
+    fn local(&self) -> Result<SocketAddr, SocketError>;
 }
 
-/// A wrapper struct used on top of `Connection` to factor authentication
-/// and serialization of data structures as well as avoiding the trait
-/// object with generic parameters problem.
-pub struct Channel<C: Connection> {
-    connection: C,
+/// Encrypted connection state
+enum ChannelState {
+    /// Connection state before attempting authentication
+    Connected,
+    /// Connection state once authentication has succeeded
+    Secured(Pull, Push),
+    /// Connection state after some error has been encountered
+    Broken,
+}
+
+/// A `Connection` is a two way encrypted and authenticated communication
+/// channel between two peers.
+pub struct Connection {
+    socket: Box<dyn Socket>,
     exchanger: Exchanger,
     state: ChannelState,
 }
 
-impl<C: Connection> Channel<C> {
-    /// Create a new `ReaderWriter` using a specified `Connection`
-    pub fn new_client(
-        connection: C,
-        exchanger: Exchanger,
-        public: PublicKey,
-    ) -> Self {
+impl Connection {
+    /// Create a new `Connection` using a specified `Socket`
+    pub fn new(socket: Box<dyn Socket>) -> Self {
         Self {
-            connection,
-            exchanger,
-            state: ChannelState::ClientPreAuth(public),
+            socket,
+            state: ChannelState::Connected,
         }
     }
 
-    /// Create a new server-end `Channel` using the given connection and key
-    /// exchanger
-    pub fn new_server(connection: C, exchanger: Exchanger) -> Self {
-        Self {
-            connection,
-            exchanger,
-            state: ChannelState::ServerPreAuth,
-        }
-    }
-
-    /// Receive `Deserialize` message on this `Channel` without using encryption
-    pub async fn receive_plain<T>(&mut self) -> Result<T, ChannelError>
+    /// Receive `Deserialize` message on this `Connection` without using
+    /// encryption
+    pub async fn receive_plain<T>(&mut self) -> Result<T, ReceiveError>
     where
         T: for<'de> Deserialize<'de> + Sized,
     {
         let mut buf = [0u8; 4096];
 
-        let read = self.connection.read(&mut buf).await?;
+        let read = self.socket.read(&mut buf).await?;
 
         deserialize(&buf[..read]).map_err(|e| e.into())
     }
 
-    /// Send a `Serialize` message on this `Channel` without using decryption
+    /// Send a `Serialize` message on this `Connection` without using decryption
     pub async fn send_plain<T>(
         &mut self,
         message: &T,
-    ) -> Result<usize, ChannelError>
+    ) -> Result<usize, SendError>
     where
         T: Serialize,
     {
         let serialized = serialize(message)?;
 
-        self.connection
-            .write(&serialized)
-            .await
-            .map_err(|e| e.into())
+        self.socket.write(&serialized).await.map_err(|e| e.into())
     }
 
     /// Receive a `Deserialize` message from the underlying `Connection`
-    pub async fn receive<T>(&mut self) -> Result<T, ChannelError>
+    pub async fn receive<T>(&mut self) -> Result<T, ReceiveError>
     where
         T: Sized + for<'de> Deserialize<'de> + Send,
     {
         match &mut self.state {
-            ChannelState::Authenticated(ref mut pull, _) => {
+            ChannelState::Secured(ref mut pull, _) => {
                 let mut buf = [0u8; 4096]; // FIXME: some saner size for the buffer
 
-                let read = self.connection.read(&mut buf).await?;
+                let read = self.socket.read(&mut buf).await?;
 
                 pull.decrypt_ref(&buf[..read]).map_err(|e| {
-                    self.state = ChannelState::Errored;
+                    self.state = ChannelState::Broken;
                     e.into()
                 })
             }
-            _ => Err(NeedsAuthError::new().into()),
+            ChannelState::Connected => Err(NeedsAuthError::new().into()),
+            ChannelState::Broken => Err(CorruptedConnection::new().into()),
         }
     }
 
     /// Send a `Serialize` message using the underlying `Connection`.
-    pub async fn send<T>(&mut self, message: &T) -> Result<usize, ChannelError>
+    pub async fn send<T>(&mut self, message: &T) -> Result<usize, SendError>
     where
         T: Serialize + Send,
     {
         match &mut self.state {
-            ChannelState::Authenticated(_, ref mut push) => {
+            ChannelState::Secured(_, ref mut push) => {
                 let data = push.encrypt(message)?;
 
-                self.connection.write(&data).await.map_err(|e| e.into())
+                self.socket.write(&data).await.map_err(|e| e.into())
             }
-            _ => Err(NeedsAuthError::new().into()),
+            ChannelState::Connected => Err(NeedsAuthError::new().into()),
+            ChannelState::Broken => Err(CorruptedConnection::new().into()),
         }
     }
 
-    /// Authenticate the remote end of this `Channel`
-    pub async fn authenticate(&mut self) -> Result<(), ChannelError> {
-        let remote_pkey = match &mut self.state {
-            ChannelState::ServerPreAuth => {
-                self.receive_plain::<PublicKey>().await?
-            }
-            ChannelState::ClientPreAuth(public) => public.clone(),
-            ChannelState::Authenticated(_, _) => return Ok(()),
-            ChannelState::Errored => return Err(CorruptedChannel::new().into()),
-        };
-
-        let session = self.exchanger.exchange(&remote_pkey)?;
+    /// Perform the key exchange and create a new `Session`
+    fn exchange(
+        &mut self,
+        exchanger: &Exchanger,
+        remote: &PublicKey,
+    ) -> Result<(), SecureError> {
+        let session = exchanger.exchange(remote)?;
         let (push, pull): (Push, Pull) = session.into();
 
-        if let ChannelState::ClientPreAuth(_) = self.state {
-            let p = self.exchanger.keypair().public().clone();
-            self.send_plain(&p).await?;
-        }
-
-        self.state = ChannelState::Authenticated(pull, push);
+        self.state = ChannelState::Secured(pull, push);
 
         Ok(())
     }
 
-    /// Checks whether this `Channel` is authenticated
-    pub fn is_authenticated(&self) -> bool {
+    /// Secures the `Connection` to a server
+    pub async fn secure_server(
+        &mut self,
+        local: &Exchanger,
+        server: &PublicKey,
+    ) -> Result<(), SecureError> {
+        self.send_plain(local.keypair().public()).await?;
+
+        self.exchange(local, server)?;
+
+        Ok(())
+    }
+
+    /// Secures this `Connection` from a client
+    pub async fn secure_client(
+        &mut self,
+        exchanger: &Exchanger,
+    ) -> Result<(), SecureError> {
+        let pkey = self.receive_plain::<PublicKey>().await?;
+
+        self.exchange(exchanger, &pkey)?;
+
+        Ok(())
+    }
+
+    /// Checks whether this `Connection` is secured
+    pub fn is_secured(&self) -> bool {
         match &self.state {
-            ChannelState::Authenticated(_, _) => true,
+            ChannelState::Secured(_, _) => true,
             _ => false,
         }
     }
 
     /// Checks whether this `Channel` is in a usable state
-    pub fn is_errored(&self) -> bool {
+    pub fn is_broken(&self) -> bool {
         match &self.state {
-            ChannelState::Errored => true,
+            ChannelState::Broken => true,
             _ => false,
         }
     }
 }
 
+impl fmt::Debug for Connection {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let (local, remote) = match (self.socket.local(), self.socket.remote())
+        {
+            (Ok(local), Ok(remote)) => {
+                (format!("{}", local), format!("{}", remote))
+            }
+            (Ok(local), Err(_)) => {
+                (format!("{}", local), "unknown".to_string())
+            }
+            (Err(_), Ok(remote)) => {
+                ("unknown".to_string(), format!("{}", remote))
+            }
+            _ => ("unknown".to_string(), "unknown".to_string()),
+        };
+
+        write!(f, "secure channel {} -> {}", local, remote)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Channel;
+    use std::collections::HashMap;
+
+    use super::*;
 
     use crate::crypto::key::exchange::{Exchanger, KeyPair};
     use crate::net::connector::tcp::TcpDirect;
@@ -203,60 +252,142 @@ mod tests {
     use crate::net::listener::tcp::TcpListener;
     use crate::net::listener::Listener;
 
-    use tokio::net::TcpStream;
+    use rand;
+
+    use serde::{Deserialize, Serialize};
 
     pub const LISTENER_ADDR: &str = "127.0.0.1:9999";
 
-    async fn setup_listener_and_client(
-    ) -> (Channel<TcpStream>, Channel<TcpStream>) {
+    macro_rules! exchange_data_and_compare {
+        ($data:expr) => {
+            let (mut client, mut listener) = setup_listener_and_client().await;
+
+            let data = $data;
+
+            client.send(&data).await.expect("failed to send");
+
+            let recvd = listener.receive().await.expect("failed to receive");
+
+            assert_eq!(data, recvd, "data is not the same");
+        };
+    }
+
+    async fn setup_listener_and_client() -> (Connection, Connection) {
         let client = KeyPair::random();
         let server = KeyPair::random();
-        let client_ex = Exchanger::new(client);
+        let client_ex = Exchanger::new(client.clone());
         let server_ex = Exchanger::new(server.clone());
 
         let mut listener = TcpListener::new(LISTENER_ADDR, server_ex)
             .await
             .expect("failed to bind");
 
-        let client_conn = TcpDirect::connect(
-            LISTENER_ADDR.parse().unwrap(),
-            client_ex,
-            server.public(),
-        )
-        .await
-        .expect("failed to connect");
+        let connector = TcpDirect::new(client_ex);
 
-        let listener_conn = listener
+        let client = connector
+            .connect(server.public(), LISTENER_ADDR.parse().unwrap())
+            .await
+            .expect("failed to connect");
+
+        let listener = listener
             .accept()
             .await
             .expect("failed to accept incoming connection");
 
-        (client_conn, listener_conn)
+        assert!(
+            listener.is_secured(),
+            "server coulnd't secure the connection"
+        );
+        assert!(client.is_secured(), "client couldn't secure the connection");
+
+        (client, listener)
     }
 
     #[tokio::test]
     async fn tcp_data_exchange() {
         let (mut client, mut listener) = setup_listener_and_client().await;
 
-        client.authenticate().await.expect("failed to authenticate");
-
-        listener
-            .authenticate()
-            .await
-            .expect("failed to authenticate server side");
-
         client.send(&0u32).await.expect("failed to send data");
 
         let recvd = listener.receive::<u32>().await.expect("failed to receive");
 
         assert_eq!(0u32, recvd, "data received incorrect");
+    }
+
+    #[tokio::test]
+    async fn tcp_struct_exchange() {
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        struct T {
+            a: u32,
+            b: u64,
+            c: A,
+        }
+
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        struct A {
+            a: u8,
+            b: u16,
+        }
+
+        let data = T {
+            a: 258,
+            b: 30567,
+            c: A { a: 66, b: 245 },
+        };
+
+        exchange_data_and_compare!(data);
+    }
+
+    #[tokio::test]
+    async fn tcp_hashmap_exchange() {
+        let mut hashmap: HashMap<u32, u128> = HashMap::default();
+
+        for _ in 0..rand::random::<usize>() % 2048 {
+            hashmap.insert(rand::random(), rand::random());
+        }
+
+        exchange_data_and_compare!(hashmap);
+    }
+
+    #[tokio::test]
+    async fn garbage_data_decryption() {
+        let (mut client, mut listener) = setup_listener_and_client().await;
+
+        client
+            .send_plain(&0u32)
+            .await
+            .expect("failed to send unencrypted data");
+
+        listener
+            .receive::<u32>()
+            .await
+            .expect_err("received garbage correctly");
+
         assert!(
-            listener.is_authenticated(),
-            "server connection not authenticated"
+            listener.is_broken(),
+            "incorrect state for listener connection"
         );
-        assert!(
-            client.is_authenticated(),
-            "client connection not authenticated"
-        );
+    }
+
+    #[tokio::test]
+    async fn initial_state() {
+        let (client, listener) = setup_listener_and_client().await;
+
+        assert!(client.is_secured(), "client is not authenticated");
+        assert!(listener.is_secured(), "listener is not authenticated");
+        assert!(!listener.is_broken(), "listener is errored");
+        assert!(!client.is_broken(), "client is errored");
+    }
+
+    #[tokio::test]
+    async fn tcp_non_existent() {
+        let exchanger = Exchanger::random();
+        let keypair = KeyPair::random();
+        let connector = TcpDirect::new(exchanger);
+
+        connector
+            .connect(keypair.public(), LISTENER_ADDR.parse().unwrap())
+            .await
+            .expect_err("connected to non-existent listener");
     }
 }

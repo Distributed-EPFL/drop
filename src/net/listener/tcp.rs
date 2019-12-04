@@ -1,14 +1,23 @@
 use std::fmt;
-use std::net::SocketAddr;
+use std::io::Error as IoError;
 
-use super::super::Channel;
+use super::super::{Connection, SecureError};
 use super::Listener;
+use crate as drop;
 use crate::crypto::key::exchange::Exchanger;
 
 use async_trait::async_trait;
 
+use macros::error;
+
 use tokio::io::Error as TokioError;
-use tokio::net::{TcpListener as TokioListener, TcpStream, ToSocketAddrs};
+use tokio::net::{TcpListener as TokioListener, ToSocketAddrs};
+
+error! {
+    type: ListenerError,
+    description: "incoming connection error",
+    causes: (TokioError, IoError, SecureError)
+}
 
 /// A plain `TcpListener` that accepts connections on a given IP address and
 /// port
@@ -22,7 +31,7 @@ impl TcpListener {
     pub async fn new<A: ToSocketAddrs>(
         candidate: A,
         exchanger: Exchanger,
-    ) -> Result<Self, <Self as Listener>::Error> {
+    ) -> Result<Self, ListenerError> {
         TokioListener::bind(candidate)
             .await
             .map_err(|e| e.into())
@@ -36,23 +45,19 @@ impl TcpListener {
 impl fmt::Debug for TcpListener {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.listener.local_addr() {
-            Ok(addr) => write!(f, "TcpListener on {}", addr),
-            Err(e) => write!(f, "TcpListener errored: {}", e),
+            Ok(addr) => write!(f, "tcp listener on {}", addr),
+            Err(e) => write!(f, "tcp listener errored: {}", e),
         }
     }
 }
 
 #[async_trait]
 impl Listener for TcpListener {
-    type Addr = SocketAddr;
+    async fn accept(&mut self) -> Result<Connection, ListenerError> {
+        let stream = Box::new(self.listener.accept().await?.0);
+        let mut connection = Connection::new(stream);
 
-    type Connection = Channel<TcpStream>;
-
-    type Error = TokioError;
-
-    async fn accept(&mut self) -> Result<Self::Connection, Self::Error> {
-        let stream = self.listener.accept().await?.0;
-
-        Ok(Channel::new_server(stream, self.exchanger.clone()))
+        connection.secure_client(&self.exchanger).await?;
+        Ok(connection)
     }
 }
