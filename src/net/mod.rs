@@ -6,6 +6,7 @@ pub mod listener;
 
 use std::fmt;
 use std::io::Error as IoError;
+use std::mem;
 use std::net::SocketAddr;
 
 use crate as drop;
@@ -84,6 +85,7 @@ enum ChannelState {
 pub struct Connection {
     socket: Box<dyn Socket>,
     state: ChannelState,
+    buffer: Vec<u8>,
 }
 
 impl Connection {
@@ -92,6 +94,7 @@ impl Connection {
         Self {
             socket,
             state: ChannelState::Connected,
+            buffer: Vec::new(),
         }
     }
 
@@ -121,6 +124,24 @@ impl Connection {
         self.socket.write(&serialized).await.map_err(|e| e.into())
     }
 
+    async fn read_size(
+        socket: &mut Box<dyn Socket>,
+    ) -> Result<u32, ReceiveError> {
+        let mut buf = [0u8; mem::size_of::<u32>()];
+        socket.read_exact(&mut buf).await?;
+
+        deserialize(&buf[..]).map_err(|e| e.into())
+    }
+
+    async fn write_size(
+        socket: &mut Box<dyn Socket>,
+        size: u32,
+    ) -> Result<(), SendError> {
+        let data = serialize(&size)?;
+
+        socket.write_all(&data).await.map_err(|e| e.into())
+    }
+
     /// Receive a `Deserialize` message from the underlying `Connection`
     pub async fn receive<T>(&mut self) -> Result<T, ReceiveError>
     where
@@ -128,11 +149,14 @@ impl Connection {
     {
         match &mut self.state {
             ChannelState::Secured(ref mut pull, _) => {
-                let mut buf = [0u8; 4096]; // FIXME: some saner size for the buffer
+                let sz = Self::read_size(&mut self.socket).await? as usize;
 
-                let read = self.socket.read(&mut buf).await?;
+                self.buffer.resize(sz, 0);
 
-                pull.decrypt_ref(&buf[..read]).map_err(|e| {
+                let read =
+                    self.socket.read_exact(&mut self.buffer[..sz]).await?;
+
+                pull.decrypt_ref(&self.buffer[..read]).map_err(|e| {
                     self.state = ChannelState::Broken;
                     e.into()
                 })
@@ -162,6 +186,8 @@ impl Connection {
         match &mut self.state {
             ChannelState::Secured(_, ref mut push) => {
                 let data = push.encrypt(message)?;
+
+                Self::write_size(&mut self.socket, data.len() as u32).await?;
 
                 self.socket.write(&data).await.map_err(|e| e.into())
             }
@@ -264,7 +290,7 @@ impl fmt::Debug for Connection {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::mem;
+    use std::net::ToSocketAddrs;
 
     use super::*;
 
@@ -278,7 +304,7 @@ mod tests {
 
     use serde::{Deserialize, Serialize};
 
-    pub const LISTENER_ADDR: &str = "127.0.0.1:9999";
+    pub const LISTENER_ADDR: &str = "localhost";
 
     macro_rules! exchange_data_and_compare {
         ($data:expr) => {
@@ -291,46 +317,51 @@ mod tests {
             let recvd = listener.receive().await.expect("failed to receive");
 
             assert_eq!(data, recvd, "data is not the same");
-
-            mem::drop(client);
-            mem::drop(listener);
         };
     }
 
-    async fn setup_listener_and_client() -> (Connection, Connection) {
+    pub async fn setup_listener_and_client() -> (Connection, Connection) {
         let client = KeyPair::random();
         let server = KeyPair::random();
         let client_ex = Exchanger::new(client.clone());
         let server_ex = Exchanger::new(server.clone());
-        let addr: SocketAddr = LISTENER_ADDR.parse().unwrap();
 
-        let mut listener = TcpListener::new(LISTENER_ADDR, server_ex)
-            .await
-            .expect("failed to bind");
+        loop {
+            let port: u16 = rand::random();
+            let addr: SocketAddr = (LISTENER_ADDR, port)
+                .to_socket_addrs()
+                .expect("failed to parse localhost")
+                .as_slice()[0];
+            let mut listener =
+                match TcpListener::new(addr, server_ex.clone()).await {
+                    Ok(listener) => listener,
+                    Err(_) => continue,
+                };
 
-        let connector = TcpDirect::new(client_ex);
+            let connector = TcpDirect::new(client_ex);
 
-        let outgoing = connector
-            .connect(server.public(), &addr)
-            .await
-            .expect("failed to connect");
+            let outgoing = connector
+                .connect(server.public(), &addr)
+                .await
+                .expect("failed to connect");
 
-        let incoming = listener
-            .accept()
-            .await
-            .expect("failed to accept incoming connection");
+            let incoming = listener
+                .accept()
+                .await
+                .expect("failed to accept incoming connection");
 
-        assert!(
-            incoming.is_secured(),
-            "server coulnd't secure the connection"
-        );
+            assert!(
+                incoming.is_secured(),
+                "server coulnd't secure the connection"
+            );
 
-        assert!(
-            outgoing.is_secured(),
-            "client couldn't secure the connection"
-        );
+            assert!(
+                outgoing.is_secured(),
+                "client couldn't secure the connection"
+            );
 
-        (outgoing, incoming)
+            return (outgoing, incoming);
+        }
     }
 
     #[tokio::test]
@@ -443,7 +474,9 @@ mod tests {
         let exchanger = Exchanger::random();
         let keypair = KeyPair::random();
         let connector = TcpDirect::new(exchanger);
-        let addr = LISTENER_ADDR.parse().unwrap();
+        let port: u16 = rand::random();
+        let addr =
+            (LISTENER_ADDR, port).to_socket_addrs().unwrap().as_slice()[0];
 
         connector
             .connect(keypair.public(), &addr)
