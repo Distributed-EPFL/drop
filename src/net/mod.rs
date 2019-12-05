@@ -470,6 +470,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn connection_fmt() {
+        let (client, _listener) = setup_listener_and_client().await;
+
+        assert_eq!(
+            format!("{:?}", client),
+            format!(
+                "secure channel {} -> {}",
+                client.socket.local().unwrap(),
+                client.socket.remote().unwrap()
+            )
+        );
+    }
+
+    #[tokio::test]
     async fn tcp_non_existent() {
         let exchanger = Exchanger::random();
         let keypair = KeyPair::random();
