@@ -56,11 +56,12 @@ pub trait Connector {
     ) -> Result<Box<dyn Socket>, ConnectError>;
 
     /// Connect to any of the provided `Candidate` that advertise the
-    /// given `PublicKey`
+    /// given `PublicKey`. Only returns a `Connection` to the fastest
+    /// responding `Candidate`
     async fn connect_any(
         _pkey: &PublicKey,
         _candidates: &[Self::Candidate],
     ) -> Result<Connection, ConnectError> {
-        unimplemented!()
+        unimplemented!() // FIXME: need join! from tokio 0.1 to be ported
     }
 }
