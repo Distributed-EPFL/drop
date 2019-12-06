@@ -151,6 +151,7 @@ impl Connection {
             ChannelState::Secured(ref mut pull, _) => {
                 let sz = Self::read_size(&mut self.socket).await? as usize;
 
+                // FIXME: avoid trusting network input and run out of memory
                 self.buffer.resize(sz, 0);
 
                 let read =
@@ -306,9 +307,60 @@ mod tests {
 
     pub const LISTENER_ADDR: &str = "localhost";
 
+    /// Create two ends of a `Connection` using the specified `Listener`
+    /// and `Connector` types
+    macro_rules! generate_connection {
+        ($listener:ty , $connector:ty) => {
+            let client = KeyPair::random();
+            let server = KeyPair::random();
+            let client_ex = Exchanger::new(client.clone());
+            let server_ex = Exchanger::new(server.clone());
+
+            loop {
+                let port: u16 = rand::random();
+                let addr: SocketAddr = (LISTENER_ADDR, port)
+                    .to_socket_addrs()
+                    .expect("failed to parse localhost")
+                    .as_slice()[0];
+                let mut listener =
+                    match <$listener>::new(addr, server_ex.clone()).await {
+                        Ok(listener) => listener,
+                        Err(_) => continue,
+                    };
+
+                let connector = <$connector>::new(client_ex);
+
+                let outgoing = connector
+                    .connect(server.public(), &addr)
+                    .await
+                    .expect("failed to connect");
+
+                let incoming = listener
+                    .accept()
+                    .await
+                    .expect("failed to accept incoming connection");
+
+                assert!(
+                    incoming.is_secured(),
+                    "server coulnd't secure the connection"
+                );
+
+                assert!(
+                    outgoing.is_secured(),
+                    "client couldn't secure the connection"
+                );
+
+                return (outgoing, incoming);
+            }
+        };
+    }
+
+    /// Exchanges the given data using a new `Connection` and checks that the
+    /// received data is the same as what was sent.
     macro_rules! exchange_data_and_compare {
         ($data:expr) => {
-            let (mut client, mut listener) = setup_listener_and_client().await;
+            let (mut client, mut listener) =
+                setup_tcp_listener_and_client().await;
 
             let data = $data;
 
@@ -320,48 +372,8 @@ mod tests {
         };
     }
 
-    pub async fn setup_listener_and_client() -> (Connection, Connection) {
-        let client = KeyPair::random();
-        let server = KeyPair::random();
-        let client_ex = Exchanger::new(client.clone());
-        let server_ex = Exchanger::new(server.clone());
-
-        loop {
-            let port: u16 = rand::random();
-            let addr: SocketAddr = (LISTENER_ADDR, port)
-                .to_socket_addrs()
-                .expect("failed to parse localhost")
-                .as_slice()[0];
-            let mut listener =
-                match TcpListener::new(addr, server_ex.clone()).await {
-                    Ok(listener) => listener,
-                    Err(_) => continue,
-                };
-
-            let connector = TcpDirect::new(client_ex);
-
-            let outgoing = connector
-                .connect(server.public(), &addr)
-                .await
-                .expect("failed to connect");
-
-            let incoming = listener
-                .accept()
-                .await
-                .expect("failed to accept incoming connection");
-
-            assert!(
-                incoming.is_secured(),
-                "server coulnd't secure the connection"
-            );
-
-            assert!(
-                outgoing.is_secured(),
-                "client couldn't secure the connection"
-            );
-
-            return (outgoing, incoming);
-        }
+    pub async fn setup_tcp_listener_and_client() -> (Connection, Connection) {
+        generate_connection!(TcpListener, TcpDirect);
     }
 
     #[tokio::test]
@@ -441,7 +453,7 @@ mod tests {
 
     #[tokio::test]
     async fn garbage_data_decryption() {
-        let (mut client, mut listener) = setup_listener_and_client().await;
+        let (mut client, mut listener) = setup_tcp_listener_and_client().await;
 
         client
             .send_plain(&0u32)
@@ -461,7 +473,7 @@ mod tests {
 
     #[tokio::test]
     async fn initial_state() {
-        let (client, listener) = setup_listener_and_client().await;
+        let (client, listener) = setup_tcp_listener_and_client().await;
 
         assert!(client.is_secured(), "client is not authenticated");
         assert!(listener.is_secured(), "listener is not authenticated");
@@ -471,7 +483,7 @@ mod tests {
 
     #[tokio::test]
     async fn connection_fmt() {
-        let (client, _listener) = setup_listener_and_client().await;
+        let (client, _listener) = setup_tcp_listener_and_client().await;
 
         assert_eq!(
             format!("{:?}", client),
