@@ -187,12 +187,12 @@ mod tests {
             let mut sealer = Seal::random();
             let mut opener = Seal::random();
 
-            let mut bytes = sealer
+            let bytes = sealer
                 .encrypt(opener.public(), &($value))
                 .expect("encryption failed");
 
             let x: T = opener
-                .$func(sealer.public(), &mut bytes)
+                .$func(sealer.public(), &bytes)
                 .expect("failed to decipher");
 
             assert_eq!(x, ($value), "decryption did not yield same data");
@@ -273,11 +273,11 @@ mod tests {
         let keypair1 = KeyPair::random();
         let keypair2 = KeyPair::random();
 
-        let mut encrypted = seal
+        let encrypted = seal
             .encrypt(&keypair1.public, &0u64)
             .expect("failed to encrypt data");
 
-        seal.decrypt::<u64>(&keypair2.public, &mut encrypted)
+        seal.decrypt::<u64>(&keypair2.public, &encrypted)
             .expect_err("verified data with wrong public key");
     }
 
@@ -287,9 +287,9 @@ mod tests {
         let mut seal = Seal::new(keypair.clone());
         let length = rand::random::<usize>() % TAG_LENGTH + NONCE_LENGTH;
 
-        let mut data: Vec<u8> = (0..length).map(|_| rand::random()).collect();
+        let data: Vec<u8> = (0..length).map(|_| rand::random()).collect();
 
-        seal.decrypt_ref::<u8>(&keypair.public, &mut data)
+        seal.decrypt_ref::<u8>(&keypair.public, &data)
             .expect_err("decrypted message without complete header");
     }
 
@@ -303,7 +303,7 @@ mod tests {
 
         encrypted[TAG_LENGTH + 2] = encrypted[TAG_LENGTH + 2].wrapping_add(2);
 
-        seal.decrypt::<u64>(&public, &mut encrypted)
+        seal.decrypt::<u64>(&public, &encrypted)
             .expect_err("decrypted corrupted message");
     }
 }
