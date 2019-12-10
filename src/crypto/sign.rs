@@ -10,8 +10,8 @@ use sodiumoxide::crypto::sign::{
 };
 
 pub use sodiumoxide::crypto::sign::{
-    Signature, PUBLICKEYBYTES as PUBKEY_LENGTH,
-    SECRETKEYBYTES as SECKEY_LENGTH, SIGNATUREBYTES as SIGN_LENGTH,
+    Signature, PUBLICKEYBYTES as PUBLIC_LENGTH,
+    SECRETKEYBYTES as SECRET_LENGTH, SIGNATUREBYTES as SIGNATURE_LENGTH,
 };
 
 /// A public key used for verifying messages
@@ -69,32 +69,32 @@ impl Signer {
     }
 
     /// Get a reference to the `SecretKey` used by this `Signer`
-    pub fn private(&self) -> &SecretKey {
+    pub fn secret(&self) -> &SecretKey {
         &self.keypair.secret
     }
 
     /// Sign some serializable data using the `SecretKey` in this `Signer`
     pub fn sign<T: Serialize>(
         &mut self,
-        data: &T,
+        message: &T,
     ) -> Result<Signature, SignError> {
         self.buffer.clear();
-        serialize_into(&mut self.buffer, data)?;
+        serialize_into(&mut self.buffer, message)?;
 
-        Ok(sign_detached(&self.buffer, &self.private().0))
+        Ok(sign_detached(&self.buffer, &self.secret().0))
     }
 
     /// Verify that the provided `Signature` is valid for the given message
     pub fn verify<T: Serialize>(
         &mut self,
         signature: &Signature,
-        pubkey: &PublicKey,
+        public: &PublicKey,
         message: &T,
     ) -> Result<(), VerifyError> {
         self.buffer.clear();
         serialize_into(&mut self.buffer, message)?;
 
-        if verify_detached(signature, &self.buffer, &pubkey.0) {
+        if verify_detached(signature, &self.buffer, &public.0) {
             Ok(())
         } else {
             Err(SodiumError::new().into())
