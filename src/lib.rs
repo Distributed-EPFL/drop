@@ -1,8 +1,6 @@
-/// Secure communication channels using sodiumoxide
+/// Cryptographic primitives using sodiumoxide
 pub mod crypto;
 /// Error definition and handling
 pub mod error;
-/// Pretty printing typenames for debugging
-pub mod lang;
 
 pub use backtrace;

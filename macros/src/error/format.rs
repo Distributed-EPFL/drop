@@ -1,12 +1,9 @@
-// Dependencies
+use std::iter;
+
+use super::parse::{Error, ErrorData};
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use std::iter;
-use super::parse::Error;
-use super::parse::ErrorData;
-
-// Functions
 
 pub fn display(error: &Error) -> TokenStream {
     let error_ident = &error.idents.error;
@@ -24,7 +21,7 @@ pub fn display(error: &Error) -> TokenStream {
                     }),*
                 }
             }
-        },
+        }
         _ => {
             quote! {
                 write!(fmt, "[{}]", stringify!(#error_ident))?;
@@ -54,7 +51,7 @@ pub fn debug(error: &Error) -> TokenStream {
         for spotting in self.spottings() {
             write!(fmt, "\n  Spotted: {}, line {}", spotting.file, spotting.line)?;
         }
-        for context in self.more() {
+        for context in self.details() {
             write!(fmt, "\n  Context: {}", context)?;
         }
         for attachment in self.attachments() {
@@ -75,8 +72,8 @@ pub fn debug(error: &Error) -> TokenStream {
                     }),*
                 }
             }
-        },
-        _ => TokenStream::new()
+        }
+        _ => TokenStream::new(),
     };
 
     quote! {

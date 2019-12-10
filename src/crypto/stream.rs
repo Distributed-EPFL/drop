@@ -1,30 +1,22 @@
 use std::fmt;
 
-use super::errors::BrokenStream;
-use super::errors::DecryptError;
-use super::errors::EncryptError;
-use super::errors::InvalidHeader;
-use super::errors::InvalidMac;
-use super::errors::MissingHeader;
+use super::errors::{
+    BrokenStream, DecryptError, EncryptError, InvalidHeader, InvalidMac,
+    MissingHeader,
+};
 use super::key::Key;
 
 use bincode::{deserialize, serialize_into};
 
 use serde::{Deserialize, Serialize};
 
-use sodiumoxide::crypto::secretstream::Header;
-use sodiumoxide::crypto::secretstream::Pull as SodiumPull;
-use sodiumoxide::crypto::secretstream::Push as SodiumPush;
-use sodiumoxide::crypto::secretstream::Stream;
-use sodiumoxide::crypto::secretstream::Tag;
-use sodiumoxide::crypto::secretstream::HEADERBYTES;
+use sodiumoxide::crypto::secretstream::{
+    Header, Pull as SodiumPull, Push as SodiumPush, Stream, Tag, HEADERBYTES,
+};
 
 enum PushState {
     Setup(Key),
-    Run {
-        stream: Stream<SodiumPush>,
-        buffer: Vec<u8>,
-    },
+    Run { stream: Stream<SodiumPush> },
 }
 
 enum PullState {
@@ -39,9 +31,9 @@ impl fmt::Debug for PullState {
             f,
             "{}",
             match self {
-                Self::Broken => "broken",
-                Self::Run(_) => "initialized",
                 Self::Setup(_) => "setting up",
+                Self::Run(_) => "initialized",
+                Self::Broken => "broken",
             }
         )
     }
@@ -50,15 +42,20 @@ impl fmt::Debug for PullState {
 /// The sending end of an encrypted channel
 pub struct Push {
     state: PushState,
+    buffer: Vec<u8>,
 }
 
 impl Push {
+    /// Create a new `Push` using the specified `Key` to encrypt messages
     pub fn new(key: Key) -> Self {
         Push {
             state: PushState::Setup(key),
+            buffer: Vec::new(),
         }
     }
 
+    /// Encrypt an arbitrary message into a slice of bytes. <br />
+    /// The resulting slice of bytes is allocated and returned as a `Vec<u8>`
     pub fn encrypt<T>(&mut self, message: &T) -> Result<Vec<u8>, EncryptError>
     where
         T: Serialize,
@@ -76,18 +73,16 @@ impl Push {
             PushState::Setup(key) => {
                 let (mut stream, header) =
                     Stream::init_push(&key.clone().into()).unwrap();
-                let mut buffer = Vec::new();
 
-                let mut ciphertext = encrypt(&mut stream, &mut buffer)?;
+                let mut ciphertext = encrypt(&mut stream, &mut self.buffer)?;
                 ciphertext.extend_from_slice(&header[..]);
 
-                self.state = PushState::Run { stream, buffer };
+                self.state = PushState::Run { stream };
                 Ok(ciphertext)
             }
-            PushState::Run {
-                ref mut stream,
-                ref mut buffer,
-            } => encrypt(stream, buffer),
+            PushState::Run { ref mut stream } => {
+                encrypt(stream, &mut self.buffer)
+            }
         }
     }
 }
@@ -178,7 +173,6 @@ impl Pull {
 }
 
 #[cfg(test)]
-#[cfg_attr(tarpaulin, skip)]
 mod tests {
     use super::*;
 

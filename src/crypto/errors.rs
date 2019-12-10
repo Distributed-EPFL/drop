@@ -1,11 +1,11 @@
 use std::io::Error as IoError;
 
-use macros::error;
-
 use crate as drop;
 use crate::error::Error;
 
 use bincode::ErrorKind as BincodeErrorKind;
+
+use macros::error;
 
 pub type BincodeError = Box<BincodeErrorKind>;
 
@@ -72,4 +72,22 @@ error! {
     type: DecryptError,
     description: "The ciphertext provided was impossible to decrypt.",
     causes: (MissingHeader, InvalidHeader, InvalidMac, BrokenStream, BincodeError)
+}
+
+error! {
+    type: ExchangeError,
+    description: "unable to exchange key",
+    causes: (SodiumError)
+}
+
+error! {
+    type: SignError,
+    description: "failed to sign the data",
+    causes: (BincodeError)
+}
+
+error! {
+    type: VerifyError,
+    description: "unable to verify signature",
+    causes: (SodiumError, BincodeError),
 }

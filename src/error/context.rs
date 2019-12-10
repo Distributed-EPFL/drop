@@ -1,31 +1,26 @@
-// Dependencies
-
 use std::any::Any;
 
-use super::error::Error;
 use super::spotting::Spotting;
-use crate::lang::Typename;
-
-// Traits
+use super::Error;
 
 pub trait Context {
     fn spot(self, spotting: Spotting) -> Self;
-    fn add<Text: Into<String>>(self, context: Text) -> Self;
-    fn attach<Payload: Any + Typename>(self, attachment: Payload) -> Self;
+    fn comment<Text: Into<String>>(self, context: Text) -> Self;
+    fn attach<Payload: Any>(self, attachment: Payload) -> Self;
 }
-
-// Implementations
 
 impl<Ok, Err: Error> Context for Result<Ok, Err> {
     fn spot(self, spotting: Spotting) -> Self {
         self.map_err(|err| err.spot(spotting))
     }
 
-    fn add<Text: Into<String>>(self, context: Text) -> Self {
-        self.map_err(|err| err.add(context))
+    fn comment<Text: Into<String>>(self, context: Text) -> Self {
+        self.map_err(|err| err.comment(context))
     }
 
-    fn attach<Payload: Any + Typename>(self, attachment: Payload) -> Self {
-        self.map_err(|err| err.attach(attachment))
+    fn attach<Payload: Any>(self, attachment: Payload) -> Self {
+        self.map_err(|err| {
+            err.attach(crate::error::Attachment::new(attachment))
+        })
     }
 }

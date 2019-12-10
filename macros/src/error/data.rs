@@ -1,11 +1,8 @@
-// Dependencies
-
-use proc_macro2::TokenStream;
-use quote::quote;
 use super::parse::Error;
 use super::parse::ErrorData;
 
-// Functions
+use proc_macro2::TokenStream;
+use quote::quote;
 
 pub fn error(error: &Error) -> TokenStream {
     let error_ident = &error.idents.error;
@@ -16,7 +13,7 @@ pub fn error(error: &Error) -> TokenStream {
         backtrace: drop::backtrace::Backtrace,
         spottings: std::vec::Vec<drop::error::Spotting>,
         more: std::vec::Vec<String>,
-        attachments: std::vec::Vec<drop::lang::Object>
+        attachments: std::vec::Vec<drop::error::Attachment>
     };
 
     let struct_fields = match &error.data {
@@ -27,14 +24,14 @@ pub fn error(error: &Error) -> TokenStream {
                 #struct_fields,
                 #(#[allow(dead_code)] #error_fields),*
             }
-        },
+        }
         ErrorData::Causes(_) => {
             quote! {
                 #struct_fields,
                 cause: #cause_ident
             }
-        },
-        ErrorData::None => struct_fields
+        }
+        ErrorData::None => struct_fields,
     };
 
     quote! {
@@ -58,5 +55,7 @@ pub fn cause(error: &Error) -> TokenStream {
                 #(#variants(#causes)),*
             }
         }
-    } else { TokenStream::new() }
+    } else {
+        TokenStream::new()
+    }
 }

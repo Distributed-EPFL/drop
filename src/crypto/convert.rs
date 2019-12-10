@@ -1,5 +1,3 @@
-// Dependencies
-
 use std::convert::TryInto;
 
 use super::hash::Digest;
@@ -8,8 +6,6 @@ use super::key::Key;
 use sodiumoxide::crypto::generichash::Digest as SodiumDigest;
 use sodiumoxide::crypto::kx::SessionKey as KxKey;
 use sodiumoxide::crypto::secretstream::Key as StreamKey;
-
-// Implementations
 
 impl From<SodiumDigest> for Digest {
     fn from(digest: SodiumDigest) -> Self {

@@ -1,5 +1,3 @@
-// Dependencies
-
 use std::convert::TryFrom;
 
 use super::errors::MalformedHex;
@@ -8,13 +6,9 @@ use super::errors::UnexpectedSize;
 use super::hash::Digest;
 use super::key::Key;
 
-// Traits
-
-pub trait ParseHex<To> {
+trait ParseHex<To> {
     fn parse_hex(&self) -> Result<To, ParseHexError>;
 }
-
-// Implementations
 
 macro_rules! implement {
     ($($size:expr), *) => ($(
@@ -56,10 +50,7 @@ impl TryFrom<&str> for Key {
     }
 }
 
-// Tests
-
 #[cfg(test)]
-#[cfg_attr(tarpaulin, skip)]
 mod tests {
     use super::*;
 
