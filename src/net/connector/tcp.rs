@@ -24,11 +24,11 @@ impl TcpDirect {
 
 impl Socket for TcpStream {
     fn local(&self) -> Result<SocketAddr, TokioError> {
-        self.local_addr().into()
+        self.local_addr()
     }
 
     fn remote(&self) -> Result<SocketAddr, TokioError> {
-        self.peer_addr().into()
+        self.peer_addr()
     }
 }
 

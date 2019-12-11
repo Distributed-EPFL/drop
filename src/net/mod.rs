@@ -124,9 +124,7 @@ impl Connection {
         self.socket.write(&serialized).await.map_err(|e| e.into())
     }
 
-    async fn read_size(
-        socket: &mut Box<dyn Socket>,
-    ) -> Result<u32, ReceiveError> {
+    async fn read_size(socket: &mut dyn Socket) -> Result<u32, ReceiveError> {
         let mut buf = [0u8; mem::size_of::<u32>()];
         socket.read_exact(&mut buf).await?;
 
@@ -134,7 +132,7 @@ impl Connection {
     }
 
     async fn write_size(
-        socket: &mut Box<dyn Socket>,
+        socket: &mut dyn Socket,
         size: u32,
     ) -> Result<(), SendError> {
         let data = serialize(&size)?;
@@ -149,7 +147,7 @@ impl Connection {
     {
         match &mut self.state {
             ChannelState::Secured(ref mut pull, _) => {
-                let sz = Self::read_size(&mut self.socket).await? as usize;
+                let sz = Self::read_size(&mut *self.socket).await? as usize;
 
                 // FIXME: avoid trusting network input and run out of memory
                 self.buffer.resize(sz, 0);
@@ -188,7 +186,7 @@ impl Connection {
             ChannelState::Secured(_, ref mut push) => {
                 let data = push.encrypt(message)?;
 
-                Self::write_size(&mut self.socket, data.len() as u32).await?;
+                Self::write_size(&mut *self.socket, data.len() as u32).await?;
 
                 self.socket.write(&data).await.map_err(|e| e.into())
             }
