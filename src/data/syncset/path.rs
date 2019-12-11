@@ -52,14 +52,17 @@ impl Path {
     /// Returns the direction at a given bit index
     /// Note that this function will panic if given an index
     /// greater or equal to the number of bits in a hash digest
-    pub fn at(&self, idx: usize) -> Direction {
-        assert!(idx < Self::NUM_BITS, "Out of bounds on Path");
-        let (byte_idx, bit_idx) = split_bits(idx);
+    pub fn at(&self, idx: usize) -> Result<Direction, PathLengthError> {
+        if idx < Path::NUM_BITS {
+            let (byte_idx, bit_idx) = split_bits(idx);
 
-        debug_assert!(HASH_SIZE > byte_idx as usize, "Out of bounds byte index");
-        let byte = (self.0).0[byte_idx as usize];
+            debug_assert!(HASH_SIZE > byte_idx as usize, "Out of bounds byte index");
+            let byte = (self.0).0[byte_idx as usize];
 
-        Direction::from_bit(byte, bit_idx)
+            Ok(Direction::from_bit(byte, bit_idx))
+        } else {
+            Err(PathLengthError::new("Out of bounds on path"))
+        }
     }
 
     /// Takes the i-th first bits of the digest and turn them into a Prefix
@@ -114,7 +117,7 @@ impl PartialEq for Prefix {
 impl Prefix {
     fn add_one(&self, dir: Direction) -> Result<Prefix, PathLengthError> {
         if self.depth >= Path::NUM_BITS {
-            return Err(PathLengthError::new());
+            return Err(PathLengthError::new("Cannot add depth to max-depth Prefix"));
         }
 
         // Copy old path, and increase depth
@@ -298,15 +301,16 @@ mod tests {
         ];
 
         for (idx, expected) in expected_vec.iter().enumerate() {
-            assert_eq!(expected, &path.at(idx));
+            assert_eq!(expected, &path.at(idx).unwrap());
         }
     }
 
     #[test]
-    #[should_panic(expected = "Out of bounds on Path")]
     fn depth_overflow() {
         let full = Path::new(&15092).unwrap();
-        full.at(Path::NUM_BITS);
+        if let Ok(_) = full.at(Path::NUM_BITS) {
+            panic!("Path returns Ok at max depth")
+        }
     }
 
     // Prefixed tests
@@ -321,7 +325,7 @@ mod tests {
                 "Prefix isn't prefix of full path"
             );
 
-            if full.at(depth) == Direction::Left {
+            if full.at(depth).unwrap() == Direction::Left {
                 prefix = prefix.left().unwrap();
             } else {
                 prefix = prefix.right().unwrap();
@@ -330,7 +334,7 @@ mod tests {
             assert_eq!(depth + 1, prefix.depth, "Prefix has wrong depth");
             for i in 0..=depth {
                 assert_eq!(
-                    full.at(i),
+                    full.at(i).unwrap(),
                     prefix.at(i).unwrap(),
                     "Prefix doesn't match full path"
                 );

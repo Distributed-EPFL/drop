@@ -23,5 +23,8 @@ error! {
 
 error! {
     type: PathLengthError,
-    description: "The provided vector's length was different than expected, or left()/right() was called on a max-length path"
+    description: "Path Length Error: {what}",
+    fields: {
+        what: &'static str, 
+    }
 }
