@@ -139,7 +139,7 @@ impl<Data: Syncable> Node<Data> {
                 ref mut right,
                 ..
             } => {
-                if path.at(depth) == Direction::Left {
+                if path.at(depth).expect("Recursion at max depth happened") == Direction::Left {
                     left.delete(item_to_delete, path, depth + 1)
                 } else {
                     right.delete(item_to_delete, path, depth + 1)
@@ -237,7 +237,7 @@ impl<Data: Syncable> Node<Data> {
                 ..
             } => {
                 // Recurse
-                let success = if path.at(depth) == Direction::Left {
+                let success = if path.at(depth).expect("Recursion at max depth happened") == Direction::Left {
                     left.insert(item, depth + 1, path)
                 } else {
                     right.insert(item, depth + 1, path)
@@ -289,9 +289,9 @@ impl<Data: Syncable> Node<Data> {
     ) -> Node<Data> {
         use Direction::*;
         debug_assert_ne!(path0, path1);
-        if path0.at(depth) == Left {
+        if path0.at(depth).expect("make_tree(): tried to insert two elements at identical paths") == Left {
             // Differing paths: exit condition
-            if path1.at(depth) == Right {
+            if path1.at(depth).expect("make_tree(): tried to insert two elements at identical paths") == Right {
                 Node::new_internal_from_items(item0, path0.0, item1, path1.0)
             // Same path: recurse
             } else {
@@ -302,7 +302,7 @@ impl<Data: Syncable> Node<Data> {
             }
         } else {
             // Different paths
-            if path1.at(depth) == Left {
+            if path1.at(depth).expect("make_tree(): tried to insert two elements at identical paths") == Left {
                 Node::new_internal_from_items(item1, path1.0, item0, path0.0)
             // Same path
             } else {
@@ -537,7 +537,7 @@ mod tests {
                             panic!("Dead branch encountered! Delete failed")
                         }
 
-                        if elem_path.at(idx) == Direction::Left {
+                        if elem_path.at(idx).unwrap() == Direction::Left {
                             nav = left
                         } else {
                             nav = right
