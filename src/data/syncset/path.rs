@@ -1,14 +1,12 @@
-use super::errors::PathLengthError;
-use crate::crypto::hash::{hash, Digest, SIZE as HASH_SIZE};
+use std::convert::TryInto;
+
 use crate::crypto::HashError;
+use crate::crypto::hash::{hash, Digest, SIZE as HASH_SIZE};
+use super::errors::PathLengthError;
 
 use serde::{Serialize, Deserialize};
 
-use std::convert::TryInto;
-
 const BITS_IN_BYTE: usize = 8;
-
-// Structs
 
 /// Navigator wrapper for Digest
 /// Guaranteed to have HASH_SIZE * 8 bits of depth
@@ -30,8 +28,6 @@ pub enum Direction {
     Left,
     Right,
 }
-
-// Implementations
 
 impl Direction {
     /// Convert the i-th bit of the byte into a Direction
@@ -218,8 +214,6 @@ impl Prefix {
 }
 
 
-// Helper Functions
-
 // Converts a bit index into byte index + bit-in-byte index
 fn split_bits(to_split: usize) -> (usize, usize) {
     (to_split / BITS_IN_BYTE, to_split % BITS_IN_BYTE)
@@ -238,10 +232,10 @@ fn get_mask(bit_idx: usize) -> u8 {
 
 
 #[cfg(test)]
-#[cfg_attr(tarpaulin, skip)]
 mod tests {
-    use super::*;
     use std::convert::TryFrom;
+
+    use super::*;
 
     // Direction tests
 

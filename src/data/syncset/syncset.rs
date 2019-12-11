@@ -1,11 +1,10 @@
-// Dependencies
-use super::errors::*;
-use super::path::*;
-use super::Syncable;
-use super::{Node, Set};
 use crate::crypto::hash::hash;
+use super::Set;
+use super::Syncable;
+use super::errors::*;
+use super::node::Node;
+use super::path::*;
 
-// Syncset
 pub struct SyncSet<Data: Syncable> {
     root: Node<Data>,
 }
@@ -18,7 +17,6 @@ pub struct Round<'a, 'b, Data: Syncable> {
     pub remove: Vec<&'a Data>,
 }
 
-// Syncset implementation
 /// A Set based on Merkle trees, with efficient (O(K log N), K number of differences,
 /// N number of total items) symmetric difference computation.
 /// Note that the SyncErrors returned by most of the functions here
@@ -51,6 +49,7 @@ impl<Data: Syncable> SyncSet<Data> {
     /// will return all the elements of the set.
     pub fn get(&self, prefix: &Prefix, dump: bool) -> Result<Set<&Data>, SyncError> {
         use Node::*;
+
         let node_at_prefix = self.root.node_at(prefix, 0);
         match node_at_prefix {
             Leaf { .. } => {
@@ -263,14 +262,13 @@ impl<Data: Syncable> SyncSet<Data> {
 }
 
 #[cfg(test)]
-#[cfg_attr(tarpaulin, skip)]
 mod tests {
 
-    use super::*;
-    extern crate rand;
-    use rand::Rng;
-
     use std::collections::HashSet;
+
+    use super::*;
+
+    use rand::Rng;
 
     const NUM_ITERS: u32 = 50000;
     #[test]
@@ -465,7 +463,6 @@ mod tests {
 
     #[test]
     fn sync() {
-        use std::collections::HashSet;
 
         type Set = HashSet<u32>;
         let mut alice = SyncSet::new();
@@ -587,7 +584,7 @@ mod tests {
         );
     }
 
-    fn insert_all<T: Eq + std::hash::Hash + Clone>(left: &mut std::collections::HashSet<T>, right: &Vec<&T>) {
+    fn insert_all<T: Eq + std::hash::Hash + Clone>(left: &mut HashSet<T>, right: &Vec<&T>) {
         for elem in right {
             left.insert((*elem).clone());
         }
