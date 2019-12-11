@@ -153,9 +153,8 @@ mod tests {
         let (srv, cli) = (KeyPair::random(), KeyPair::random());
         let wrong_keypair = KeyPair::random();
 
-        let srv_session = exchange_key!(srv.clone(), cli.public.clone());
-        let cli_session =
-            exchange_key!(cli.clone(), wrong_keypair.public().clone());
+        let srv_session = exchange_key!(srv, cli.public.clone());
+        let cli_session = exchange_key!(cli, wrong_keypair.public().clone());
 
         assert_ne!(
             cli_session.receive, srv_session.transmit,

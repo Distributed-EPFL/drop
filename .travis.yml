@@ -19,7 +19,20 @@ rust:
   - beta
   - nightly
 
+jobs:
+  allow_failures:
+    - rust:
+        - nightly
+        - beta
+  fast_finish: true
+
+before_install:
+  - rustup component add rustfmt
+  - rustup component add clippy || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
+
 script:
+  - cargo fmt --all -- --check
+  - cargo clippy --all-targets --all-features -- -D warnings
   - cargo build
   - cargo test
 

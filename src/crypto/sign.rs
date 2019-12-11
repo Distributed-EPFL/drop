@@ -164,7 +164,9 @@ mod tests {
 
         let mut signature = signer.sign(&0u64).expect("failed to sign data");
 
-        signature.0.last_mut().map(|x| *x = x.wrapping_add(1));
+        if let Some(x) = signature.0.last_mut() {
+            *x = x.wrapping_add(1);
+        }
 
         signer
             .verify(&signature, &keypair.public, &0u64)
