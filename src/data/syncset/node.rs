@@ -1,11 +1,11 @@
-use crate::crypto::hash::{hash, Digest};
+use std::cell::{Cell, RefCell};
+use std::mem;
 
+use crate::crypto::hash::{hash, Digest};
 use super::errors::*;
 use super::path::*;
 use super::Syncable;
 
-use std::cell::{Cell, RefCell};
-use std::mem;
 
 /// Private type used for the binary tree
 #[derive(Debug)]
@@ -420,7 +420,6 @@ impl<Data: Syncable> Node<Data> {
 struct ConcatDigest(Digest, Digest);
 
 #[cfg(test)]
-#[cfg_attr(tarpaulin, skip)]
 mod tests {
     use super::*;
 

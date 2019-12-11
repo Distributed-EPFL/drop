@@ -1,11 +1,9 @@
-// Dependencies
 
 use crate as drop;
 use crate::crypto::HashError;
 use crate::error::Error;
-use macros::error;
 
-// Errors
+use macros::error;
 
 error! {
     type: EmptyHashError,

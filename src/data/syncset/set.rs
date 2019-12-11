@@ -1,7 +1,7 @@
-use super::path::Prefix;
-use super::Node;
-use super::Syncable;
 use crate::crypto::hash::Digest;
+use super::Syncable;
+use super::node::Node;
+use super::path::Prefix;
 
 /// Data structure used to synchronize two SyncSets
 #[derive(Debug, PartialEq, Clone)]
