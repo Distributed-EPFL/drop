@@ -56,7 +56,6 @@ impl Path {
         if idx < Path::NUM_BITS {
             let (byte_idx, bit_idx) = split_bits(idx);
 
-            debug_assert!(HASH_SIZE > byte_idx as usize, "Out of bounds byte index");
             let byte = (self.0).0[byte_idx as usize];
 
             Ok(Direction::from_bit(byte, bit_idx))
