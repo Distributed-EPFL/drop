@@ -1,11 +1,10 @@
 use std::cell::{Cell, RefCell};
 use std::mem;
 
-use crate::crypto::hash::{hash, Digest};
 use super::errors::*;
 use super::path::*;
 use super::Syncable;
-
+use crate::crypto::hash::{hash, Digest};
 
 /// Private type used for the binary tree
 #[derive(Debug)]
@@ -70,7 +69,7 @@ impl<Data: Syncable> Node<Data> {
         match self {
             Node::Leaf { item, .. } => result.push(item),
             Node::Empty => (),
-            Node::Internal { left, right, ..} => {
+            Node::Internal { left, right, .. } => {
                 left.dump_recursive(result);
                 right.dump_recursive(result);
             }
@@ -128,7 +127,12 @@ impl<Data: Syncable> Node<Data> {
     }
 
     /// Deletes item at the given depth, on the given path, recursively on Nodes
-    pub fn delete(&mut self, item_to_delete: &Data, path: Path, depth: usize) -> bool {
+    pub fn delete(
+        &mut self,
+        item_to_delete: &Data,
+        path: Path,
+        depth: usize,
+    ) -> bool {
         let deletion_successful = match self {
             // Can't delete what's not there
             Node::Empty => false,
@@ -139,7 +143,9 @@ impl<Data: Syncable> Node<Data> {
                 ref mut right,
                 ..
             } => {
-                if path.at(depth).expect("Recursion at max depth happened") == Direction::Left {
+                if path.at(depth).expect("Recursion at max depth happened")
+                    == Direction::Left
+                {
                     left.delete(item_to_delete, path, depth + 1)
                 } else {
                     right.delete(item_to_delete, path, depth + 1)
@@ -147,9 +153,7 @@ impl<Data: Syncable> Node<Data> {
             }
 
             // Check for potential collision, and delete if elmnt matches
-            Node::Leaf { ref item, .. } => {
-                item == item_to_delete
-            }
+            Node::Leaf { ref item, .. } => item == item_to_delete,
         };
 
         // Pull up the tree's elements
@@ -192,7 +196,12 @@ impl<Data: Syncable> Node<Data> {
     }
 
     /// Inserts item into the node, with the given path
-    pub fn insert(&mut self, item: Data, depth: usize, path: Path) -> Result<bool, SyncError> {
+    pub fn insert(
+        &mut self,
+        item: Data,
+        depth: usize,
+        path: Path,
+    ) -> Result<bool, SyncError> {
         match self {
             // Trivial case
             Node::Empty => {
@@ -214,7 +223,9 @@ impl<Data: Syncable> Node<Data> {
                     if let Node::Leaf { item: old_item, .. } = old {
                         // Insert both elements into a new tree
                         let old_path = Path(old_hash);
-                        let new_node = Node::make_tree(old_item, old_path, item, path, depth);
+                        let new_node = Node::make_tree(
+                            old_item, old_path, item, path, depth,
+                        );
 
                         // No need to invalidate cache here, because we're discarding the old node anyway
                         self.swap(new_node);
@@ -233,11 +244,14 @@ impl<Data: Syncable> Node<Data> {
                 ..
             } => {
                 // Recurse
-                let success = if path.at(depth).expect("Recursion at max depth happened") == Direction::Left {
-                    left.insert(item, depth + 1, path)
-                } else {
-                    right.insert(item, depth + 1, path)
-                }?;
+                let success =
+                    if path.at(depth).expect("Recursion at max depth happened")
+                        == Direction::Left
+                    {
+                        left.insert(item, depth + 1, path)
+                    } else {
+                        right.insert(item, depth + 1, path)
+                    }?;
                 // If insertion was successful, invalidate cache and propagate success up
                 if success {
                     self.invalidate_cache();
@@ -285,9 +299,15 @@ impl<Data: Syncable> Node<Data> {
     ) -> Node<Data> {
         use Direction::*;
         debug_assert_ne!(path0, path1);
-        if path0.at(depth).expect("make_tree(): tried to insert two elements at identical paths") == Left {
+        if path0.at(depth).expect(
+            "make_tree(): tried to insert two elements at identical paths",
+        ) == Left
+        {
             // Differing paths: exit condition
-            if path1.at(depth).expect("make_tree(): tried to insert two elements at identical paths") == Right {
+            if path1.at(depth).expect(
+                "make_tree(): tried to insert two elements at identical paths",
+            ) == Right
+            {
                 Node::new_internal_from_items(item0, path0.0, item1, path1.0)
             // Same path: recurse
             } else {
@@ -298,7 +318,10 @@ impl<Data: Syncable> Node<Data> {
             }
         } else {
             // Different paths
-            if path1.at(depth).expect("make_tree(): tried to insert two elements at identical paths") == Left {
+            if path1.at(depth).expect(
+                "make_tree(): tried to insert two elements at identical paths",
+            ) == Left
+            {
                 Node::new_internal_from_items(item1, path1.0, item0, path0.0)
             // Same path
             } else {
@@ -435,10 +458,10 @@ mod tests {
         let elem_r = 13;
         let hash_right = hash(&elem_r).unwrap();
         root.insert(elem_l, 0, Path(hash_left.clone())).unwrap();
-        root.insert(elem_r, 0, Path(hash_right.clone()))
-            .unwrap();
+        root.insert(elem_r, 0, Path(hash_right.clone())).unwrap();
 
-        let expected_label = hash(&ConcatDigest(hash_left, hash_right)).unwrap();
+        let expected_label =
+            hash(&ConcatDigest(hash_left, hash_right)).unwrap();
         assert_eq!(root.label().unwrap(), expected_label);
     }
 
@@ -453,8 +476,7 @@ mod tests {
         let elem_r = 13;
         let hash_right = hash(&elem_r).unwrap();
         root.insert(elem_l, 0, Path(hash_left.clone())).unwrap();
-        root.insert(elem_r, 0, Path(hash_right))
-            .unwrap();
+        root.insert(elem_r, 0, Path(hash_right)).unwrap();
         let mut total = 1;
         root.traverse(&mut |el| total *= el);
         assert_eq!(total, elem_l * elem_r, "Traversal fails for two elements");
@@ -487,12 +509,13 @@ mod tests {
             panic!("Root is not of type Leaf. {:?}", root)
         }
 
-        root.insert(elem_r, 0, Path(hash_right))
-            .unwrap();
+        root.insert(elem_r, 0, Path(hash_right)).unwrap();
         if let Internal { left, right, .. } = &root {
             let left: &Node<_> = left;
             let right: &Node<_> = right;
-            if let (Leaf { item: item_l, .. }, Leaf { item: item_r, .. }) = (left, right) {
+            if let (Leaf { item: item_l, .. }, Leaf { item: item_r, .. }) =
+                (left, right)
+            {
                 assert_eq!(*item_l, elem_l, "Left branch doesn't match");
                 assert_eq!(*item_r, elem_r, "Right branch doesn't match");
             } else {

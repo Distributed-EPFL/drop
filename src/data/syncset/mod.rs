@@ -4,18 +4,15 @@ use crate::crypto::hash;
 
 use serde::Serialize;
 
-
-
 mod errors;
 mod node;
 mod path;
 mod set;
 
 pub use errors::*;
+use node::Node;
 pub use path::*;
 pub use set::Set;
-use node::Node;
-
 
 pub trait Syncable: Serialize + PartialEq {}
 impl<T: Serialize + PartialEq> Syncable for T {}
@@ -31,7 +28,6 @@ const DUMP_THRESHOLD: usize = 5;
 pub struct SyncSet<Data: Syncable> {
     root: Node<Data>,
 }
-
 
 // Round, the structure used to sync Syncsets
 #[derive(Debug, Clone)]
@@ -60,7 +56,6 @@ impl<Data: Syncable> SyncSet<Data> {
     {
         self.root.traverse(f)
     }
-    
 
     /// Attempts to delete the given element from the set, and
     /// returns Ok(true) if the element was contained in the
@@ -74,7 +69,11 @@ impl<Data: Syncable> SyncSet<Data> {
     /// if the entire sub-tree at the path should be returned, regardless of size.
     /// For instance, calling get(...) with an empty prefix, and dump set to true
     /// will return all the elements of the set.
-    pub fn get(&self, prefix: &Prefix, dump: bool) -> Result<Set<&Data>, SyncError> {
+    pub fn get(
+        &self,
+        prefix: &Prefix,
+        dump: bool,
+    ) -> Result<Set<&Data>, SyncError> {
         use Node::*;
 
         let node_at_prefix = self.root.node_at(prefix, 0);
@@ -146,7 +145,10 @@ impl<Data: Syncable> SyncSet<Data> {
     /// Round.remove will contain the nodes that this SyncSet contains but aren't
     /// present in the view, Round.add will contain the nodes that are present in
     /// the view, but not in this set.
-    pub fn sync<'a,'b>(&'a self, view: &'b [Set<Data>]) -> Result<Round<'a, 'b, Data>, SyncError> {
+    pub fn sync<'a, 'b>(
+        &'a self,
+        view: &'b [Set<Data>],
+    ) -> Result<Round<'a, 'b, Data>, SyncError> {
         // Figure out how much to pre-allocate
         let mut elem_count = 0;
         for set in view {
@@ -177,8 +179,14 @@ impl<Data: Syncable> SyncSet<Data> {
                             if remote_label != local_label {
                                 // Note: a node at max depth having children would violate invariant
                                 // thus, calling unwrap is appropriate
-                                new_view.push(self.get(&remote_prefix.left().unwrap(), false)?);
-                                new_view.push(self.get(&remote_prefix.right().unwrap(), false)?);
+                                new_view.push(self.get(
+                                    &remote_prefix.left().unwrap(),
+                                    false,
+                                )?);
+                                new_view.push(self.get(
+                                    &remote_prefix.right().unwrap(),
+                                    false,
+                                )?);
                             }
                         }
 
@@ -202,14 +210,16 @@ impl<Data: Syncable> SyncSet<Data> {
                     } = &local_set
                     {
                         // Cannot use standard vector comparison; one vector owns its data, while the other one not
-                        let mut vectors_equal = remote_data.len() == local_data.len();
+                        let mut vectors_equal =
+                            remote_data.len() == local_data.len();
                         for i in 0..remote_data.len() {
                             if !vectors_equal {
                                 break;
                             }
 
                             unsafe {
-                                vectors_equal = remote_data.get_unchecked(i) == *local_data.get_unchecked(i);
+                                vectors_equal = remote_data.get_unchecked(i)
+                                    == *local_data.get_unchecked(i);
                             }
                         }
 
@@ -222,36 +232,45 @@ impl<Data: Syncable> SyncSet<Data> {
                             let mut j = 0;
                             // Since the data is ordered we can do a merge like in a merge-sort
                             // While we have elements in both of the arrays, we iterate
-                            while i < remote_data.len() && j < local_data.len() {
+                            while i < remote_data.len() && j < local_data.len()
+                            {
                                 // Update hashes
                                 if local_hash_opt == None {
-                                    local_hash_opt =
-                                        Some(hash(unsafe { local_data.get_unchecked(j) })?);
+                                    local_hash_opt = Some(hash(unsafe {
+                                        local_data.get_unchecked(j)
+                                    })?);
                                 };
 
                                 if remote_hash_opt == None {
-                                    remote_hash_opt =
-                                        Some(hash(unsafe { remote_data.get_unchecked(i) })?);
+                                    remote_hash_opt = Some(hash(unsafe {
+                                        remote_data.get_unchecked(i)
+                                    })?);
                                 };
 
                                 // Borrow, explicitely avoid moving out
-                                let local_hash = local_hash_opt.as_ref().unwrap();
-                                let remote_hash = remote_hash_opt.as_ref().unwrap();
+                                let local_hash =
+                                    local_hash_opt.as_ref().unwrap();
+                                let remote_hash =
+                                    remote_hash_opt.as_ref().unwrap();
 
                                 // Add elements in order
                                 match remote_hash.cmp(&local_hash) {
                                     Ordering::Less => {
-                                        let new = unsafe { remote_data.get_unchecked(i) };
+                                        let new = unsafe {
+                                            remote_data.get_unchecked(i)
+                                        };
                                         add.push(new);
                                         i += 1;
                                         remote_hash_opt = None;
-                                    },
+                                    }
                                     Ordering::Greater => {
-                                        let new = *unsafe { local_data.get_unchecked(i) };
+                                        let new = *unsafe {
+                                            local_data.get_unchecked(i)
+                                        };
                                         remove.push(new);
                                         j += 1;
                                         local_hash_opt = None;
-                                    },
+                                    }
                                     Ordering::Equal => {
                                         // We ignore hash collisions
                                         i += 1;
@@ -264,12 +283,16 @@ impl<Data: Syncable> SyncSet<Data> {
 
                             // Iterate over the remaining array (since the other one is empty now)
                             while i < remote_data.len() {
-                                add.push(unsafe { remote_data.get_unchecked(i) });
+                                add.push(unsafe {
+                                    remote_data.get_unchecked(i)
+                                });
                                 i += 1;
                             }
 
                             while j < local_data.len() {
-                                remove.push(unsafe { local_data.get_unchecked(j) });
+                                remove.push(unsafe {
+                                    local_data.get_unchecked(j)
+                                });
                                 j += 1;
                             }
 
@@ -316,8 +339,12 @@ mod tests {
 
         assert_eq!(set.root.size(), NUM_ITERS as usize, "Root has wrong size");
 
-        if let Set::ListSet { underlying, .. } = set.get(&Prefix::empty(), true).unwrap() {
-            let mut previous = hash(underlying.get(0).expect("get() returns no elements")).unwrap();
+        if let Set::ListSet { underlying, .. } =
+            set.get(&Prefix::empty(), true).unwrap()
+        {
+            let mut previous =
+                hash(underlying.get(0).expect("get() returns no elements"))
+                    .unwrap();
             for i in 1..NUM_ITERS {
                 let current = hash(underlying.get(i as usize).unwrap())
                     .expect("get() returns too few elements");
@@ -332,20 +359,38 @@ mod tests {
     fn check_elem_containment(
         set: &Set<&u32>,
         expected_prefix: &Prefix,
-        elem_path: &Path, syncset: &SyncSet<u32>,
+        elem_path: &Path,
+        syncset: &SyncSet<u32>,
         elem: u32,
-        should_be_contained: bool) {
+        should_be_contained: bool,
+    ) {
         match set {
             Set::LabelSet { prefix, label } => {
-                assert!(prefix.is_prefix_of(elem_path), "Prefix is not a prefix of the path");
+                assert!(
+                    prefix.is_prefix_of(elem_path),
+                    "Prefix is not a prefix of the path"
+                );
                 assert_eq!(prefix, expected_prefix);
-                if let n @ Node::Internal { .. } = syncset.root.node_at(prefix, 0) {
-                    assert_eq!(&n.label().unwrap(), label, "Root label doesn't match label");
+                if let n @ Node::Internal { .. } =
+                    syncset.root.node_at(prefix, 0)
+                {
+                    assert_eq!(
+                        &n.label().unwrap(),
+                        label,
+                        "Root label doesn't match label"
+                    );
                 } else {
-                    panic!("get returns a labelset of a leaf or empty, {:?}", set)
+                    panic!(
+                        "get returns a labelset of a leaf or empty, {:?}",
+                        set
+                    )
                 }
-            },
-            Set::ListSet { underlying, prefix, dump } => {
+            }
+            Set::ListSet {
+                underlying,
+                prefix,
+                dump,
+            } => {
                 assert!(
                     underlying.len() <= super::DUMP_THRESHOLD,
                     "Number of elements received exceeds the threshold"
@@ -354,7 +399,10 @@ mod tests {
                     prefix.is_prefix_of(&elem_path),
                     "Prefix isn't a prefix of the full hash"
                 );
-                assert_eq!(prefix, expected_prefix, "Prefix doesn't match expected");
+                assert_eq!(
+                    prefix, expected_prefix,
+                    "Prefix doesn't match expected"
+                );
                 assert!(!dump, "get returns wrong value for dump");
                 if should_be_contained {
                     let mut success = false;
@@ -399,8 +447,13 @@ mod tests {
                 let expected_prefix = arbitrary_elem_path.prefix(depth);
                 let set = syncset.get(&expected_prefix, false).unwrap();
                 check_elem_containment(
-                    &set, &expected_prefix, &arbitrary_elem_path,
-                    &syncset, arbitrary_elem, true);
+                    &set,
+                    &expected_prefix,
+                    &arbitrary_elem_path,
+                    &syncset,
+                    arbitrary_elem,
+                    true,
+                );
             }
 
             // Test if the non-element is not contained
@@ -408,8 +461,13 @@ mod tests {
                 let expected_prefix = arbitrary_non_elem_path.prefix(depth);
                 let set = syncset.get(&expected_prefix, false).unwrap();
                 check_elem_containment(
-                    &set, &expected_prefix, &arbitrary_non_elem_path,
-                    &syncset, arbitrary_non_elem, false);
+                    &set,
+                    &expected_prefix,
+                    &arbitrary_non_elem_path,
+                    &syncset,
+                    arbitrary_non_elem,
+                    false,
+                );
             }
         }
     }
@@ -482,7 +540,6 @@ mod tests {
 
     #[test]
     fn sync() {
-
         type Set = HashSet<u32>;
         let mut alice = SyncSet::new();
         let mut bob = SyncSet::new();
@@ -504,7 +561,11 @@ mod tests {
         for i in NUM_ITERS..num_extra_elems + NUM_ITERS {
             if generator.gen() {
                 expected_diff_alice.insert(i);
-                assert!(alice.insert(i).unwrap(), "Inserting element {} fails", i);
+                assert!(
+                    alice.insert(i).unwrap(),
+                    "Inserting element {} fails",
+                    i
+                );
             } else {
                 expected_diff_bob.insert(i);
                 assert!(bob.insert(i).unwrap(), "Inserting element {} fails", i)
@@ -518,21 +579,30 @@ mod tests {
         );
         {
             let init_round = alice.start_sync().unwrap();
-            let mut view: Vec<_> = init_round.view.iter().map(|e| e.obtain_ownership()).collect();
+            let mut view: Vec<_> = init_round
+                .view
+                .iter()
+                .map(|e| e.obtain_ownership())
+                .collect();
             let mut alice_turn = false;
             while !view.is_empty() {
                 let round = if alice_turn {
                     let round = alice.sync(&view).unwrap();
-                    insert_all(&mut elems_alice_thinks_bob_hasnt, &round.remove);
+                    insert_all(
+                        &mut elems_alice_thinks_bob_hasnt,
+                        &round.remove,
+                    );
                     insert_all(&mut elems_alice_thinks_bob_has, &round.add);
                     round
                 } else {
                     let round = bob.sync(&view).unwrap();
-                    insert_all(&mut elems_bob_thinks_alice_hasnt, &round.remove);
+                    insert_all(
+                        &mut elems_bob_thinks_alice_hasnt,
+                        &round.remove,
+                    );
                     insert_all(&mut elems_bob_thinks_alice_has, &round.add);
                     round
                 };
-
 
                 // Copy over the elements owned by the sets
                 // Normally this would happen as a serialize -> network -> deserialize process
@@ -542,7 +612,8 @@ mod tests {
                     let to_insert = elem.obtain_ownership();
                     view.push(to_insert);
                 }*/
-                view = round.view.iter().map(|e| e.obtain_ownership()).collect();
+                view =
+                    round.view.iter().map(|e| e.obtain_ownership()).collect();
                 alice_turn = !alice_turn
             }
         }
@@ -575,24 +646,34 @@ mod tests {
         let mut diff = Set::new();
         {
             let init_round = alice.start_sync().unwrap();
-            let mut view: Vec<_> = init_round.view.iter().map(|e| e.obtain_ownership()).collect();
+            let mut view: Vec<_> = init_round
+                .view
+                .iter()
+                .map(|e| e.obtain_ownership())
+                .collect();
             let mut alice_turn = false;
             while !view.is_empty() {
-
                 let round = if alice_turn {
                     let round = alice.sync(&view).unwrap();
-                    assert!(round.add.is_empty(), "Round add isn't empty for alice");
+                    assert!(
+                        round.add.is_empty(),
+                        "Round add isn't empty for alice"
+                    );
                     insert_all(&mut diff, &round.remove);
                     round
                 } else {
                     let round = bob.sync(&view).unwrap();
-                    assert!(round.remove.is_empty(), "Round remove isn't empty for bob");
+                    assert!(
+                        round.remove.is_empty(),
+                        "Round remove isn't empty for bob"
+                    );
                     insert_all(&mut diff, &round.add);
                     round
                 };
                 // Copy over the elements owned by the sets
                 // Normally this would happen as a serialize -> network -> deserialize process
-                view = round.view.iter().map(|e| e.obtain_ownership()).collect();
+                view =
+                    round.view.iter().map(|e| e.obtain_ownership()).collect();
                 alice_turn = !alice_turn
             }
         }
@@ -603,10 +684,12 @@ mod tests {
         );
     }
 
-    fn insert_all<T: Eq + std::hash::Hash + Clone>(left: &mut HashSet<T>, right: &[&T]) {
+    fn insert_all<T: Eq + std::hash::Hash + Clone>(
+        left: &mut HashSet<T>,
+        right: &[&T],
+    ) {
         for elem in right {
             left.insert((*elem).clone());
         }
     }
 }
-
