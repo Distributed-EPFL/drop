@@ -22,6 +22,12 @@ impl<T: Serialize + PartialEq> Syncable for T {}
 
 const DUMP_THRESHOLD: usize = 5;
 
+/// A Set based on Merkle trees, with efficient (O(K log N), K number of differences,
+/// N number of total items) symmetric difference computation.
+/// Note that the SyncErrors returned by most of the functions here
+/// can almost always only happen due to Read errors. Thus, if you're using the tree to store
+/// something simple like integers, it is safe to assume the operations on this tree will
+/// never return errors (ignoring edge cases like hash collisions)
 pub struct SyncSet<Data: Syncable> {
     root: Node<Data>,
 }
@@ -34,13 +40,6 @@ pub struct Round<'a, 'b, Data: Syncable> {
     pub add: Vec<&'b Data>,
     pub remove: Vec<&'a Data>,
 }
-
-/// A Set based on Merkle trees, with efficient (O(K log N), K number of differences,
-/// N number of total items) symmetric difference computation.
-/// Note that the SyncErrors returned by most of the functions here
-/// can almost always only happen due to Read errors. Thus, if you're using the tree to store
-/// something simple like integers, it is safe to assume the operations on this tree will
-/// never return errors (ignoring edge cases like hash collisions)
 
 impl<Data: Syncable> SyncSet<Data> {
     /// Attempts to insert the given element into the set.
