@@ -1,4 +1,3 @@
-
 use crate as drop;
 use crate::crypto::HashError;
 use crate::error::Error;
@@ -25,6 +24,6 @@ error! {
     type: PathLengthError,
     description: "Path Length Error: {what}",
     fields: {
-        what: &'static str, 
+        what: &'static str,
     }
 }

@@ -1,7 +1,7 @@
-use crate::crypto::hash::Digest;
-use super::Syncable;
 use super::node::Node;
 use super::path::Prefix;
+use super::Syncable;
+use crate::crypto::hash::Digest;
 
 /// Data structure used to synchronize two SyncSets
 #[derive(Debug, PartialEq, Clone)]
@@ -21,7 +21,11 @@ pub enum Set<Data> {
 
 impl<Data: Syncable> Set<Data> {
     // Constructors, for ease of use
-    pub(super) fn new_dataset(prefix: Prefix, node: &Node<Data>, dump: bool) -> Set<&Data> {
+    pub(super) fn new_dataset(
+        prefix: Prefix,
+        node: &Node<Data>,
+        dump: bool,
+    ) -> Set<&Data> {
         let underlying = node.dump();
 
         Set::ListSet {
@@ -46,14 +50,26 @@ impl<Data: Syncable + Clone> Set<&Data> {
     pub fn obtain_ownership(&self) -> Set<Data> {
         use Set::*;
         match self {
-            LabelSet { prefix, label } => LabelSet { prefix: prefix.clone(), label: label.clone() },
-            ListSet { underlying, prefix, dump } => {
-                let mut new_underlying: Vec<Data> = Vec::with_capacity(underlying.len());
+            LabelSet { prefix, label } => LabelSet {
+                prefix: prefix.clone(),
+                label: label.clone(),
+            },
+            ListSet {
+                underlying,
+                prefix,
+                dump,
+            } => {
+                let mut new_underlying: Vec<Data> =
+                    Vec::with_capacity(underlying.len());
                 for elem in underlying {
                     new_underlying.push((*elem).clone());
                 }
 
-                ListSet { underlying: new_underlying, prefix: prefix.clone(), dump: *dump }
+                ListSet {
+                    underlying: new_underlying,
+                    prefix: prefix.clone(),
+                    dump: *dump,
+                }
             }
         }
     }

@@ -1,10 +1,10 @@
 use std::convert::TryInto;
 
-use crate::crypto::HashError;
-use crate::crypto::hash::{hash, Digest, SIZE as HASH_SIZE};
 use super::errors::PathLengthError;
+use crate::crypto::hash::{hash, Digest, SIZE as HASH_SIZE};
+use crate::crypto::HashError;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 const BITS_IN_BYTE: usize = 8;
 
@@ -87,7 +87,9 @@ impl PartialEq for Prefix {
             // Check all full bytes for equality
             for i in 0..num_full_bytes {
                 unsafe {
-                    if self.inner.get_unchecked(i) != other.inner.get_unchecked(i) {
+                    if self.inner.get_unchecked(i)
+                        != other.inner.get_unchecked(i)
+                    {
                         return false;
                     }
                 }
@@ -95,8 +97,10 @@ impl PartialEq for Prefix {
 
             // Check all the additional bits for equality
             if overflow_bits > 0 {
-                let last_byte_self = unsafe { self.inner.get_unchecked(num_full_bytes) };
-                let last_byte_other = unsafe { other.inner.get_unchecked(num_full_bytes) };
+                let last_byte_self =
+                    unsafe { self.inner.get_unchecked(num_full_bytes) };
+                let last_byte_other =
+                    unsafe { other.inner.get_unchecked(num_full_bytes) };
                 let shift_amount = BITS_IN_BYTE - overflow_bits;
 
                 let masked_self = last_byte_self >> shift_amount;
@@ -116,7 +120,9 @@ impl PartialEq for Prefix {
 impl Prefix {
     fn add_one(&self, dir: Direction) -> Result<Prefix, PathLengthError> {
         if self.depth >= Path::NUM_BITS {
-            return Err(PathLengthError::new("Cannot add depth to max-depth Prefix"));
+            return Err(PathLengthError::new(
+                "Cannot add depth to max-depth Prefix",
+            ));
         }
 
         // Copy old path, and increase depth
@@ -181,7 +187,10 @@ impl Prefix {
     }
 
     /// Hashes a data element, and creates a path out of the digest
-    pub fn new<Data: Serialize>(data: &Data, depth: usize) -> Result<Prefix, HashError> {
+    pub fn new<Data: Serialize>(
+        data: &Data,
+        depth: usize,
+    ) -> Result<Prefix, HashError> {
         let digest = hash(data)?;
         Ok(Prefix::from_digest(&digest, depth))
     }
@@ -199,7 +208,8 @@ impl Prefix {
 
         // If there are some bits left to individually compare in the last byte
         if overflow_bits > 0 {
-            let last_byte_left = unsafe { self.inner.get_unchecked(num_full_bytes) };
+            let last_byte_left =
+                unsafe { self.inner.get_unchecked(num_full_bytes) };
             let last_byte_right = (rhs.0).0[num_full_bytes];
             let shift_amount = BITS_IN_BYTE - overflow_bits;
 
@@ -215,7 +225,6 @@ impl Prefix {
     }
 }
 
-
 // Converts a bit index into byte index + bit-in-byte index
 fn split_bits(to_split: usize) -> (usize, usize) {
     (to_split / BITS_IN_BYTE, to_split % BITS_IN_BYTE)
@@ -230,8 +239,6 @@ fn is_bit_set(byte: u8, bit_idx: usize) -> bool {
 fn get_mask(bit_idx: usize) -> u8 {
     1 << (BITS_IN_BYTE - bit_idx - 1)
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -295,8 +302,8 @@ mod tests {
         let path = Path::new(&15092).unwrap();
 
         let expected_vec = vec![
-            Left, Right, Left, Right, Right, Left, Right, Left, Left, Left, Left, Right, Right,
-            Right, Right, Right,
+            Left, Right, Left, Right, Right, Left, Right, Left, Left, Left,
+            Left, Right, Right, Right, Right, Right,
         ];
 
         for (idx, expected) in expected_vec.iter().enumerate() {
@@ -371,16 +378,16 @@ mod tests {
         assert!(!pref3.is_prefix_of(&full), "prefix3 returned true");
 
         let pref4 = Prefix {
-            inner: [0xFF, 0x1, 0, 0, 0, 0, 0, 0,
-                       0,   0, 0, 0, 0, 0, 0, 0,
-                       0,   0, 0, 0, 0, 0, 0, 0,
-                       0,   0, 0, 0, 0, 0, 0, 0],
+            inner: [
+                0xFF, 0x1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ],
             depth: 9,
         };
         assert!(!pref4.is_prefix_of(&full), "prefix4 returned true");
 
         let empty = Prefix {
-            inner: [0;HASH_SIZE],
+            inner: [0; HASH_SIZE],
             depth: 0,
         };
         assert!(empty.is_prefix_of(&full), "empty prefix returned false");
@@ -401,10 +408,7 @@ mod tests {
         inner[0] = 0xAA;
         inner[1] = 0x55;
         let inner_len = 2;
-        let path = Prefix {
-            inner,
-            depth: 16,
-        };
+        let path = Prefix { inner, depth: 16 };
         for i in 0..inner_len {
             for j in 0..BITS_IN_BYTE {
                 let expected_bit = (i + j) % 2 == 0;
@@ -417,7 +421,7 @@ mod tests {
     #[test]
     fn indices() {
         let prefix = Prefix {
-            inner: [0b1000_0000;HASH_SIZE],
+            inner: [0b1000_0000; HASH_SIZE],
             depth: 2,
         };
         assert_eq!(prefix.at(0), Some(Direction::Right));
