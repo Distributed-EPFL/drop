@@ -44,7 +44,8 @@ impl Default for Hasher {
 }
 
 /// A hash digest
-#[derive(Clone, Deserialize, Hash, Eq, PartialOrd, Serialize)]
+#[allow(clippy::derive_hash_xor_eq)]
+#[derive(Clone, Deserialize, Hash, Eq, Ord, PartialOrd, Serialize)]
 pub struct Digest(pub(crate) [u8; SIZE]);
 
 impl PartialEq for Digest {

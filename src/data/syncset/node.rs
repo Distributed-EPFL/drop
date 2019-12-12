@@ -148,11 +148,7 @@ impl<Data: Syncable> Node<Data> {
 
             // Check for potential collision, and delete if elmnt matches
             Node::Leaf { ref item, .. } => {
-                if item == item_to_delete {
-                    true
-                } else {
-                    false
-                }
+                item == item_to_delete
             }
         };
 
@@ -457,7 +453,7 @@ mod tests {
         let elem_r = 13;
         let hash_right = hash(&elem_r).unwrap();
         root.insert(elem_l, 0, Path(hash_left.clone())).unwrap();
-        root.insert(elem_r, 0, Path(hash_right.clone()))
+        root.insert(elem_r, 0, Path(hash_right))
             .unwrap();
         let mut total = 1;
         root.traverse(&mut |el| total *= el);
@@ -483,7 +479,7 @@ mod tests {
         // hash(13) = 1101 ...
         let elem_r = 13;
         let hash_right = hash(&elem_r).unwrap();
-        root.insert(elem_l, 0, Path(hash_left.clone())).unwrap();
+        root.insert(elem_l, 0, Path(hash_left)).unwrap();
         if let Leaf { item, .. } = root {
             assert_eq!(item, elem_l, "Inserted element doesn't match");
         // Success!
@@ -491,7 +487,7 @@ mod tests {
             panic!("Root is not of type Leaf. {:?}", root)
         }
 
-        root.insert(elem_r, 0, Path(hash_right.clone()))
+        root.insert(elem_r, 0, Path(hash_right))
             .unwrap();
         if let Internal { left, right, .. } = &root {
             let left: &Node<_> = left;
