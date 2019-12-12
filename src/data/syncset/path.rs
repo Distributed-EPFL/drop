@@ -130,14 +130,14 @@ impl Prefix {
 
         let new_bit = dir.to_bit();
 
-        if new_bit == true {
+        if new_bit {
             // Set the new bit
             let mask = get_mask(bit_idx);
-            *current_byte = *current_byte | mask;
+            *current_byte |= mask;
         } else {
             // Unset the new bit
             let mask = !get_mask(bit_idx);
-            *current_byte = *current_byte & mask;
+            *current_byte &= mask;
         }
         Ok(Prefix {
             inner: new_inner,
@@ -177,7 +177,7 @@ impl Prefix {
     fn from_digest(digest: &Digest, depth: usize) -> Prefix {
         Prefix {
             inner: digest.0,
-            depth: depth,
+            depth,
         }
     }
 
@@ -278,7 +278,7 @@ mod tests {
             assert_eq!(is_bit_set(mishmash, i), b);
         }
 
-        let byte = 0b10000100;
+        let byte = 0b1000_0100;
         for i in 0..BITS_IN_BYTE {
             if i != 0 && i != 5 {
                 assert!(!is_bit_set(byte, i))
@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn depth_overflow() {
         let full = Path::new(&15092).unwrap();
-        if let Ok(_) = full.at(Path::NUM_BITS) {
+        if full.at(Path::NUM_BITS).is_ok() {
             panic!("Path returns Ok at max depth")
         }
     }
@@ -391,7 +391,7 @@ mod tests {
     fn add_one_errors() {
         let pref = Prefix::new(&15092, Path::NUM_BITS).unwrap();
 
-        if let Ok(_) = pref.add_one(Direction::Left) {
+        if pref.add_one(Direction::Left).is_ok() {
             panic!("Expected an error in adding one to direction")
         }
     }
@@ -403,7 +403,7 @@ mod tests {
         inner[1] = 0x55;
         let inner_len = 2;
         let path = Prefix {
-            inner: inner,
+            inner,
             depth: 16,
         };
         for i in 0..inner_len {
@@ -418,7 +418,7 @@ mod tests {
     #[test]
     fn indices() {
         let prefix = Prefix {
-            inner: [0b10000000;HASH_SIZE],
+            inner: [0b1000_0000;HASH_SIZE],
             depth: 2,
         };
         assert_eq!(prefix.at(0), Some(Direction::Right));
