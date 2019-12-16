@@ -356,62 +356,62 @@ mod tests {
     /// Exchanges the given data using a new `Connection` and checks that the
     /// received data is the same as what was sent.
     macro_rules! exchange_data_and_compare {
-        ($data:expr) => {
-            let (mut client, mut listener) =
-                setup_tcp_listener_and_client().await;
+        ($data:expr, $type:ty, $setup:ident) => {
+            let (mut client, mut listener) = $setup().await;
 
             let data = $data;
 
             client.send(&data).await.expect("failed to send");
 
-            let recvd = listener.receive().await.expect("failed to receive");
+            let recvd: $type =
+                listener.receive().await.expect("failed to receive");
 
             assert_eq!(data, recvd, "data is not the same");
         };
     }
 
-    pub async fn setup_tcp_listener_and_client() -> (Connection, Connection) {
+    pub async fn setup_tcp() -> (Connection, Connection) {
         generate_connection!(TcpListener, TcpDirect);
     }
 
     #[tokio::test]
     async fn tcp_u8_exchange() {
-        exchange_data_and_compare!(0u8);
+        exchange_data_and_compare!(0, u8, setup_tcp);
     }
 
     #[tokio::test]
     async fn tcp_u16_exchange() {
-        exchange_data_and_compare!(0u16);
+        exchange_data_and_compare!(0, u16, setup_tcp);
     }
 
     #[tokio::test]
     async fn tcp_u32_exchange() {
-        exchange_data_and_compare!(0u32);
+        exchange_data_and_compare!(0, u32, setup_tcp);
     }
 
     #[tokio::test]
     async fn tcp_u64_exchange() {
-        exchange_data_and_compare!(0u64);
+        exchange_data_and_compare!(0, u64, setup_tcp);
     }
 
     #[tokio::test]
     async fn tcp_i8_exchange() {
-        exchange_data_and_compare!(0i8);
+        exchange_data_and_compare!(0, i8, setup_tcp);
     }
 
     #[tokio::test]
     async fn tcp_i16_exchange() {
-        exchange_data_and_compare!(0i16);
+        exchange_data_and_compare!(0, i16, setup_tcp);
     }
 
     #[tokio::test]
     async fn tcp_i32_exchange() {
-        exchange_data_and_compare!(0i32);
+        exchange_data_and_compare!(0, i32, setup_tcp);
     }
 
     #[tokio::test]
     async fn tcp_i64_exchange() {
-        exchange_data_and_compare!(0i64);
+        exchange_data_and_compare!(0, i64, setup_tcp);
     }
 
     #[tokio::test]
@@ -435,7 +435,7 @@ mod tests {
             c: A { a: 66, b: 245 },
         };
 
-        exchange_data_and_compare!(data);
+        exchange_data_and_compare!(data, T, setup_tcp);
     }
 
     #[tokio::test]
@@ -446,12 +446,12 @@ mod tests {
             hashmap.insert(rand::random(), rand::random());
         }
 
-        exchange_data_and_compare!(hashmap);
+        exchange_data_and_compare!(hashmap, HashMap<u32, u128>, setup_tcp);
     }
 
     #[tokio::test]
     async fn garbage_data_decryption() {
-        let (mut client, mut listener) = setup_tcp_listener_and_client().await;
+        let (mut client, mut listener) = setup_tcp().await;
 
         client
             .send_plain(&0u32)
@@ -471,7 +471,7 @@ mod tests {
 
     #[tokio::test]
     async fn initial_state() {
-        let (client, listener) = setup_tcp_listener_and_client().await;
+        let (client, listener) = setup_tcp().await;
 
         assert!(client.is_secured(), "client is not authenticated");
         assert!(listener.is_secured(), "listener is not authenticated");
@@ -481,7 +481,7 @@ mod tests {
 
     #[tokio::test]
     async fn connection_fmt() {
-        let (client, _listener) = setup_tcp_listener_and_client().await;
+        let (client, _listener) = setup_tcp().await;
 
         assert_eq!(
             format!("{:?}", client),
