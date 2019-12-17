@@ -76,26 +76,6 @@ impl<Data: Syncable> Node<Data> {
         }
     }
 
-    /// Traverses the graph in a depth first manner (priority to left leaves), and applies the
-    /// function to each element encountered.
-    pub fn traverse<F>(&self, f: &mut F)
-    where
-        F: FnMut(&Data),
-    {
-        use Node::*;
-        match self {
-            // Bottom elements
-            Empty => (),
-            Leaf { item, .. } => f(item),
-
-            // Recursion
-            Internal { left, right, .. } => {
-                left.traverse(f);
-                right.traverse(f);
-            }
-        }
-    }
-
     /// Returns the number of children (including itself) a node has.
     pub fn size(&self) -> usize {
         use Node::*;
@@ -463,32 +443,6 @@ mod tests {
         let expected_label =
             hash(&ConcatDigest(hash_left, hash_right)).unwrap();
         assert_eq!(root.label().unwrap(), expected_label);
-    }
-
-    #[test]
-    fn traverse() {
-        use Node::*;
-        let mut root = Empty;
-        // hash(15092) = 0101 1010 0001 1111 ...
-        let elem_l = 15092;
-        let hash_left = hash(&elem_l).unwrap();
-        // hash(13) = 1101 ...
-        let elem_r = 13;
-        let hash_right = hash(&elem_r).unwrap();
-        root.insert(elem_l, 0, Path(hash_left.clone())).unwrap();
-        root.insert(elem_r, 0, Path(hash_right)).unwrap();
-        let mut total = 1;
-        root.traverse(&mut |el| total *= el);
-        assert_eq!(total, elem_l * elem_r, "Traversal fails for two elements");
-
-        assert!(
-            root.delete(&elem_l, Path(hash_left), 0),
-            "Deletion fails for left element"
-        );
-
-        total = 1;
-        root.traverse(&mut |el| total *= el);
-        assert_eq!(total, elem_r, "Traversal fails for one element");
     }
 
     #[test]

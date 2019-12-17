@@ -48,15 +48,6 @@ impl<Data: Syncable> SyncSet<Data> {
         self.root.insert(data, 0, path)
     }
 
-    /// Traverses the graph in a depth first manner (priority to left leaves), and applies the
-    /// function to each element encountered.
-    pub fn traverse<F>(&self, f: &mut F)
-    where
-        F: FnMut(&Data),
-    {
-        self.root.traverse(f)
-    }
-
     /// Attempts to delete the given element from the set, and
     /// returns Ok(true) if the element was contained in the
     /// syncset, Ok(false) if it wasn't
