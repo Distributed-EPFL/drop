@@ -243,6 +243,12 @@ impl Connection {
         Ok(())
     }
 
+    /// Gracefully closes this `Connection` ensuring that any data sent has been
+    /// received by the remote peer.
+    pub async fn close(&mut self) -> Result<(), IoError> {
+        self.socket.shutdown().await
+    }
+
     /// Checks whether this `Connection` is secured
     pub fn is_secured(&self) -> bool {
         match &self.state {
