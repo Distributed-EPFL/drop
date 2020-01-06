@@ -1,4 +1,4 @@
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use super::{ConnectError, Connector, Socket};
 use crate::crypto::key::exchange::Exchanger;
@@ -27,16 +27,9 @@ impl Connector for UtpDirect {
     async fn establish(
         candidate: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError> {
-        let local = match *candidate {
-            SocketAddr::V4(_) => {
-                SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))
-            }
-            SocketAddr::V6(_) => SocketAddr::V6(SocketAddrV6::new(
-                Ipv6Addr::UNSPECIFIED,
-                0,
-                0,
-                0,
-            )),
+        let local: SocketAddr = match *candidate {
+            SocketAddr::V4(_) => (Ipv4Addr::UNSPECIFIED, 0).into(),
+            SocketAddr::V6(_) => (Ipv6Addr::UNSPECIFIED, 0).into(),
         };
         let socket = UtpSocket::bind(local).await?;
         let (stream, driver) = socket.connect(*candidate).await?;
@@ -63,7 +56,6 @@ impl Socket for UtpStream {
 
 #[cfg(test)]
 mod tests {
-    use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::atomic::{AtomicU16, Ordering};
 
     use super::*;
@@ -77,10 +69,7 @@ mod tests {
     }
 
     fn next_test_ip4() -> SocketAddr {
-        SocketAddr::V4(SocketAddrV4::new(
-            Ipv4Addr::new(127, 0, 0, 1),
-            next_test_port(),
-        ))
+        (Ipv4Addr::new(127, 0, 0, 1), next_test_port()).into()
     }
 
     #[tokio::test]
