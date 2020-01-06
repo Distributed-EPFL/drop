@@ -14,6 +14,12 @@ pub struct UtpDirect {
     exchanger: Exchanger,
 }
 
+impl UtpDirect {
+    pub fn new(exchanger: Exchanger) -> Self {
+        Self { exchanger }
+    }
+}
+
 #[async_trait]
 impl Connector for UtpDirect {
     type Candidate = SocketAddr;
@@ -60,8 +66,8 @@ mod tests {
     use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::atomic::{AtomicU16, Ordering};
 
-    use super::super::Connection;
     use super::*;
+    use crate::net::listener::{utp::UtpListener, Listener};
 
     fn next_test_port() -> u16 {
         static PORT_OFFSET: AtomicU16 = AtomicU16::new(0);
@@ -80,23 +86,25 @@ mod tests {
     #[tokio::test]
     async fn utp_correct() {
         let addr = next_test_ip4();
-        let utp = UtpSocket::bind(addr).await.expect("failed to bind local");
+        let server = Exchanger::random();
+        let client = Exchanger::random();
+        let mut utp = UtpListener::new(addr, server.clone())
+            .await
+            .expect("failed to bind local");
 
         task::spawn(async move {
-            let utp = UtpDirect::establish(&addr)
+            let utp = UtpDirect::new(client);
+            let mut connection = utp
+                .connect(server.keypair().public(), &addr)
                 .await
                 .expect("failed to connect");
-            let mut connection = Connection::new(utp);
 
             connection.send(&0u32).await.expect("failed to send");
             connection.close().await.expect("failed to close");
         });
 
-        let (stream, driver) =
+        let mut connection =
             utp.accept().await.expect("failed to accept connection");
-        let mut connection = Connection::new(Box::new(stream));
-
-        task::spawn(driver);
 
         let data = connection
             .receive::<u32>()
