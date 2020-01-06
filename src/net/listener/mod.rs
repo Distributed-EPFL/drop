@@ -1,6 +1,9 @@
 /// Tcp related listeners utilities
 pub mod tcp;
 
+/// uTp related listener
+pub mod utp;
+
 use std::net::SocketAddr;
 
 use super::{Connection, SecureError};

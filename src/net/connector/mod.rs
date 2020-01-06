@@ -1,6 +1,9 @@
 /// Tcp related connectors
 pub mod tcp;
 
+/// uTP connectors
+pub mod utp;
+
 use super::{Connection, SecureError, Socket};
 use crate as drop;
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
