@@ -30,7 +30,9 @@ pub trait Listener {
     type Candidate: ToSocketAddrs + Send + Sync;
 
     /// Returns the local address on which this `Listener` listens
-    fn local_addr(&self) -> Result<SocketAddr, ListenerError>;
+    fn local_addr(&self) -> Option<SocketAddr> {
+        None
+    }
 
     /// Asynchronously accept incoming `Connection`s
     async fn accept(&mut self) -> Result<Connection, ListenerError>;

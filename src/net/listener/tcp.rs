@@ -62,8 +62,8 @@ impl Listener for TcpListener {
         unimplemented!()
     }
 
-    fn local_addr(&self) -> Result<SocketAddr, ListenerError> {
-        self.listener.local_addr().map_err(|e| e.into())
+    fn local_addr(&self) -> Option<SocketAddr> {
+        self.listener.local_addr().ok()
     }
 
     /// Accept an incoming `Connection` from this `TcpListener` and performs

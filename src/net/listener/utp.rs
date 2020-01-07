@@ -43,15 +43,8 @@ impl Listener for UtpListener {
     /// Get the local address for this `Listener`. Be aware that `UtpDirect` is
     /// a one-use `Listener` and that after accepting a `Connection` this will
     /// return an error.
-    fn local_addr(&self) -> Result<SocketAddr, ListenerError> {
-        self.socket
-            .as_ref()
-            .ok_or_else(|| {
-                let io: Error = ErrorKind::AddrNotAvailable.into();
-
-                io.into()
-            })
-            .map(|x| x.local_addr())
+    fn local_addr(&self) -> Option<SocketAddr> {
+        self.socket.as_ref().map(|x| x.local_addr())
     }
 
     /// Accept a Utp `Connection` on this `Listener`. This `Listener` is no
