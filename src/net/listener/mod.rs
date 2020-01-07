@@ -4,6 +4,7 @@ pub mod tcp;
 /// uTp related listener
 pub mod utp;
 
+use std::fmt;
 use std::net::SocketAddr;
 
 use super::{Connection, SecureError};
@@ -26,10 +27,12 @@ error! {
 /// A trait used to accept incoming `Connection`s from other peers
 #[async_trait]
 pub trait Listener {
-    /// The type of address that this `Listener` listens on
-    type Candidate: ToSocketAddrs + Send + Sync;
+    /// The type of address that this `Listener` listens on.
+    type Candidate: ToSocketAddrs + Send + Sync + fmt::Display;
 
-    /// Returns the local address on which this `Listener` listens
+    /// Returns the local address on which this `Listener` listens if relevant.
+    /// Typically hole punching `Listener`s will not listen on a socket and
+    /// will therefore not have any local_addr
     fn local_addr(&self) -> Option<SocketAddr> {
         None
     }

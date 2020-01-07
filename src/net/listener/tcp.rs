@@ -18,6 +18,22 @@ pub struct TcpListener {
 
 impl TcpListener {
     /// Create a new `TcpListener` that will listen on the candidate address
+    ///
+    /// # Arguments
+    ///
+    /// * `candidate` - The target address to listen on
+    /// * `exchanger` - A key `Exchanger` to be used when handshaking with the
+    /// remote end
+    ///
+    /// # Example
+    /// ```
+    /// use std::net::{Ipv4Addr, SocketAddr};
+    /// use drop::crypto::key::exchange::Exchanger;
+    /// use drop::net::listener::tcp::TcpListener;
+    ///
+    /// let addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
+    /// let listener = TcpListener::new(addr, Exchanger::random());
+    /// ```
     pub async fn new<A: ToSocketAddrs>(
         candidate: A,
         exchanger: Exchanger,
@@ -29,15 +45,6 @@ impl TcpListener {
                 exchanger,
             })
             .map_err(|e| e.into())
-    }
-}
-
-impl fmt::Debug for TcpListener {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.listener.local_addr() {
-            Ok(addr) => write!(f, "tcp listener on {}", addr),
-            Err(e) => write!(f, "tcp listener errored: {}", e),
-        }
     }
 }
 
@@ -59,7 +66,7 @@ impl Listener for TcpListener {
     type Candidate = SocketAddr;
 
     async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError> {
-        unimplemented!()
+        todo!()
     }
 
     fn local_addr(&self) -> Option<SocketAddr> {
