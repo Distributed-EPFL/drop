@@ -257,7 +257,7 @@ impl Connection {
         }
     }
 
-    /// Checks whether this `Channel` is in a usable state
+    /// Checks whether this `Connection` is in a usable state
     pub fn is_broken(&self) -> bool {
         match &self.state {
             ChannelState::Broken => true,
