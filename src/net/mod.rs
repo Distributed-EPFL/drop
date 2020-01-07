@@ -100,6 +100,12 @@ impl Connection {
 
     /// Receive `Deserialize` message on this `Connection` without using
     /// encryption
+    ///
+    /// # Example
+    /// ```ignore
+    /// let mut connection;
+    /// let value: u32 = connection.receive_plain().await?;
+    /// ```
     pub async fn receive_plain<T>(&mut self) -> Result<T, ReceiveError>
     where
         T: for<'de> Deserialize<'de> + Sized,
@@ -112,6 +118,12 @@ impl Connection {
     }
 
     /// Send a `Serialize` message on this `Connection` without using decryption
+    ///
+    /// # Example
+    /// ```ignore
+    /// let mut connection: Connection;
+    /// let written = connection.send_plain(&0u32).await?;
+    /// ```
     pub async fn send_plain<T>(
         &mut self,
         message: &T,
@@ -140,7 +152,9 @@ impl Connection {
         socket.write_all(&data).await.map_err(|e| e.into())
     }
 
-    /// Receive a `Deserialize` message from the underlying `Connection`
+    /// Receive a `Deserialize` message from the underlying `Connection`.
+    /// This will return an error if the `Connection` has not performed the
+    /// key exchange prior to calling this method.
     pub async fn receive<T>(&mut self) -> Result<T, ReceiveError>
     where
         T: Sized + for<'de> Deserialize<'de> + Send,
