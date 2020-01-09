@@ -33,8 +33,6 @@ pub(super) enum Node<Data: Syncable> {
 }
 
 impl<Data: Syncable> Node<Data> {
-    // todo? add node_at_mut? (Node is a private item structure, thus all uses would
-    // have to be within the syncset implementation)
     /// Finds the first node at a given path. If a (potentially empty) Leaf node is encountered
     /// prior to the path's max depth, a reference to that node is returned.
     /// Otherwise, if the end of the path is reached, then then the iterated node will be returned
@@ -369,7 +367,7 @@ impl<Data: Syncable> Node<Data> {
             // Error: hash of an empty leaf (should this be a hash of unit instead?)
             Node::Empty => Err(EmptyHashError::new().into()),
 
-            // Non-empty leaf - label == path == hash
+            // Non-empty leaf: label == path == hash
             Node::Leaf { cached_label, item } => {
                 let mut cached_label_borrowed = cached_label.borrow_mut();
                 if let Some(digest) = cached_label_borrowed.as_ref() {
