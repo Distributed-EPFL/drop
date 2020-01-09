@@ -85,22 +85,14 @@ impl PartialEq for Prefix {
                 .expect("Couldn't cast 32-bit integer to usize.");
 
             // Check all full bytes for equality
-            for i in 0..num_full_bytes {
-                unsafe {
-                    if self.inner.get_unchecked(i)
-                        != other.inner.get_unchecked(i)
-                    {
-                        return false;
-                    }
-                }
+            if self.inner[0..num_full_bytes] != other.inner[0..num_full_bytes] {
+                return false;
             }
 
             // Check all the additional bits for equality
             if overflow_bits > 0 {
-                let last_byte_self =
-                    unsafe { self.inner.get_unchecked(num_full_bytes) };
-                let last_byte_other =
-                    unsafe { other.inner.get_unchecked(num_full_bytes) };
+                let last_byte_self = self.inner[num_full_bytes];
+                let last_byte_other = self.inner[num_full_bytes];
                 let shift_amount = BITS_IN_BYTE - overflow_bits;
 
                 let masked_self = last_byte_self >> shift_amount;
@@ -208,8 +200,7 @@ impl Prefix {
 
         // If there are some bits left to individually compare in the last byte
         if overflow_bits > 0 {
-            let last_byte_left =
-                unsafe { self.inner.get_unchecked(num_full_bytes) };
+            let last_byte_left = self.inner[num_full_bytes];
             let last_byte_right = (rhs.0).0[num_full_bytes];
             let shift_amount = BITS_IN_BYTE - overflow_bits;
 
