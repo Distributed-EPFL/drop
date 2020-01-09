@@ -17,7 +17,7 @@ pub(super) enum Node<Data: Syncable> {
         // Data contained in the leaf
         item: Data,
         // Potentially empty cached hash
-        cached_label: RefCell<Option<Digest>>,
+        hash: Digest,
     },
 
     Internal {
@@ -26,7 +26,6 @@ pub(super) enum Node<Data: Syncable> {
         left: Box<Node<Data>>,
 
         // Pre-computed values for label and size
-        // todo: rename to label (+function)
         cached_label: RefCell<Option<Digest>>,
         cached_size: Cell<Option<usize>>,
     },
@@ -183,7 +182,7 @@ impl<Data: Syncable> Node<Data> {
         match self {
             // Trivial case
             Node::Empty => {
-                self.swap(Node::new_leaf(item));
+                self.swap(Node::new_leaf(item, path.0));
                 Ok(true)
             }
             Node::Leaf { .. } => {
@@ -251,20 +250,15 @@ impl<Data: Syncable> Node<Data> {
     // Invalidates the cache of a node
     fn invalidate_cache(&self) {
         use Node::*;
-        match self {
-            Empty => (),
-            Leaf { cached_label, .. } => {
-                cached_label.replace(None);
-            }
-            Internal {
-                cached_label,
-                cached_size,
-                ..
-            } => {
-                cached_label.replace(None);
-                cached_size.replace(None);
-            }
-        };
+        if let Internal {
+            cached_label,
+            cached_size,
+            ..
+        } = self
+        {
+            cached_label.replace(None);
+            cached_size.replace(None);
+        }
     }
 
     // Makes a tree with 2 leaves. Do not call with path0=path1
@@ -312,11 +306,8 @@ impl<Data: Syncable> Node<Data> {
     }
 
     // Convenience constructors
-    fn new_leaf(item: Data) -> Node<Data> {
-        Node::Leaf {
-            item,
-            cached_label: RefCell::new(None),
-        }
+    fn new_leaf(item: Data, hash: Digest) -> Node<Data> {
+        Node::Leaf { item, hash }
     }
 
     fn new_internal_from_items(
@@ -327,11 +318,11 @@ impl<Data: Syncable> Node<Data> {
     ) -> Node<Data> {
         let left_node = Node::Leaf {
             item: left_item,
-            cached_label: RefCell::new(Some(left_hash)),
+            hash: left_hash,
         };
         let right_node = Node::Leaf {
             item: right_item,
-            cached_label: RefCell::new(Some(right_hash)),
+            hash: right_hash,
         };
         Node::new_internal(left_node, right_node)
     }
@@ -368,16 +359,7 @@ impl<Data: Syncable> Node<Data> {
             Node::Empty => Err(EmptyHashError::new().into()),
 
             // Non-empty leaf: label == path == hash
-            Node::Leaf { cached_label, item } => {
-                let mut cached_label_borrowed = cached_label.borrow_mut();
-                if let Some(digest) = cached_label_borrowed.as_ref() {
-                    Ok(digest.clone())
-                } else {
-                    let new_hash = hash(item)?;
-                    *cached_label_borrowed = Some(new_hash.clone());
-                    Ok(new_hash)
-                }
-            }
+            Node::Leaf { hash, .. } => Ok(hash.clone()),
 
             Node::Internal {
                 left,

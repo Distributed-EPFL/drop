@@ -69,9 +69,9 @@ impl<Data: Syncable> SyncSet<Data> {
 
         let node_at_prefix = self.root.node_at(prefix, 0);
         match node_at_prefix {
-            Leaf { .. } => {
+            Leaf { hash, .. } => {
                 // Because this is a leaf, its hash is that of its data element, thus label == path
-                let leaf_path = Path(node_at_prefix.label()?);
+                let leaf_path = Path(hash.clone());
 
                 // Check if the prefix actually matches, or if we just ran out of nodes
                 if prefix.is_prefix_of(&leaf_path) {
@@ -81,7 +81,7 @@ impl<Data: Syncable> SyncSet<Data> {
                 }
             }
             Internal { .. } => {
-                // We either dump the branch, or we return the Label/Path structure corresponding
+                // We either dump the branch, or we return the corresponding Label/Path structure
                 if dump || node_at_prefix.size() <= DUMP_THRESHOLD {
                     Ok(Set::new_dataset(prefix.clone(), node_at_prefix, dump))
                 } else {
