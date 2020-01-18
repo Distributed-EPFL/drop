@@ -4,11 +4,13 @@ pub mod connector;
 /// Utilities to open a listener for incoming connections
 pub mod listener;
 
+mod socket;
+
 use std::fmt;
 use std::io::Error as IoError;
 use std::mem;
-use std::net::SocketAddr;
 
+use self::socket::Socket;
 use crate as drop;
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
 use crate::crypto::stream::{Pull, Push};
@@ -21,10 +23,10 @@ use macros::error;
 
 use serde::{Deserialize, Serialize};
 
-use tokio::io::{
-    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Error as TokioError,
-};
-use tokio::task::block_in_place;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, Error as TokioError};
+
+use tracing::{debug, debug_span, info};
+use tracing_futures::Instrument;
 
 /// Type of errors returned when serializing/deserializing
 pub type SerializerError = Box<BincodeErrorKind>;
@@ -57,17 +59,6 @@ error! {
 error! {
     type: CorruptedConnection,
     description: "channel corrupted"
-}
-
-/// Trait for structs that are able to asynchronously send and receive data from
-/// the network. Only requirement is asynchronously reading and writing arrays
-/// of bytes
-pub trait Socket: AsyncRead + AsyncWrite + Unpin + Send + Sync {
-    /// Address of the remote peer for this `Connection`
-    fn remote(&self) -> Result<SocketAddr, IoError>;
-
-    /// Local address in use by this `Connection`
-    fn local(&self) -> Result<SocketAddr, IoError>;
 }
 
 /// Encrypted connection state
@@ -110,11 +101,13 @@ impl Connection {
     where
         T: for<'de> Deserialize<'de> + Sized,
     {
-        let mut buf = [0u8; 4096];
+        let size = Self::read_size(self.socket.as_mut()).await? as usize;
 
-        let read = self.socket.read(&mut buf).await?;
+        self.buffer.resize(size, 0);
 
-        deserialize(&buf[..read]).map_err(|e| e.into())
+        let read = self.socket.read(&mut self.buffer[..size]).await?;
+
+        deserialize(&self.buffer[..read]).map_err(|e| e.into())
     }
 
     /// Send a `Serialize` message on this `Connection` without using decryption
@@ -132,6 +125,10 @@ impl Connection {
         T: Serialize,
     {
         let serialized = serialize(message)?;
+
+        debug!("sending {} bytes as plain data", serialized.len());
+
+        Self::write_size(self.socket.as_mut(), serialized.len() as u32).await?;
 
         self.socket.write(&serialized).await.map_err(|e| e.into())
     }
@@ -161,13 +158,24 @@ impl Connection {
     {
         match &mut self.state {
             ChannelState::Secured(ref mut pull, _) => {
-                let sz = Self::read_size(&mut *self.socket).await? as usize;
+                let sz = Self::read_size(&mut *self.socket)
+                    .instrument(debug_span!("read_size"))
+                    .await? as usize;
+
+                debug!(
+                    "receiving message of {} bytes from {}",
+                    sz,
+                    self.socket.remote()?
+                );
 
                 // FIXME: avoid trusting network input and run out of memory
                 self.buffer.resize(sz, 0);
 
-                let read =
-                    self.socket.read_exact(&mut self.buffer[..sz]).await?;
+                let read = self
+                    .socket
+                    .read_exact(&mut self.buffer[..sz])
+                    .instrument(debug_span!("read_data"))
+                    .await?;
 
                 pull.decrypt_ref(&self.buffer[..read]).map_err(|e| {
                     self.state = ChannelState::Broken;
@@ -177,15 +185,6 @@ impl Connection {
             ChannelState::Connected => Err(NeedsAuthError::new().into()),
             ChannelState::Broken => Err(CorruptedConnection::new().into()),
         }
-    }
-
-    /// Send a `Serialize` message on this `Connection` synchronously.
-    /// This call may block if the data can't be sent immediately.
-    pub fn send_sync<T>(&mut self, _message: &T) -> Result<usize, SendError>
-    where
-        T: Serialize + Send,
-    {
-        block_in_place(|| unimplemented!())
     }
 
     /// Send a `Serialize` message using the underlying `Connection`.
@@ -200,7 +199,14 @@ impl Connection {
             ChannelState::Secured(_, ref mut push) => {
                 let data = push.encrypt(message)?;
 
-                Self::write_size(&mut *self.socket, data.len() as u32).await?;
+                debug!(
+                    "sending {} bytes of data to {}",
+                    data.len(),
+                    self.socket.remote()?
+                );
+
+                Self::write_size(self.socket.as_mut(), data.len() as u32)
+                    .await?;
 
                 self.socket.write(&data).await.map_err(|e| e.into())
             }
@@ -209,8 +215,7 @@ impl Connection {
         }
     }
 
-    /// Send a `Serialize` message in a synchronous fashion. This method may
-    /// block
+    /// Send a `Serialize` message in an asynchronous fashion.
     pub async fn send<T>(&mut self, message: &T) -> Result<usize, SendError>
     where
         T: Serialize + Send,
@@ -238,6 +243,7 @@ impl Connection {
         local: &Exchanger,
         server: &PublicKey,
     ) -> Result<(), SecureError> {
+        info!("sending public key to peer");
         self.send_plain(local.keypair().public()).await?;
 
         self.exchange(local, server)?;
@@ -250,6 +256,7 @@ impl Connection {
         &mut self,
         exchanger: &Exchanger,
     ) -> Result<(), SecureError> {
+        info!("waiting for peer's public key");
         let pkey = self.receive_plain::<PublicKey>().await?;
 
         self.exchange(exchanger, &pkey)?;
@@ -261,6 +268,13 @@ impl Connection {
     /// received by the remote peer.
     pub async fn close(&mut self) -> Result<(), IoError> {
         self.socket.shutdown().await
+    }
+
+    /// Flushes any pending data waiting to be received by the other end of this
+    /// `Connection` only returning when all data has been acknowledged by the
+    /// remote peer.
+    pub async fn flush(&mut self) -> Result<(), IoError> {
+        self.socket.flush().await
     }
 
     /// Checks whether this `Connection` is secured
@@ -309,7 +323,7 @@ impl fmt::Debug for Connection {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::net::ToSocketAddrs;
+    use std::net::{SocketAddr, ToSocketAddrs};
 
     use super::*;
 
