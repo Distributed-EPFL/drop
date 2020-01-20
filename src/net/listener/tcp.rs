@@ -106,7 +106,7 @@ impl Listener for TcpListener {
 
 impl fmt::Display for TcpListener {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let addr = self.local_addr().map_or(Err(fmt::Error), |x| Ok(x))?;
+        let addr = self.local_addr().map_or(Err(fmt::Error), Ok)?;
 
         write!(f, "tcp listener on {}", addr)
     }
