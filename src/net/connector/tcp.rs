@@ -6,8 +6,9 @@ use crate::crypto::key::exchange::Exchanger;
 
 use async_trait::async_trait;
 
-use tokio::io::Error as TokioError;
 use tokio::net::TcpStream;
+
+use tracing::info;
 
 /// A `Connector` that uses direct TCP connections to a remote peer
 pub struct TcpDirect {
@@ -17,18 +18,12 @@ pub struct TcpDirect {
 impl TcpDirect {
     /// Create a new `TcpDirect` `Connector` using the given
     /// `Exchanger` to compute shared secrets
+    ///
+    /// # Arguments
+    /// * `exchanger` - The key exchanger to be used when handshaking with
+    /// remote peers
     pub fn new(exchanger: Exchanger) -> Self {
         Self { exchanger }
-    }
-}
-
-impl Socket for TcpStream {
-    fn local(&self) -> Result<SocketAddr, TokioError> {
-        self.local_addr()
-    }
-
-    fn remote(&self) -> Result<SocketAddr, TokioError> {
-        self.peer_addr()
     }
 }
 
@@ -46,6 +41,8 @@ impl Connector for TcpDirect {
     async fn establish(
         candidate: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError> {
+        info!("establishing tcp connection to {}", candidate);
+
         let stream: Box<dyn Socket> =
             Box::new(TcpStream::connect(candidate).await?);
 

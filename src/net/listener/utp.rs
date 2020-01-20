@@ -1,14 +1,19 @@
+use std::fmt;
 use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
 
 use super::super::Connection;
 use super::{Listener, ListenerError};
 use crate::crypto::key::exchange::Exchanger;
+use crate::net::socket::utp::BufferedUtpStream;
 
 use async_trait::async_trait;
 
 use tokio::net::ToSocketAddrs;
 use tokio::task;
+
+use tracing::{debug_span, info};
+use tracing_futures::Instrument;
 
 use utp::UtpSocket;
 
@@ -58,12 +63,103 @@ impl Listener for UtpListener {
         });
 
         let (stream, driver) = socket?.accept().await?;
+        let remote = stream.peer_addr();
 
-        task::spawn(driver);
-        let mut connection = Connection::new(Box::new(stream));
+        info!("incoming uTp connection from {}", remote);
 
-        connection.secure_client(&self.exchanger).await?;
+        task::spawn(driver.instrument(debug_span!("stream_driver")));
+
+        let buffered = BufferedUtpStream::new(stream);
+
+        let mut connection = Connection::new(Box::new(buffered));
+
+        connection
+            .secure_client(&self.exchanger)
+            .instrument(debug_span!("key_exchange"))
+            .await?;
+
+        info!("accepted secure connection from {}", remote);
 
         Ok(connection)
+    }
+}
+
+impl fmt::Display for UtpListener {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.socket {
+            None => write!(f, "exhausted utp listener"),
+            Some(ref socket) => {
+                write!(f, "utp listener on {}", socket.local_addr())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::env;
+    use std::net::Ipv4Addr;
+
+    use super::*;
+    use crate::net::connector::utp::UtpDirect;
+    use crate::net::connector::Connector;
+
+    use tracing_subscriber::FmtSubscriber;
+
+    fn init_logger() {
+        if let Some(level) = env::var("RUST_LOG").ok().map(|x| x.parse().ok()) {
+            let subscriber =
+                FmtSubscriber::builder().with_max_level(level).finish();
+
+            let _ = tracing::subscriber::set_global_default(subscriber);
+        }
+    }
+
+    #[tokio::test]
+    async fn utp_listener_fmt() {
+        let addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
+        let exchanger = Exchanger::random();
+        let listener = UtpListener::new(addr, exchanger)
+            .await
+            .expect("bind failed");
+
+        assert_eq!(
+            format!("{}", listener),
+            format!("utp listener on {}", listener.local_addr().unwrap()),
+        );
+    }
+
+    #[tokio::test]
+    async fn utp_double_accept() {
+        init_logger();
+
+        let addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
+        let exchanger = Exchanger::random();
+        let mut listener = UtpListener::new(addr, exchanger.clone())
+            .await
+            .expect("bind failed");
+        let addr = listener.local_addr().unwrap();
+
+        let handle = task::spawn(async move {
+            let exch = Exchanger::random();
+            let connector = UtpDirect::new(exch);
+            let mut connection = connector
+                .connect(exchanger.keypair().public(), &addr)
+                .await
+                .expect("connect failed");
+
+            connection.close().await.expect("close failed");
+        });
+
+        let mut connection = listener.accept().await.expect("accept failed");
+
+        listener
+            .accept()
+            .await
+            .expect_err("second accept succeeded");
+
+        connection.close().await.expect("close failed");
+
+        handle.await.expect("connector failed");
     }
 }

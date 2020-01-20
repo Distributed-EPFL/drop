@@ -4,6 +4,8 @@ pub mod tcp;
 /// uTP connectors
 pub mod utp;
 
+use std::fmt;
+
 use super::{Connection, SecureError, Socket};
 use crate as drop;
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
@@ -17,6 +19,9 @@ use macros::error;
 use tokio::io::Error as TokioError;
 use tokio::net::ToSocketAddrs;
 
+use tracing::{debug_span, info};
+use tracing_futures::Instrument;
+
 error! {
     type: ConnectError,
     description: "error opening connection",
@@ -28,20 +33,34 @@ error! {
 #[async_trait]
 pub trait Connector {
     /// The target address type used by this connector
-    type Candidate: ToSocketAddrs + Send + Sync;
+    type Candidate: ToSocketAddrs + Send + Sync + fmt::Display;
 
     /// Connect asynchronously to a given destination with its `PublicKey` and
     /// the local node's `KeyExchanger` that has been passed when constructing
     /// the `Connector`
+    ///
+    /// # Arguments
+    /// * `pkey` - Public key of the remote peer we are connectiong to
+    /// * `candidate` - A remote address for the remote peer, the concrete type
+    /// depends on the actual `Connector` used
     async fn connect(
         &self,
         pkey: &PublicKey,
         candidate: &Self::Candidate,
     ) -> Result<Connection, ConnectError> {
-        let socket = Self::establish(candidate).await?;
+        let socket = Self::establish(candidate)
+            .instrument(debug_span!("establish"))
+            .await?;
         let mut connection = Connection::new(socket);
 
-        connection.secure_server(self.exchanger(), pkey).await?;
+        info!("connected to {}, exchanging keys", candidate);
+
+        connection
+            .secure_server(self.exchanger(), pkey)
+            .instrument(debug_span!("key_exchange"))
+            .await?;
+
+        info!("secure connection established with {}", candidate);
 
         Ok(connection)
     }

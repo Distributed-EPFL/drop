@@ -1,5 +1,6 @@
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 
+use super::super::socket::utp::BufferedUtpStream;
 use super::{ConnectError, Connector, Socket};
 use crate::crypto::key::exchange::Exchanger;
 
@@ -8,6 +9,9 @@ use async_trait::async_trait;
 use utp::{UtpSocket, UtpStream};
 
 use tokio::task;
+
+use tracing::{debug_span, info};
+use tracing_futures::Instrument;
 
 /// A `Connector` using the micro transport protocol
 pub struct UtpDirect {
@@ -32,11 +36,20 @@ impl Connector for UtpDirect {
             SocketAddr::V6(_) => (Ipv6Addr::UNSPECIFIED, 0).into(),
         };
         let socket = UtpSocket::bind(local).await?;
+
+        info!(
+            "connecting {} -> {} using uTp",
+            socket.local_addr(),
+            candidate
+        );
+
         let (stream, driver) = socket.connect(*candidate).await?;
 
-        task::spawn(driver);
+        info!("connection to {} established", candidate);
 
-        Ok(Box::new(stream))
+        task::spawn(driver.instrument(debug_span!("stream_driver")));
+
+        Ok(Box::new(BufferedUtpStream::new(stream)))
     }
 
     fn exchanger(&self) -> &Exchanger {
@@ -46,20 +59,23 @@ impl Connector for UtpDirect {
 
 impl Socket for UtpStream {
     fn remote(&self) -> std::io::Result<SocketAddr> {
-        todo!()
+        Ok(self.peer_addr())
     }
 
     fn local(&self) -> std::io::Result<SocketAddr> {
-        todo!()
+        Ok(self.local_addr())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::env;
     use std::sync::atomic::{AtomicU16, Ordering};
 
     use super::*;
     use crate::net::listener::{utp::UtpListener, Listener};
+
+    use tracing_subscriber::FmtSubscriber;
 
     fn next_test_port() -> u16 {
         static PORT_OFFSET: AtomicU16 = AtomicU16::new(0);
@@ -72,36 +88,74 @@ mod tests {
         (Ipv4Addr::new(127, 0, 0, 1), next_test_port()).into()
     }
 
+    fn init_logger() {
+        if let Some(level) = env::var("RUST_LOG").ok().map(|x| x.parse().ok()) {
+            let subscriber =
+                FmtSubscriber::builder().with_max_level(level).finish();
+
+            let _ = tracing::subscriber::set_global_default(subscriber);
+        }
+    }
+
     #[tokio::test]
     async fn utp_correct() {
+        init_logger();
+
         let addr = next_test_ip4();
         let server = Exchanger::random();
         let client = Exchanger::random();
         let mut utp = UtpListener::new(addr, server.clone())
+            .instrument(debug_span!("bind"))
             .await
             .expect("failed to bind local");
 
-        task::spawn(async move {
-            let utp = UtpDirect::new(client);
-            let mut connection = utp
-                .connect(server.keypair().public(), &addr)
-                .await
-                .expect("failed to connect");
+        task::spawn(
+            async move {
+                let utp = UtpDirect::new(client);
+                let mut connection = utp
+                    .connect(server.keypair().public(), &addr)
+                    .instrument(debug_span!("connect"))
+                    .await
+                    .expect("failed to connect");
 
-            connection.send(&0u32).await.expect("failed to send");
-            connection.close().await.expect("failed to close");
-        });
+                connection
+                    .send(&0u32)
+                    .instrument(debug_span!("send"))
+                    .await
+                    .expect("failed to send");
 
-        let mut connection =
-            utp.accept().await.expect("failed to accept connection");
+                connection
+                    .close()
+                    .instrument(debug_span!("close"))
+                    .await
+                    .expect("failed to close");
+            }
+            .instrument(debug_span!("client")),
+        );
+
+        let mut connection = utp
+            .accept()
+            .instrument(debug_span!("accept"))
+            .await
+            .expect("failed to accept connection");
 
         let data = connection
             .receive::<u32>()
+            .instrument(debug_span!("server_receive"))
             .await
             .expect("failed to receive");
 
         assert_eq!(data, 0u32, "wrong data received");
 
-        connection.close().await.expect("faield to close");
+        connection
+            .flush()
+            .instrument(debug_span!("server_flush"))
+            .await
+            .expect("failed to flush");
+        connection
+            .close()
+            .instrument(debug_span!("server_close"))
+            .await
+            .expect("failed to close");
     }
 }

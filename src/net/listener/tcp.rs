@@ -1,5 +1,5 @@
 use std::fmt;
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddr};
 
 use super::super::Connection;
 use super::{Listener, ListenerError};
@@ -8,6 +8,9 @@ use crate::crypto::key::exchange::Exchanger;
 use async_trait::async_trait;
 
 use tokio::net::{TcpListener as TokioListener, ToSocketAddrs};
+
+use tracing::{debug_span, info};
+use tracing_futures::Instrument;
 
 /// A plain `TcpListener` that accepts connections on a given IP address and
 /// port
@@ -77,10 +80,35 @@ impl Listener for TcpListener {
     /// key exchange to authenticate the remote peer.
     async fn accept(&mut self) -> Result<Connection, ListenerError> {
         let stream = self.listener.accept().await.map(|(stream, _)| stream)?;
+
+        let remote = stream
+            .peer_addr()
+            .unwrap_or_else(|_| (Ipv4Addr::UNSPECIFIED, 0u16).into());
+
+        info!(
+            "incoming tcp connection {} -> {}",
+            remote,
+            self.local_addr().unwrap()
+        );
+
         let mut connection = Connection::new(Box::new(stream));
 
-        connection.secure_client(&self.exchanger).await?;
+        connection
+            .secure_client(&self.exchanger)
+            .instrument(debug_span!("key_exchange"))
+            .await?;
+
+        info!("accepted secure connection from {}", remote);
+
         Ok(connection)
+    }
+}
+
+impl fmt::Display for TcpListener {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let addr = self.local_addr().map_or(Err(fmt::Error), |x| Ok(x))?;
+
+        write!(f, "tcp listener on {}", addr)
     }
 }
 
