@@ -1,3 +1,6 @@
+/// Tcp `Socket` implementation
+pub mod tcp;
+/// uTp `Socket` implementation
 pub mod utp;
 
 use std::io::Result;

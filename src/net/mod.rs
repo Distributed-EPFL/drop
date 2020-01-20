@@ -298,7 +298,7 @@ impl fmt::Debug for Connection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (local, remote) = match (self.socket.local(), self.socket.remote())
         {
-            (Ok(local), Ok(remote)) => {
+;            (Ok(local), Ok(remote)) => {
                 (format!("{}", local), format!("{}", remote))
             }
             (Ok(local), Err(_)) => {

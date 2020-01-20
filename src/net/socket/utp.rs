@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::Result;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -68,5 +69,16 @@ impl AsyncWrite for BufferedUtpStream {
         cx: &mut Context,
     ) -> Poll<Result<()>> {
         self.get_stream().poll_shutdown(cx)
+    }
+}
+
+impl fmt::Display for BufferedUtpStream {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "utp connection {} -> {}",
+            self.local().unwrap(),
+            self.remote().unwrap()
+        )
     }
 }
