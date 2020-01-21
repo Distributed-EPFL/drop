@@ -6,6 +6,7 @@ pub mod error;
 pub mod net;
 
 #[cfg(test)]
+/// Test utilities that are used all across the framework
 pub mod test;
 
 pub use backtrace;
