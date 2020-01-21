@@ -4,7 +4,11 @@ pub mod tcp;
 /// uTP connectors
 pub mod utp;
 
+mod directory;
+pub use directory::*;
+
 use std::fmt;
+use std::io::Error as IoError;
 
 use super::{Connection, SecureError, Socket};
 use crate as drop;
@@ -16,24 +20,21 @@ use async_trait::async_trait;
 
 use macros::error;
 
-use tokio::io::Error as TokioError;
-use tokio::net::ToSocketAddrs;
-
 use tracing::{debug_span, info};
 use tracing_futures::Instrument;
 
 error! {
     type: ConnectError,
     description: "error opening connection",
-    causes: (TokioError, ExchangeError, SecureError)
+    causes: (IoError, ExchangeError, SecureError)
 }
 
 /// The `Connector` trait is used to connect to peers using some sort of
 /// Internet address (e.g. Ipv4 or Ipv6).
 #[async_trait]
-pub trait Connector {
+pub trait Connector: Send + Sync {
     /// The target address type used by this connector
-    type Candidate: ToSocketAddrs + Send + Sync + fmt::Display;
+    type Candidate: Send + Sync + fmt::Display;
 
     /// Connect asynchronously to a given destination with its `PublicKey` and
     /// the local node's `KeyExchanger` that has been passed when constructing
@@ -44,11 +45,12 @@ pub trait Connector {
     /// * `candidate` - A remote address for the remote peer, the concrete type
     /// depends on the actual `Connector` used
     async fn connect(
-        &self,
+        &mut self,
         pkey: &PublicKey,
         candidate: &Self::Candidate,
     ) -> Result<Connection, ConnectError> {
-        let socket = Self::establish(candidate)
+        let socket = self
+            .establish(candidate)
             .instrument(debug_span!("establish"))
             .await?;
         let mut connection = Connection::new(socket);
@@ -74,6 +76,7 @@ pub trait Connector {
     /// after the connection has been established in order not to make the
     /// remote end close the connection.
     async fn establish(
+        &mut self,
         candidate: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError>;
 
@@ -81,6 +84,7 @@ pub trait Connector {
     /// given `PublicKey`. Only returns a `Connection` to the fastest
     /// responding `Candidate`
     async fn connect_any(
+        &self,
         _pkey: &PublicKey,
         _candidates: &[Self::Candidate],
     ) -> Result<Connection, ConnectError> {

@@ -29,6 +29,7 @@ impl Connector for UtpDirect {
     type Candidate = SocketAddr;
 
     async fn establish(
+        &mut self,
         candidate: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError> {
         let local: SocketAddr = match *candidate {
@@ -69,33 +70,9 @@ impl Socket for UtpStream {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-    use std::sync::atomic::{AtomicU16, Ordering};
-
     use super::*;
     use crate::net::listener::{utp::UtpListener, Listener};
-
-    use tracing_subscriber::FmtSubscriber;
-
-    fn next_test_port() -> u16 {
-        static PORT_OFFSET: AtomicU16 = AtomicU16::new(0);
-        const PORT_START: u16 = 9600;
-
-        PORT_START + PORT_OFFSET.fetch_add(1, Ordering::Relaxed)
-    }
-
-    fn next_test_ip4() -> SocketAddr {
-        (Ipv4Addr::new(127, 0, 0, 1), next_test_port()).into()
-    }
-
-    fn init_logger() {
-        if let Some(level) = env::var("RUST_LOG").ok().map(|x| x.parse().ok()) {
-            let subscriber =
-                FmtSubscriber::builder().with_max_level(level).finish();
-
-            let _ = tracing::subscriber::set_global_default(subscriber);
-        }
-    }
+    use crate::test::*;
 
     #[tokio::test]
     async fn utp_correct() {
@@ -111,7 +88,7 @@ mod tests {
 
         task::spawn(
             async move {
-                let utp = UtpDirect::new(client);
+                let mut utp = UtpDirect::new(client);
                 let mut connection = utp
                     .connect(server.keypair().public(), &addr)
                     .instrument(debug_span!("connect"))

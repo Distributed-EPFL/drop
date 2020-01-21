@@ -39,6 +39,7 @@ impl Connector for TcpDirect {
 
     /// Open a `Socket` to the specified destination using TCP
     async fn establish(
+        &mut self,
         candidate: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError> {
         info!("establishing tcp connection to {}", candidate);
