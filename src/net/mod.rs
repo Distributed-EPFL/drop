@@ -1,14 +1,19 @@
 /// Utilities to connect to other peers in a secure fashion
 pub mod connector;
 
-/// Utilities to open a listener for incoming connections
+/// Utilities to accept incoming connections from peers
 pub mod listener;
 
+/// Common utilities for networking
+pub(crate) mod common;
+
+/// Socket implementation for various types
 mod socket;
 
 use std::fmt;
 use std::io::Error as IoError;
 use std::mem;
+use std::net::SocketAddr;
 
 use self::socket::Socket;
 use crate as drop;
@@ -292,6 +297,16 @@ impl Connection {
             _ => false,
         }
     }
+
+    /// Get the address of the remote peer associated with this `Connection`
+    pub fn peer_addr(&self) -> Result<SocketAddr, IoError> {
+        self.socket.remote()
+    }
+
+    /// Get the local address of this `Connection`
+    pub fn local_addr(&self) -> Result<SocketAddr, IoError> {
+        self.socket.local()
+    }
 }
 
 impl fmt::Debug for Connection {
@@ -360,7 +375,7 @@ mod tests {
                         Err(_) => continue,
                     };
 
-                let connector = <$connector>::new(client_ex);
+                let mut connector = <$connector>::new(client_ex);
 
                 let outgoing = connector
                     .connect(server.public(), &addr)
@@ -531,7 +546,7 @@ mod tests {
     async fn tcp_non_existent() {
         let exchanger = Exchanger::random();
         let keypair = KeyPair::random();
-        let connector = TcpDirect::new(exchanger);
+        let mut connector = TcpDirect::new(exchanger);
         let port: u16 = rand::random();
         let addr =
             (LISTENER_ADDR, port).to_socket_addrs().unwrap().as_slice()[0];
