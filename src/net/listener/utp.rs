@@ -103,17 +103,7 @@ mod test {
     use super::*;
     use crate::net::connector::utp::UtpDirect;
     use crate::net::connector::Connector;
-
-    use tracing_subscriber::FmtSubscriber;
-
-    fn init_logger() {
-        if let Some(level) = env::var("RUST_LOG").ok().map(|x| x.parse().ok()) {
-            let subscriber =
-                FmtSubscriber::builder().with_max_level(level).finish();
-
-            let _ = tracing::subscriber::set_global_default(subscriber);
-        }
-    }
+    use crate::test::init_logger;
 
     #[tokio::test]
     async fn utp_listener_fmt() {
@@ -142,7 +132,7 @@ mod test {
 
         let handle = task::spawn(async move {
             let exch = Exchanger::random();
-            let connector = UtpDirect::new(exch);
+            let mut connector = UtpDirect::new(exch);
             let mut connection = connector
                 .connect(exchanger.keypair().public(), &addr)
                 .await

@@ -1,8 +1,12 @@
-/// Tcp related listeners utilities
+/// Listeners that use TCP as a transport protocol
 pub mod tcp;
 
-/// uTp related listener
+/// Listeners that use uTP as a transport protocol
 pub mod utp;
+
+mod directory;
+
+pub use directory::*;
 
 use std::fmt;
 use std::net::SocketAddr;
@@ -37,9 +41,9 @@ pub trait Listener {
         None
     }
 
-    /// Asynchronously accept incoming `Connection`s
+    /// Asynchronously accept one incoming `Connection`
     async fn accept(&mut self) -> Result<Connection, ListenerError>;
 
-    /// Get a slice of `Candidate`s on which to connect
+    /// Get a slice of `Candidate`s on which to this `Listener` can be reached
     async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError>;
 }
