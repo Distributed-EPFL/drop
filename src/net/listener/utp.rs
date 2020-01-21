@@ -97,17 +97,14 @@ impl fmt::Display for UtpListener {
 
 #[cfg(test)]
 mod test {
-    use std::env;
-    use std::net::Ipv4Addr;
-
     use super::*;
     use crate::net::connector::utp::UtpDirect;
     use crate::net::connector::Connector;
-    use crate::test::init_logger;
+    use crate::test::*;
 
     #[tokio::test]
     async fn utp_listener_fmt() {
-        let addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
+        let addr = next_test_ip4();
         let exchanger = Exchanger::random();
         let listener = UtpListener::new(addr, exchanger)
             .await
@@ -123,7 +120,7 @@ mod test {
     async fn utp_double_accept() {
         init_logger();
 
-        let addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
+        let addr = next_test_ip4();
         let exchanger = Exchanger::random();
         let mut listener = UtpListener::new(addr, exchanger.clone())
             .await

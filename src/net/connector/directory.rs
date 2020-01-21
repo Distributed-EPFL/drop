@@ -148,18 +148,19 @@ impl Connector for DirectoryConnector {
 
 #[cfg(test)]
 mod test {
-    use std::net::Ipv4Addr;
-
     use super::*;
     use crate::net::connector::tcp::TcpDirect;
     use crate::net::listener::tcp::TcpListener;
     use crate::net::listener::{DirectoryListener, Listener};
+    use crate::test::*;
 
     use tokio::task;
 
     #[tokio::test]
     async fn directory_connect() {
-        let addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
+        init_logger();
+
+        let addr = next_test_ip4();
         let dir_exchanger = Exchanger::random();
         let dir_public = *dir_exchanger.keypair().public();
         let mut listener = DirectoryListener::new(addr, dir_exchanger.clone())
@@ -169,12 +170,7 @@ mod test {
         let dir_addr = listener.local_addr().unwrap();
 
         task::spawn(async move {
-            for _ in 0..2usize {
-                assert!(
-                    listener.accept().await.is_ok(),
-                    "failed to server directory request"
-                );
-            }
+            listener.serve().await.expect("failed to serve requests");
         });
 
         let peer_exchanger = Exchanger::random();
