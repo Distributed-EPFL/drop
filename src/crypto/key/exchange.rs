@@ -26,6 +26,14 @@ impl fmt::Display for PublicKey {
     }
 }
 
+impl fmt::Debug for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "PublicKey {{ ")?;
+        <Self as fmt::Display>::fmt(self, f)?;
+        write!(f, " }}")
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// A `SecretKey` used to compute a shared secret with a remote party
 pub struct SecretKey(SodiumSecKey);

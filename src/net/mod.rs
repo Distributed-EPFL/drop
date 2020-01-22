@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt, Error as TokioError};
 
-use tracing::{debug, debug_span, info};
+use tracing::{debug, debug_span, info, trace};
 use tracing_futures::Instrument;
 
 /// Type of errors returned when serializing/deserializing
@@ -159,7 +159,7 @@ impl Connection {
     /// key exchange prior to calling this method.
     pub async fn receive<T>(&mut self) -> Result<T, ReceiveError>
     where
-        T: Sized + for<'de> Deserialize<'de> + Send,
+        T: Sized + for<'de> Deserialize<'de> + Send + fmt::Debug,
     {
         match &mut self.state {
             ChannelState::Secured(ref mut pull, _) => {
@@ -223,9 +223,11 @@ impl Connection {
     /// Send a `Serialize` message in an asynchronous fashion.
     pub async fn send<T>(&mut self, message: &T) -> Result<usize, SendError>
     where
-        T: Serialize + Send,
+        T: Serialize + Send + fmt::Debug,
     {
-        self.send_async(message).await
+        let ret = self.send_async(message).await;
+        trace!("sent {:?}", message);
+        ret
     }
 
     /// Perform the key exchange and create a new `Session`
