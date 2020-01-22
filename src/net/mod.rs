@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt, Error as TokioError};
 
-use tracing::{debug, debug_span, info, trace};
+use tracing::{debug, debug_span, error as error_log, info, trace};
 use tracing_futures::Instrument;
 
 /// Type of errors returned when serializing/deserializing
@@ -167,7 +167,7 @@ impl Connection {
                     .instrument(debug_span!("read_size"))
                     .await? as usize;
 
-                debug!(
+                trace!(
                     "receiving message of {} bytes from {}",
                     sz,
                     self.socket.remote()?
@@ -182,10 +182,22 @@ impl Connection {
                     .instrument(debug_span!("read_data"))
                     .await?;
 
-                pull.decrypt_ref(&self.buffer[..read]).map_err(|e| {
-                    self.state = ChannelState::Broken;
-                    e.into()
-                })
+                let msg: Result<T, ReceiveError> =
+                    pull.decrypt_ref(&self.buffer[..read]).map_err(|e| {
+                        self.state = ChannelState::Broken;
+                        e.into()
+                    });
+
+                if let Ok(ref msg) = msg {
+                    debug!("received {:?}", msg);
+                } else {
+                    error_log!(
+                        "corrupted message from {}",
+                        self.socket.remote()?
+                    );
+                }
+
+                msg
             }
             ChannelState::Connected => Err(NeedsAuthError::new().into()),
             ChannelState::Broken => Err(CorruptedConnection::new().into()),
@@ -204,7 +216,7 @@ impl Connection {
             ChannelState::Secured(_, ref mut push) => {
                 let data = push.encrypt(message)?;
 
-                debug!(
+                trace!(
                     "sending {} bytes of data to {}",
                     data.len(),
                     self.socket.remote()?
@@ -226,7 +238,7 @@ impl Connection {
         T: Serialize + Send + fmt::Debug,
     {
         let ret = self.send_async(message).await;
-        trace!("sent {:?}", message);
+        debug!("sent {:?}", message);
         ret
     }
 
