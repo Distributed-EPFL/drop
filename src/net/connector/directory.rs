@@ -55,8 +55,8 @@ impl DirectoryConnector {
         })
     }
 
-    /// Registers a local `SocketAddr` on the directory server to which this
-    /// `DirectoryConnector` is connected.
+    /// Registers a local `SocketAddr` on the directory server that can be
+    /// reached by other peers.
     pub async fn register(
         &mut self,
         addr: SocketAddr,
@@ -160,58 +160,67 @@ mod test {
     async fn directory_connect() {
         init_logger();
 
-        let addr = next_test_ip4();
+        let dir_addr = next_test_ip4();
         let dir_exchanger = Exchanger::random();
         let dir_public = *dir_exchanger.keypair().public();
-        let mut listener = DirectoryListener::new(addr, dir_exchanger.clone())
-            .await
-            .expect("bind failed");
+        let mut listener =
+            DirectoryListener::new(dir_addr, dir_exchanger.clone())
+                .instrument(debug_span!("directory listener"))
+                .await
+                .expect("bind failed");
 
-        let dir_addr = listener.local_addr().unwrap();
+        task::spawn(
+            async move {
+                listener.serve().await.expect("failed to serve requests");
+            }
+            .instrument(debug_span!("directory_serve")),
+        );
 
-        task::spawn(async move {
-            listener.serve().await.expect("failed to serve requests");
-        });
-
+        let peer_addr = next_test_ip4();
         let peer_exchanger = Exchanger::random();
         let peer_public = *peer_exchanger.keypair().public();
 
-        let mut listener = TcpListener::new(addr, peer_exchanger.clone())
+        let mut listener = TcpListener::new(peer_addr, peer_exchanger.clone())
             .await
             .expect("failed to listen");
-
-        let peer_addr = listener.local_addr().unwrap();
 
         let handle = task::spawn(async move {
             let connector = Box::new(TcpDirect::new(Exchanger::random()));
             let mut connector =
-                DirectoryConnector::new(connector, &peer_public, dir_addr)
+                DirectoryConnector::new(connector, &dir_public, dir_addr)
+                    .instrument(debug_span!("directory_connect"))
                     .await
                     .expect("connect to directory failed");
 
             connector
                 .connect(&peer_public, &peer_public)
+                .instrument(debug_span!("peer_connect"))
                 .await
                 .expect("failed to connect to peer");
         });
-        let mut tcp = Box::new(TcpDirect::new(peer_exchanger));
 
-        let mut dir_conn = tcp
-            .connect(&dir_public, &dir_addr)
+        let tcp = Box::new(TcpDirect::new(peer_exchanger));
+        let mut directory = DirectoryConnector::new(tcp, &dir_public, dir_addr)
             .await
             .expect("failed to connect to directory");
 
-        dir_conn
-            .send(&DirectoryRequest::Add((peer_public, peer_addr).into()))
+        directory
+            .register(peer_addr)
+            .instrument(debug_span!("peer_register"))
             .await
-            .expect("failed to register with directory");
+            .expect("failed to register on directory");
 
-        dir_conn
-            .send(&0u32)
+        directory
+            .close()
+            .instrument(debug_span!("directory_close"))
             .await
             .expect("failed to close directory connection");
 
-        listener.accept().await.expect("failed to accept");
+        listener
+            .accept()
+            .instrument(debug_span!("peer_accept"))
+            .await
+            .expect("failed to accept");
 
         handle.await.expect("remote peer failed");
     }

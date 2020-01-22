@@ -5,13 +5,13 @@ use crate::crypto::key::exchange::PublicKey;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum DirectoryRequest {
     Add(DirectoryPeer),
     Fetch(PublicKey),
 }
 
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub(crate) enum DirectoryResponse {
     /// Add request was a success
     Ok,
@@ -21,7 +21,7 @@ pub(crate) enum DirectoryResponse {
     NotFound(PublicKey),
 }
 
-impl fmt::Debug for DirectoryResponse {
+impl fmt::Display for DirectoryResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -35,13 +35,7 @@ impl fmt::Debug for DirectoryResponse {
     }
 }
 
-impl fmt::Display for DirectoryResponse {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        <Self as fmt::Debug>::fmt(self, f)
-    }
-}
-
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub(crate) struct DirectoryPeer {
     pkey: PublicKey,
     addr: SocketAddr,

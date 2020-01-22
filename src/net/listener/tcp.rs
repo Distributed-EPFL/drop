@@ -1,5 +1,5 @@
 use std::fmt;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 
 use super::super::Connection;
 use super::{Listener, ListenerError};
@@ -9,7 +9,7 @@ use async_trait::async_trait;
 
 use tokio::net::{TcpListener as TokioListener, ToSocketAddrs};
 
-use tracing::{debug_span, info};
+use tracing::{debug, debug_span, info};
 use tracing_futures::Instrument;
 
 /// A plain `TcpListener` that accepts connections on a given IP address and
@@ -37,10 +37,15 @@ impl TcpListener {
     /// let addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
     /// let listener = TcpListener::new(addr, Exchanger::random());
     /// ```
-    pub async fn new<A: ToSocketAddrs>(
+    pub async fn new<A: ToSocketAddrs + fmt::Display>(
         candidate: A,
         exchanger: Exchanger,
     ) -> Result<Self, ListenerError> {
+        debug!(
+            "listening with TCP on {} with {}",
+            candidate,
+            exchanger.keypair().public()
+        );
         TokioListener::bind(candidate)
             .await
             .map(|listener| Self {
@@ -79,17 +84,9 @@ impl Listener for TcpListener {
     /// Accept an incoming `Connection` from this `TcpListener` and performs
     /// key exchange to authenticate the remote peer.
     async fn accept(&mut self) -> Result<Connection, ListenerError> {
-        let stream = self.listener.accept().await.map(|(stream, _)| stream)?;
+        let (stream, remote) = self.listener.accept().await?;
 
-        let remote = stream
-            .peer_addr()
-            .unwrap_or_else(|_| (Ipv4Addr::UNSPECIFIED, 0u16).into());
-
-        info!(
-            "incoming tcp connection {} -> {}",
-            remote,
-            self.local_addr().unwrap()
-        );
+        info!("incoming tcp connection from {}", remote);
 
         let mut connection = Connection::new(Box::new(stream));
 

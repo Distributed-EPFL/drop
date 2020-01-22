@@ -43,7 +43,7 @@ impl DirectoryListener {
     /// let mut listener = DirectoryListener::new(addr, Exchanger::random()).await?;
     /// # Ok(()) }
     /// ```
-    pub async fn new<A: ToSocketAddrs>(
+    pub async fn new<A: ToSocketAddrs + fmt::Display>(
         local: A,
         exchanger: Exchanger,
     ) -> Result<Self, ListenerError> {
@@ -59,14 +59,15 @@ impl DirectoryListener {
     /// # use std::net::{Ipv4Addr, SocketAddr};
     ///
     /// use drop::crypto::key::exchange::Exchanger;
-    /// use drop::net::listener::DirectoryListener;
+    /// use drop::net::listener::{DirectoryListener, ListenerError};
     ///
-    /// # async fn do() -> Result<()> {
+    /// # async fn doc() -> Result<(), ListenerError> {
     /// let local: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
     /// let exchanger = Exchanger::random();
-    /// let mut listener = DirectoryListener::new(local, exchanger);
+    /// let mut listener = DirectoryListener::new(local, exchanger).await?;
     ///
     /// tokio::task::spawn(async move { listener.serve().await });
+    /// # Ok(())
     /// # }
     /// ```
     pub async fn serve(&mut self) -> Result<(), ListenerError> {
@@ -81,9 +82,16 @@ impl DirectoryListener {
 
             info!("directory connection from {}", connection.peer_addr()?);
 
-            while let Ok(request) =
-                connection.receive::<DirectoryRequest>().await
-            {
+            loop {
+                let request =
+                    match connection.receive::<DirectoryRequest>().await {
+                        Ok(req) => req,
+                        Err(e) => {
+                            error!("failed to read request: {}", e);
+                            break;
+                        }
+                    };
+
                 let response = match request {
                     DirectoryRequest::Add(peer_info) => {
                         let addr = peer_info.addr();
@@ -97,10 +105,13 @@ impl DirectoryListener {
                     DirectoryRequest::Fetch(pkey) => {
                         match self.peers.entry(pkey) {
                             Entry::Vacant(_) => {
+                                info!("peer {} not found", pkey);
                                 DirectoryResponse::NotFound(pkey)
                             }
                             Entry::Occupied(e) => {
-                                DirectoryResponse::Found(e.get().addr())
+                                let addr = e.get().addr();
+                                info!("found request peer at {}", addr);
+                                DirectoryResponse::Found(addr)
                             }
                         }
                     }
@@ -174,11 +185,11 @@ mod tests {
     async fn add_peer() {
         init_logger();
 
-        let exchanger = Exchanger::random();
+        let dir_exchanger = Exchanger::random();
         let server_addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
 
         let mut listener =
-            DirectoryListener::new(server_addr, exchanger.clone())
+            DirectoryListener::new(server_addr, dir_exchanger.clone())
                 .await
                 .expect("bind failed");
         let server_addr = listener.local_addr().expect("get addr failed");
@@ -191,7 +202,7 @@ mod tests {
             .instrument(debug_span!("directory_server")),
         );
 
-        let dir_key = *exchanger.keypair().public();
+        let dir_pub = *dir_exchanger.keypair().public();
 
         let peer_addr: SocketAddr = "127.0.0.1:9090".parse().unwrap();
         let peer_exchanger = Exchanger::random();
@@ -202,8 +213,8 @@ mod tests {
             async move {
                 let tcp = Box::new(TcpDirect::new(Exchanger::random()));
                 let mut connector =
-                    DirectoryConnector::new(tcp, &dir_key, server_addr)
-                        .instrument(debug_span!("directory"))
+                    DirectoryConnector::new(tcp, &dir_pub, server_addr)
+                        .instrument(debug_span!("directory_client"))
                         .await
                         .expect("directory connect failed");
 
@@ -220,14 +231,11 @@ mod tests {
             .await
             .expect("failed to listen");
 
-        let mut connector = DirectoryConnector::new(
-            connector,
-            exchanger.keypair().public(),
-            server_addr,
-        )
-        .instrument(debug_span!("peer_to_find"))
-        .await
-        .expect("failed to connect to directory");
+        let mut connector =
+            DirectoryConnector::new(connector, &dir_pub, server_addr)
+                .instrument(debug_span!("peer_to_find"))
+                .await
+                .expect("failed to connect to directory");
 
         connector
             .register(peer_addr)
