@@ -1,7 +1,7 @@
 use std::fmt;
 use std::net::SocketAddr;
 
-use super::super::Connection;
+use super::super::socket::Socket;
 use super::{Listener, ListenerError};
 use crate::crypto::key::exchange::Exchanger;
 
@@ -83,21 +83,20 @@ impl Listener for TcpListener {
 
     /// Accept an incoming `Connection` from this `TcpListener` and performs
     /// key exchange to authenticate the remote peer.
-    async fn accept(&mut self) -> Result<Connection, ListenerError> {
-        let (stream, remote) = self.listener.accept().await?;
+    async fn accept_raw(&mut self) -> Result<Box<dyn Socket>, ListenerError> {
+        let (stream, remote) = self
+            .listener
+            .accept()
+            .instrument(debug_span!("tcp_accept"))
+            .await?;
 
         info!("incoming tcp connection from {}", remote);
 
-        let mut connection = Connection::new(Box::new(stream));
+        Ok(Box::new(stream))
+    }
 
-        connection
-            .secure_client(&self.exchanger)
-            .instrument(debug_span!("key_exchange"))
-            .await?;
-
-        info!("accepted secure connection from {}", remote);
-
-        Ok(connection)
+    fn exchanger(&self) -> &Exchanger {
+        &self.exchanger
     }
 }
 

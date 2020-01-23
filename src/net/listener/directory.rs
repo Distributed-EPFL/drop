@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use super::super::common::directory::{
     DirectoryPeer, DirectoryRequest, DirectoryResponse,
 };
-use super::super::Connection;
+use super::super::socket::Socket;
 use super::tcp::TcpListener;
 use super::{Listener, ListenerError};
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
@@ -138,14 +138,16 @@ impl Listener for DirectoryListener {
     /// bit special as it first answers any number of directory request once
     /// a `Connection` has been established before handing the `Connection`
     /// over.
-    async fn accept(&mut self) -> Result<Connection, ListenerError> {
-        let connection = self.listener.accept().await?;
-
-        Ok(connection)
+    async fn accept_raw(&mut self) -> Result<Box<dyn Socket>, ListenerError> {
+        Ok(self.listener.accept_raw().await?)
     }
 
     fn local_addr(&self) -> Option<SocketAddr> {
         self.listener.local_addr()
+    }
+
+    fn exchanger(&self) -> &Exchanger {
+        self.listener.exchanger()
     }
 
     async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError> {

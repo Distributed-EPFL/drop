@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
 
-use super::super::Connection;
+use super::super::socket::Socket;
 use super::{Listener, ListenerError};
 use crate::crypto::key::exchange::Exchanger;
 use crate::net::socket::utp::BufferedUtpStream;
@@ -17,7 +17,7 @@ use tracing_futures::Instrument;
 
 use utp::UtpSocket;
 
-/// A listener using the micro transport protocol (uTp)
+/// A `Listener` that uses the micro transport protocol (μTp)
 pub struct UtpListener {
     socket: Option<UtpSocket>,
     exchanger: Exchanger,
@@ -55,7 +55,7 @@ impl Listener for UtpListener {
     /// Accept a Utp `Connection` on this `Listener`. This `Listener` is no
     /// longer usable after succesfully accepting an incoming `Connection` and
     /// will always return an error.
-    async fn accept(&mut self) -> Result<Connection, ListenerError> {
+    async fn accept_raw(&mut self) -> Result<Box<dyn Socket>, ListenerError> {
         let opt: Option<UtpSocket> = self.socket.take();
         let socket: Result<UtpSocket, ListenerError> = opt.ok_or_else(|| {
             let io: Error = ErrorKind::AddrNotAvailable.into();
@@ -71,16 +71,11 @@ impl Listener for UtpListener {
 
         let buffered = BufferedUtpStream::new(stream);
 
-        let mut connection = Connection::new(Box::new(buffered));
+        Ok(Box::new(buffered))
+    }
 
-        connection
-            .secure_client(&self.exchanger)
-            .instrument(debug_span!("key_exchange"))
-            .await?;
-
-        info!("accepted secure connection from {}", remote);
-
-        Ok(connection)
+    fn exchanger(&self) -> &Exchanger {
+        &self.exchanger
     }
 }
 
@@ -99,6 +94,7 @@ impl fmt::Display for UtpListener {
 mod test {
     use super::*;
     use crate::net::connector::{Connector, UtpDirect};
+    use crate::net::Connection;
     use crate::test::*;
     use crate::{exchange_data_and_compare, generate_connection};
 
