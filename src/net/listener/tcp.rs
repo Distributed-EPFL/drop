@@ -112,18 +112,18 @@ impl fmt::Display for TcpListener {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const LISTENER_ADDR: &str = "localhost:1234";
+    use crate::test::next_test_ip4;
 
     #[tokio::test]
     #[should_panic]
     async fn tcp_double_bind() {
         let exchanger = Exchanger::random();
-        let one = TcpListener::new(LISTENER_ADDR, exchanger.clone())
+        let addr = next_test_ip4();
+        let one = TcpListener::new(addr, exchanger.clone())
             .await
             .expect("failed to bind");
 
-        let two = TcpListener::new(LISTENER_ADDR, exchanger)
+        let two = TcpListener::new(addr, exchanger)
             .await
             .expect("failed to bind");
 

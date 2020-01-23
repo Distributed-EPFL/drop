@@ -1,4 +1,7 @@
 mod log;
+
+pub mod net;
+
 pub use log::*;
 
 use std::net::{Ipv4Addr, SocketAddr};

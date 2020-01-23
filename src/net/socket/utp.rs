@@ -82,3 +82,44 @@ impl fmt::Display for BufferedUtpStream {
         )
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::test::*;
+
+    use tokio::task;
+
+    use utp::UtpSocket;
+
+    #[tokio::test]
+    async fn utp_stream_fmt() {
+        init_logger();
+        let (srv, cli) = (next_test_ip4(), next_test_ip4());
+        let listener = UtpSocket::bind(srv).await.expect("bind failed");
+
+        let handle = task::spawn(async move {
+            let socket = UtpSocket::bind(cli).await.expect("bind failed");
+
+            let (stream, _) =
+                socket.connect(srv).await.expect("connect failed");
+
+            let stream = BufferedUtpStream::new(stream);
+
+            assert_eq!(
+                format!("{}", stream),
+                format!("utp connection {} -> {}", cli, srv)
+            );
+        });
+
+        let (stream, _) = listener.accept().await.expect("accept failed");
+        let stream = BufferedUtpStream::new(stream);
+
+        assert_eq!(
+            format!("{}", stream),
+            format!("utp connection {} -> {}", srv, cli)
+        );
+
+        handle.await.expect("task failed");
+    }
+}

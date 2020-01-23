@@ -101,6 +101,7 @@ mod test {
     use crate::net::connector::utp::UtpDirect;
     use crate::net::connector::Connector;
     use crate::test::*;
+    use crate::{exchange_data_and_compare, generate_connection};
 
     #[tokio::test]
     async fn utp_listener_fmt() {
@@ -148,5 +149,9 @@ mod test {
         connection.close().await.expect("close failed");
 
         handle.await.expect("connector failed");
+    }
+
+    pub async fn setup_utp() -> (Connection, Connection) {
+        generate_connection!(UtpListener, UtpDirect);
     }
 }
