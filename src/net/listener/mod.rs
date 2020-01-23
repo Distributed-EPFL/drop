@@ -62,5 +62,5 @@ pub trait Listener: Send + Sync {
     fn exchanger(&self) -> &Exchanger;
 
     /// Get a slice of `Candidate`s on which to this `Listener` can be reached
-    async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError>;
+    async fn candidates(&self) -> Result<Vec<Self::Candidate>, ListenerError>;
 }

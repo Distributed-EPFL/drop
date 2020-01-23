@@ -73,7 +73,7 @@ mod unix {
 impl Listener for TcpListener {
     type Candidate = SocketAddr;
 
-    async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError> {
+    async fn candidates(&self) -> Result<Vec<Self::Candidate>, ListenerError> {
         todo!()
     }
 

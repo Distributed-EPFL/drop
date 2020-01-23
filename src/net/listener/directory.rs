@@ -150,7 +150,7 @@ impl Listener for DirectoryListener {
         self.listener.exchanger()
     }
 
-    async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError> {
+    async fn candidates(&self) -> Result<Vec<Self::Candidate>, ListenerError> {
         todo!()
     }
 }
