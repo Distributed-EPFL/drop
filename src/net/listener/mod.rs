@@ -1,8 +1,10 @@
 /// Listeners that use TCP as a transport protocol
-pub mod tcp;
+mod tcp;
+pub use tcp::*;
 
 /// Listeners that use uTP as a transport protocol
-pub mod utp;
+mod utp;
+pub use self::utp::*;
 
 mod directory;
 

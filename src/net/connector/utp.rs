@@ -71,7 +71,7 @@ impl Socket for UtpStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::listener::{utp::UtpListener, Listener};
+    use crate::net::listener::{Listener, UtpListener};
     use crate::test::*;
 
     #[tokio::test]

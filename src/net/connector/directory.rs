@@ -149,8 +149,8 @@ impl Connector for DirectoryConnector {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::net::connector::tcp::TcpDirect;
-    use crate::net::listener::tcp::TcpListener;
+    use crate::net::connector::TcpDirect;
+    use crate::net::listener::TcpListener;
     use crate::net::listener::{DirectoryListener, Listener};
     use crate::test::*;
 

@@ -32,7 +32,7 @@ impl TcpListener {
     /// ```
     /// use std::net::{Ipv4Addr, SocketAddr};
     /// use drop::crypto::key::exchange::Exchanger;
-    /// use drop::net::listener::tcp::TcpListener;
+    /// use drop::net::listener::TcpListener;
     ///
     /// let addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
     /// let listener = TcpListener::new(addr, Exchanger::random());

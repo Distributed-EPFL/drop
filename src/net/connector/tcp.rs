@@ -55,8 +55,8 @@ impl Connector for TcpDirect {
 mod test {
     use super::super::Connection;
     use super::*;
-    use crate::net::listener::tcp::TcpListener;
     use crate::net::listener::Listener;
+    use crate::net::listener::TcpListener;
     use crate::test::next_test_ip4;
     use crate::{exchange_data_and_compare, generate_connection};
 
