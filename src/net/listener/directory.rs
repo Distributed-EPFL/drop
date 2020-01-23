@@ -172,7 +172,7 @@ mod tests {
     use std::net::Ipv4Addr;
 
     use super::*;
-    use crate::net::connector::tcp::TcpDirect;
+    use crate::net::connector::TcpDirect;
     use crate::net::connector::{Connector, DirectoryConnector};
     use crate::test::init_logger;
 

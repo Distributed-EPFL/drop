@@ -1,8 +1,8 @@
-/// Tcp related connectors
-pub mod tcp;
+mod tcp;
+pub use tcp::*;
 
-/// uTP connectors
-pub mod utp;
+mod utp;
+pub use self::utp::*;
 
 mod directory;
 pub use directory::*;

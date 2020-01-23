@@ -98,8 +98,7 @@ impl fmt::Display for UtpListener {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::net::connector::utp::UtpDirect;
-    use crate::net::connector::Connector;
+    use crate::net::connector::{Connector, UtpDirect};
     use crate::test::*;
     use crate::{exchange_data_and_compare, generate_connection};
 
