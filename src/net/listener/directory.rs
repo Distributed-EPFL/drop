@@ -35,8 +35,7 @@ impl DirectoryListener {
     /// ```
     /// # use std::net::SocketAddr;
     /// use drop::crypto::key::exchange::Exchanger;
-    /// # use drop::net::listener::ListenerError;
-    /// use drop::net::listener::DirectoryListener;
+    /// use drop::net::listener::{DirectoryListener, ListenerError};
     ///
     /// # async fn doc() -> Result<(), ListenerError> {
     /// let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
@@ -82,40 +81,10 @@ impl DirectoryListener {
 
             info!("directory connection from {}", connection.peer_addr()?);
 
-            loop {
-                let request =
-                    match connection.receive::<DirectoryRequest>().await {
-                        Ok(req) => req,
-                        Err(e) => {
-                            error!("failed to read request: {}", e);
-                            break;
-                        }
-                    };
-
-                let response = match request {
-                    DirectoryRequest::Add(peer_info) => {
-                        let addr = peer_info.addr();
-
-                        self.peers.insert(*peer_info.public(), peer_info);
-
-                        info!("added {} to known peers", addr);
-
-                        DirectoryResponse::Ok
-                    }
-                    DirectoryRequest::Fetch(pkey) => {
-                        match self.peers.entry(pkey) {
-                            Entry::Vacant(_) => {
-                                info!("peer {} not found", pkey);
-                                DirectoryResponse::NotFound(pkey)
-                            }
-                            Entry::Occupied(e) => {
-                                let addr = e.get().addr();
-                                info!("found request peer at {}", addr);
-                                DirectoryResponse::Found(addr)
-                            }
-                        }
-                    }
-                };
+            while let Ok(request) =
+                connection.receive::<DirectoryRequest>().await
+            {
+                let response = self.handle_request(request);
 
                 if connection.send(&response).await.is_err() {
                     error!(
@@ -130,6 +99,34 @@ impl DirectoryListener {
         }
 
         Ok(())
+    }
+
+    fn handle_request(
+        &mut self,
+        request: DirectoryRequest,
+    ) -> DirectoryResponse {
+        match request {
+            DirectoryRequest::Add(peer_info) => {
+                let addr = peer_info.addr();
+
+                self.peers.insert(*peer_info.public(), peer_info);
+
+                info!("added {} to known peers", addr);
+
+                DirectoryResponse::Ok
+            }
+            DirectoryRequest::Fetch(pkey) => match self.peers.entry(pkey) {
+                Entry::Vacant(_) => {
+                    info!("peer {} not found", pkey);
+                    DirectoryResponse::NotFound(pkey)
+                }
+                Entry::Occupied(e) => {
+                    let addr = e.get().addr();
+                    info!("found request peer at {}", addr);
+                    DirectoryResponse::Found(addr)
+                }
+            },
+        }
     }
 }
 
