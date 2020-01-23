@@ -22,7 +22,6 @@ use async_trait::async_trait;
 use macros::error;
 
 use tokio::io::Error as TokioError;
-use tokio::net::ToSocketAddrs;
 
 error! {
     type: ListenerError,
@@ -34,7 +33,7 @@ error! {
 #[async_trait]
 pub trait Listener {
     /// The type of address that this `Listener` listens on.
-    type Candidate: ToSocketAddrs + Send + Sync + fmt::Display;
+    type Candidate: Send + Sync + fmt::Display;
 
     /// Returns the local address on which this `Listener` listens if relevant.
     /// Typically hole punching `Listener`s will not listen on a socket and
