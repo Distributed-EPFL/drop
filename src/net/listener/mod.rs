@@ -6,6 +6,10 @@ pub use tcp::*;
 mod utp;
 pub use self::utp::*;
 
+/// Listeners that can open publicly reachable ports on a NAT
+mod nat;
+pub use self::nat::*;
+
 mod directory;
 
 pub use directory::*;
