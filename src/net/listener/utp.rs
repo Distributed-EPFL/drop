@@ -154,6 +154,7 @@ mod test {
 
     #[tokio::test]
     async fn utp_u8_exchange() {
+        crate::test::init_logger();
         exchange_data_and_compare!(0, u8, setup_utp);
     }
 

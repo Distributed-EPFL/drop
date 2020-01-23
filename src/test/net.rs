@@ -1,58 +1,47 @@
-pub const LISTENER_ADDR: &str = "localhost";
-
 /// Create two ends of a `Connection` using the specified `Listener`
 /// and `Connector` types
 #[macro_export]
 macro_rules! generate_connection {
     ($listener:ty , $connector:ty) => {
-        use std::net::ToSocketAddrs;
-
         use crate::crypto::key::exchange::{Exchanger, KeyPair};
-        use crate::test::net::LISTENER_ADDR;
-
-        use rand;
 
         let client = KeyPair::random();
         let server = KeyPair::random();
         let client_ex = Exchanger::new(client.clone());
         let server_ex = Exchanger::new(server.clone());
 
-        loop {
-            let port: u16 = rand::random();
-            let addr: SocketAddr = (LISTENER_ADDR, port)
-                .to_socket_addrs()
-                .expect("failed to parse localhost")
-                .as_slice()[0];
-            let mut listener =
-                match <$listener>::new(addr, server_ex.clone()).await {
-                    Ok(listener) => listener,
-                    Err(_) => continue,
-                };
+        let addr = next_test_ip4();
+        let mut listener = <$listener>::new(addr, server_ex.clone())
+            .await
+            .expect("listen failed");
 
-            let mut connector = <$connector>::new(client_ex);
+        let mut connector = <$connector>::new(client_ex);
 
-            let outgoing = connector
-                .connect(server.public(), &addr)
-                .await
-                .expect("failed to connect");
-
-            let incoming = listener
+        let handle = tokio::task::spawn(async move {
+            listener
                 .accept()
                 .await
-                .expect("failed to accept incoming connection");
+                .expect("failed to accept incoming connection")
+        });
 
-            assert!(
-                incoming.is_secured(),
-                "server coulnd't secure the connection"
-            );
+        let outgoing = connector
+            .connect(server.public(), &addr)
+            .await
+            .expect("failed to connect");
 
-            assert!(
-                outgoing.is_secured(),
-                "client couldn't secure the connection"
-            );
+        let incoming = handle.await.expect("task failure");
 
-            return (outgoing, incoming);
-        }
+        assert!(
+            incoming.is_secured(),
+            "server coulnd't secure the connection"
+        );
+
+        assert!(
+            outgoing.is_secured(),
+            "client couldn't secure the connection"
+        );
+
+        return (outgoing, incoming);
     };
 }
 
