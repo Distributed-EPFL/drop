@@ -102,31 +102,33 @@ impl Parse for Error {
             }
         }
 
-        if ident.is_none() {
-            Err(syn::Error::new(
+        match (ident, description) {
+            (None, _) => Err(syn::Error::new(
                 Span::call_site(),
                 "Property `type` is required in an `error!`.",
-            ))
-        } else if description.is_none() {
-            Err(syn::Error::new(
+            )),
+            (_, None) => Err(syn::Error::new(
                 Span::call_site(),
                 "Property `description` is required in an `error!`.",
-            ))
-        } else {
-            let error = ident.unwrap();
-            let cause = Ident::new(&format!("{}Cause", error), error.span());
+            )),
 
-            Ok(Error {
-                idents: Idents { error, cause },
-                description: description.unwrap(),
-                data: if fields.is_some() {
-                    ErrorData::Fields(fields.unwrap())
-                } else if causes.is_some() {
-                    ErrorData::Causes(causes.unwrap())
-                } else {
-                    ErrorData::None
-                },
-            })
+            (Some(ident), Some(description)) => {
+                let error = ident;
+                let cause =
+                    Ident::new(&format!("{}Cause", error), error.span());
+
+                Ok(Error {
+                    idents: Idents { error, cause },
+                    description,
+                    data: if let Some(fields) = fields {
+                        ErrorData::Fields(fields)
+                    } else if let Some(causes) = causes {
+                        ErrorData::Causes(causes)
+                    } else {
+                        ErrorData::None
+                    },
+                })
+            }
         }
     }
 }
