@@ -1,52 +1,56 @@
 language: rust
-sudo: required
+os:
+  - linux
+  - osx
 dist: trusty
 addons:
-    apt:
-        packages:
-            - libssl-dev
-            - libcurl4-openssl-dev
-            - libelf-dev
-            - libdw-dev
-            - cmake
-            - gcc
-            - binutils-dev
-            - libiberty-dev
-
+  apt:
+    packages:
+    - libssl-dev
+    - libcurl4-openssl-dev
+    - libelf-dev
+    - libdw-dev
+    - cmake
+    - gcc
+    - binutils-dev
+    - libiberty-dev
 cache: cargo
 rust:
-  - stable
-  - beta
-  - nightly
-
+- stable
+- beta
+- nightly
 jobs:
+  include:
+    - os: linux
+      dist: trusty
+    - os: linux
+      dist: xenial
+    - os: linux
+      dist: bionic
   allow_failures:
-    - rust:
-        - nightly
-        - beta
+  - rust: nightly
   fast_finish: true
-
 before_install:
-  - rustup component add rustfmt
-  - rustup component add clippy || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
-
+- rustup component add rustfmt
+- rustup component add clippy || cargo install --git https://github.com/rust-lang/rust-clippy/
+  --force clippy
 script:
-  - cargo fmt --all -- --check
-  - cargo clippy --all-targets --all-features -- -D warnings
-  - cargo build
-  - cargo test
+- cargo fmt --all -- --check
+- cargo clippy --all-targets --all-features -- -D warnings
+- cargo build
+- cargo test
 
 after_success: |
-    wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
-    tar xzf master.tar.gz &&
-    cd kcov-master &&
-    mkdir build &&
-    cd build &&
-    cmake .. &&
-    make &&
-    make install DESTDIR=../../kcov-build &&
-    cd ../.. &&
-    rm -rf kcov-master &&
-    for file in target/debug/drop-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
-    bash <(curl -s https://codecov.io/bash) &&
-    echo "Uploaded code coverage"
+  wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
+  tar xzf master.tar.gz &&
+  cd kcov-master &&
+  mkdir build &&
+  cd build &&
+  cmake .. &&
+  make &&
+  make install DESTDIR=../../kcov-build &&
+  cd ../.. &&
+  rm -rf kcov-master &&
+  for file in target/debug/drop-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
+  bash <(curl -s https://codecov.io/bash) &&
+  echo "Uploaded code coverage"
