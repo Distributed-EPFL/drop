@@ -1,9 +1,9 @@
 use std::fmt;
-use std::io::{Error, ErrorKind};
+use std::io::ErrorKind;
 use std::net::SocketAddr;
 
 use super::super::socket::Socket;
-use super::{Listener, ListenerError};
+use super::*;
 use crate::crypto::key::exchange::Exchanger;
 use crate::net::socket::utp::BufferedUtpStream;
 
@@ -15,7 +15,7 @@ use tokio::task;
 use tracing::{debug_span, info};
 use tracing_futures::Instrument;
 
-use utp::UtpSocket;
+use ::utp::UtpSocket;
 
 /// A `Listener` that uses the micro transport protocol (μTp)
 pub struct UtpListener {
@@ -31,7 +31,7 @@ impl UtpListener {
         exchanger: Exchanger,
     ) -> Result<Self, ListenerError> {
         Ok(Self {
-            socket: Some(UtpSocket::bind(addr).await?),
+            socket: Some(UtpSocket::bind(addr).await.context(Io)?),
             exchanger,
         })
     }
@@ -57,12 +57,11 @@ impl Listener for UtpListener {
     /// will always return an error.
     async fn establish(&mut self) -> Result<Box<dyn Socket>, ListenerError> {
         let opt: Option<UtpSocket> = self.socket.take();
-        let socket: Result<UtpSocket, ListenerError> = opt.ok_or_else(|| {
-            let io: Error = ErrorKind::AddrNotAvailable.into();
-            io.into()
-        });
+        let socket: Result<UtpSocket, ListenerError> = opt
+            .ok_or_else(|| ErrorKind::AddrNotAvailable.into())
+            .context(Io);
 
-        let (stream, driver) = socket?.accept().await?;
+        let (stream, driver) = socket?.accept().await.context(Io)?;
         let remote = stream.peer_addr();
 
         info!("incoming uTp connection from {}", remote);

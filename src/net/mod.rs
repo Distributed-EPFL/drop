@@ -1,3 +1,5 @@
+/// Common data shared between `Listener`s and `Connector`s
+pub(crate) mod common;
 /// Utilities to connect to other peers in a secure fashion
 pub mod connector;
 /// Utilities to accept incoming connections from peers
