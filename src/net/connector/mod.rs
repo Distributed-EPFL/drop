@@ -1,5 +1,11 @@
+mod directory;
+pub use directory::*;
+
 mod tcp;
 pub use tcp::*;
+
+mod utp;
+pub use self::utp::*;
 
 use std::fmt;
 use std::io::Error;
