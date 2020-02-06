@@ -2,6 +2,14 @@
 mod tcp;
 pub use tcp::*;
 
+/// Listeners that use uTP as a transport protocol
+mod utp;
+pub use self::utp::*;
+
+/// Directory listener
+mod directory;
+pub use directory::*;
+
 use std::fmt;
 use std::net::SocketAddr;
 
