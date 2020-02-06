@@ -1,3 +1,6 @@
+mod tcp;
+pub use tcp::*;
+
 use std::fmt;
 use std::io::Error as IoError;
 
