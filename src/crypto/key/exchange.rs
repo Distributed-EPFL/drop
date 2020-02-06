@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::super::errors::{ExchangeError, SodiumError};
 use super::super::stream::{Pull, Push};
 use super::Key;
@@ -9,9 +11,28 @@ use sodiumoxide::crypto::kx::{
     PublicKey as SodiumPubKey, SecretKey as SodiumSecKey,
 };
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+)]
 /// A `PublicKey` used to compute a shared secret with a remote party
 pub struct PublicKey(SodiumPubKey);
+
+impl fmt::Display for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for b in self.0.as_ref() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Debug for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "PublicKey {{ ")?;
+        <Self as fmt::Display>::fmt(self, f)?;
+        write!(f, " }}")
+    }
+}
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// A `SecretKey` used to compute a shared secret with a remote party
@@ -62,6 +83,7 @@ impl Into<(Push, Pull)> for Session {
 
 /// A structure used to compute a shared secret with another
 /// party using a `KeyPair` and the other party's `PublicKey`
+#[derive(Clone)]
 pub struct Exchanger {
     keypair: KeyPair,
 }
@@ -135,7 +157,7 @@ mod tests {
         let cli_keypair = KeyPair::random();
 
         let srv_session =
-            exchange_key!(srv_keypair.clone(), cli_keypair.public.clone());
+            exchange_key!(srv_keypair.clone(), cli_keypair.public);
         let cli_session = exchange_key!(cli_keypair, &srv_keypair.public);
 
         assert_eq!(
@@ -153,8 +175,8 @@ mod tests {
         let (srv, cli) = (KeyPair::random(), KeyPair::random());
         let wrong_keypair = KeyPair::random();
 
-        let srv_session = exchange_key!(srv, cli.public.clone());
-        let cli_session = exchange_key!(cli, wrong_keypair.public().clone());
+        let srv_session = exchange_key!(srv, cli.public);
+        let cli_session = exchange_key!(cli, *wrong_keypair.public());
 
         assert_ne!(
             cli_session.receive, srv_session.transmit,
