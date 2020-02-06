@@ -15,12 +15,12 @@ pub use macros::error;
 pub use self::spotting::Spotting;
 
 /// Generic error trait
-pub trait Error {
+pub trait Error: Send + Sync {
     fn description(&self) -> &String;
     fn backtrace(&self) -> &Backtrace;
     fn spot(self, spotting: Spotting) -> Self;
     fn comment<T: Into<String>>(self, context: T) -> Self;
-    fn attach<Payload: Any>(self, attachment: Payload) -> Self;
+    fn attach<Payload: Any + Send + Sync>(self, attachment: Payload) -> Self;
     fn spottings(&self) -> &Vec<Spotting>;
     fn details(&self) -> &[String];
     fn attachments(&self) -> &[Attachment];
@@ -29,12 +29,12 @@ pub trait Error {
 /// An object attached to an `Error`. This contains both the attached value
 /// as well as its pretty printable name.
 pub struct Attachment {
-    value: Box<dyn Any>,
+    value: Box<dyn Any + Send + Sync>,
     typename: &'static str,
 }
 
 impl Attachment {
-    pub fn new<T: Sized + 'static>(value: T) -> Self {
+    pub fn new<T: Send + Sized + Sync + 'static>(value: T) -> Self {
         Self {
             value: Box::new(value),
             typename: type_name::<T>(),
