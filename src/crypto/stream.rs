@@ -107,7 +107,7 @@ impl Pull {
     /// to this `Pull` instance. The resulting value can therefore not
     /// outlive this `Pull` nor can this `Pull` read another message
     /// until the current one has been dropped.
-    pub fn decrypt_ref<'de, T>(
+    pub fn decrypt<'de, T>(
         &'de mut self,
         ciphertext: &[u8],
     ) -> Result<T, DecryptError>
@@ -156,18 +156,6 @@ impl Pull {
             PullState::Broken => Err(BrokenStream::new().into()),
         }
     }
-
-    /// Decrypts an arbitrary message from a slice of bytes. <br />
-    /// The provided data should have been encrypted with
-    /// a matching instance of `Push` using the same `Key`. <br />
-    /// If this method fails once, the `Pull` instance will be considered
-    /// broken and be unusable from then on.
-    pub fn decrypt<T>(&mut self, ciphertext: &[u8]) -> Result<T, DecryptError>
-    where
-        for<'de> T: Deserialize<'de> + ToOwned<Owned = T>,
-    {
-        self.decrypt_ref(ciphertext).map_err(|e| e)
-    }
 }
 
 #[cfg(test)]
@@ -188,7 +176,7 @@ mod tests {
             let ciphertext =
                 transmitter.encrypt(&message).expect("failed to encrypt");
             let plaintext = receiver
-                .decrypt_ref::<u64>(&ciphertext)
+                .decrypt::<u64>(&ciphertext)
                 .expect("failed to decrypt without copy");
 
             assert_eq!(
