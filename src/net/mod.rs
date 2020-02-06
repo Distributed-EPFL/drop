@@ -4,7 +4,6 @@ pub(crate) mod common;
 pub mod connector;
 /// Utilities to accept incoming connections from peers
 pub mod listener;
-
 /// Socket implementation for various types
 mod socket;
 

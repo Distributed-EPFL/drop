@@ -2,11 +2,11 @@
 pub mod crypto;
 /// Error definition and handling
 pub mod error;
-/// Connection utilities and listeners
+/// Async and synchronous network utilities
 pub mod net;
 
 #[cfg(test)]
-/// Testing utilities
+/// Test utilities that are used all across the framework
 pub mod test;
 
 pub use backtrace;
