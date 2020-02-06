@@ -1,3 +1,6 @@
+mod tcp;
+pub use tcp::*;
+
 use std::fmt;
 use std::io::Error;
 
@@ -14,8 +17,10 @@ use tracing_futures::Instrument;
 #[derive(Debug, Snafu)]
 pub enum ConnectError {
     #[snafu(display("i/o error: {}", source))]
+    #[snafu(visibility(pub))]
     Io { source: Error },
     #[snafu(display("could not secure connection: {}", source))]
+    #[snafu(visibility(pub))]
     Secure { source: SecureError },
 }
 

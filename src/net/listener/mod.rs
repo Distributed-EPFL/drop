@@ -1,3 +1,7 @@
+/// Listeners that use TCP as a transport protocol
+mod tcp;
+pub use tcp::*;
+
 use std::fmt;
 use std::io::Error;
 use std::net::SocketAddr;
@@ -13,9 +17,11 @@ use snafu::{ResultExt, Snafu};
 #[derive(Debug, Snafu)]
 pub enum ListenerError {
     #[snafu(display("i/o  error: {}", source))]
+    #[snafu(visibility(pub))]
     Io { source: Error },
 
     #[snafu(display("could not secure connection: {}", source))]
+    #[snafu(visibility(pub))]
     Secure { source: SecureError },
 }
 
