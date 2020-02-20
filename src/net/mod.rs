@@ -1,11 +1,29 @@
 /// Common data shared between `Listener`s and `Connector`s
 pub(crate) mod common;
+
 /// Utilities to connect to other peers in a secure fashion
 pub mod connector;
+pub use connector::ConnectError;
+pub use connector::Connector;
+pub use connector::Directory as DirectoryConnector;
+pub use connector::Tcp as TcpConnector;
+pub use connector::Utp as UtpConnector;
+
 /// Utilities to accept incoming connections from peers
 pub mod listener;
+pub use listener::Directory as DirectoryListener;
+pub use listener::Listener;
+pub use listener::ListenerError;
+pub use listener::Tcp as TcpListener;
+pub use listener::Utp as UtpListener;
+
 /// Socket implementation for various types
 mod socket;
+
+/// Pre-made servers that accomplish common tasks
+pub mod server;
+pub use server::DirectoryServer;
+pub use server::ServerError;
 
 pub(self) mod utils;
 
