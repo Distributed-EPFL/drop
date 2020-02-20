@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use tracing::{debug, debug_span, error as error_log, info, trace};
+use tracing::{debug, debug_span, info, trace};
 use tracing_futures::Instrument;
 
 /// Type of errors returned when serializing/deserializing
@@ -162,37 +162,45 @@ impl Connection {
     {
         match &mut self.state {
             ConnectionState::Secured(ref mut pull, _) => {
-                let size = Self::read_size(&mut *self.socket)
-                    .instrument(debug_span!("read_size"))
-                    .await? as usize;
+                async fn receive_internal<
+                    T: Sized + for<'de> Deserialize<'de> + Send + fmt::Debug,
+                >(
+                    pull: &mut Pull,
+                    socket: &mut dyn Socket,
+                    mut buffer: &mut Vec<u8>,
+                ) -> Result<T, ReceiveError> {
+                    let size = Connection::read_size(socket)
+                        .instrument(debug_span!("read_size"))
+                        .await? as usize;
 
-                trace!(
-                    "receiving message of {} bytes from {}",
-                    size,
-                    self.socket.peer_addr()?
-                );
+                    trace!(
+                        "receiving message of {} bytes from {}",
+                        size,
+                        socket.peer_addr()?
+                    );
 
-                // FIXME: avoid trusting network input and run out of memory
-                self.buffer.resize(size, 0);
+                    // FIXME: avoid trusting network input and run out of memory
+                    buffer.resize(size, 0);
 
-                self.socket
-                    .read_exact(&mut self.buffer)
-                    .instrument(debug_span!("read_data"))
-                    .await?;
+                    socket
+                        .read_exact(&mut buffer)
+                        .instrument(debug_span!("read_data"))
+                        .await?;
 
-                let msg: Result<T, ReceiveError> =
-                    pull.decrypt(&self.buffer).map_err(|e| {
-                        self.state = ConnectionState::Broken;
-                        e.into()
-                    });
+                    pull.decrypt(&buffer).map_err(|e| e.into())
+                }
+
+                let msg = receive_internal(
+                    pull,
+                    self.socket.as_mut(),
+                    &mut self.buffer,
+                )
+                .await;
 
                 if let Ok(ref msg) = msg {
                     debug!("received {:?}", msg);
                 } else {
-                    error_log!(
-                        "corrupted message from {}",
-                        self.socket.peer_addr()?
-                    );
+                    self.state = ConnectionState::Broken;
                 }
 
                 msg
@@ -205,22 +213,36 @@ impl Connection {
     /// Send a `Serialize` message using the underlying `Connection`.
     pub async fn send<T>(&mut self, message: &T) -> Result<(), SendError>
     where
-        T: Serialize + Send,
+        T: Serialize + Send + fmt::Debug,
     {
         match &mut self.state {
             ConnectionState::Secured(_, ref mut push) => {
-                let data = push.encrypt(message)?;
+                async fn send_internal<T: Serialize + Send + fmt::Debug>(
+                    message: &T,
+                    socket: &mut dyn Socket,
+                    push: &mut Push,
+                ) -> Result<(), SendError> {
+                    let data = push.encrypt(message)?;
 
-                trace!(
-                    "sending {} bytes of data to {}",
-                    data.len(),
-                    self.socket.peer_addr()?
-                );
+                    debug!("sending {:?}", message);
 
-                Self::write_size(self.socket.as_mut(), data.len() as u32)
-                    .await?;
+                    trace!(
+                        "sending {} bytes of data to {}",
+                        data.len(),
+                        socket.peer_addr()?
+                    );
 
-                self.socket.write_all(&data).await.map_err(|e| e.into())
+                    Connection::write_size(socket, data.len() as u32).await?;
+
+                    socket.write_all(&data).await.map_err(|e| e.into())
+                }
+
+                send_internal(message, self.socket.as_mut(), push)
+                    .await
+                    .map_err(|e| {
+                        self.state = ConnectionState::Broken;
+                        e
+                    })
             }
             ConnectionState::Connected => Err(NeedsSecureError::new().into()),
             ConnectionState::Broken => Err(CorruptedConnection::new().into()),
