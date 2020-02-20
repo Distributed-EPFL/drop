@@ -18,12 +18,12 @@ use tracing_futures::Instrument;
 use utp::UtpSocket;
 
 /// A `Listener` that uses the micro transport protocol (μTp)
-pub struct UtpListener {
+pub struct Direct {
     socket: Option<UtpSocket>,
     exchanger: Exchanger,
 }
 
-impl UtpListener {
+impl Direct {
     /// Create a new `UtpListener` that will be able to accept one `Connection`
     /// on the given local address.
     pub async fn new<A: ToSocketAddrs>(
@@ -38,7 +38,7 @@ impl UtpListener {
 }
 
 #[async_trait]
-impl Listener for UtpListener {
+impl Listener for Direct {
     type Candidate = SocketAddr;
 
     async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError> {
@@ -79,7 +79,7 @@ impl Listener for UtpListener {
     }
 }
 
-impl fmt::Display for UtpListener {
+impl fmt::Display for Direct {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.socket {
             None => write!(f, "exhausted utp listener"),
@@ -93,8 +93,8 @@ impl fmt::Display for UtpListener {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::net::connector::{Connector, UtpDirect};
-    use crate::net::Connection;
+    use crate::net::connector::Connector;
+    use crate::net::{Connection, UtpConnector, UtpListener};
     use crate::test::*;
     use crate::{exchange_data_and_compare, generate_connection};
 
@@ -127,7 +127,7 @@ mod test {
 
         let handle = task::spawn(async move {
             let exch = Exchanger::random();
-            let mut connector = UtpDirect::new(exch);
+            let connector = UtpConnector::new(exch);
             let mut connection = connector
                 .connect(exchanger.keypair().public(), &addr)
                 .await
@@ -149,7 +149,7 @@ mod test {
     }
 
     pub async fn setup_utp() -> (Connection, Connection) {
-        generate_connection!(UtpListener, UtpDirect);
+        generate_connection!(UtpListener, UtpConnector);
     }
 
     #[tokio::test]

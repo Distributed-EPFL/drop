@@ -14,25 +14,25 @@ use tracing_futures::Instrument;
 
 /// A plain `TcpListener` that accepts connections on a given IP address and
 /// port
-pub struct TcpListener {
+pub struct Direct {
     listener: TokioListener,
     exchanger: Exchanger,
 }
 
-impl TcpListener {
+impl Direct {
     /// Create a new `TcpListener` that will listen on the candidate address
     ///
     /// # Arguments
     ///
-    /// * `candidate` - The target address to listen on
-    /// * `exchanger` - A key `Exchanger` to be used when handshaking with the
+    /// * `candidate` The target address to listen on
+    /// * `exchanger` A key `Exchanger` to be used when handshaking with the
     /// remote end
     ///
     /// # Example
     /// ```
     /// use std::net::{Ipv4Addr, SocketAddr};
     /// use drop::crypto::key::exchange::Exchanger;
-    /// use drop::net::listener::TcpListener;
+    /// use drop::net::TcpListener;
     ///
     /// let addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
     /// let listener = TcpListener::new(addr, Exchanger::random());
@@ -60,9 +60,9 @@ impl TcpListener {
 mod unix {
     use std::os::unix::io::{AsRawFd, RawFd};
 
-    use super::TcpListener;
+    use super::Direct;
 
-    impl AsRawFd for TcpListener {
+    impl AsRawFd for Direct {
         fn as_raw_fd(&self) -> RawFd {
             self.listener.as_raw_fd()
         }
@@ -70,7 +70,7 @@ mod unix {
 }
 
 #[async_trait]
-impl Listener for TcpListener {
+impl Listener for Direct {
     type Candidate = SocketAddr;
 
     async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError> {
@@ -100,7 +100,7 @@ impl Listener for TcpListener {
     }
 }
 
-impl fmt::Display for TcpListener {
+impl fmt::Display for Direct {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let addr = self.local_addr().map_or(Err(fmt::Error), Ok)?;
 
@@ -118,13 +118,11 @@ mod tests {
     async fn tcp_double_bind() {
         let exchanger = Exchanger::random();
         let addr = next_test_ip4();
-        let one = TcpListener::new(addr, exchanger.clone())
+        let one = Direct::new(addr, exchanger.clone())
             .await
             .expect("failed to bind");
 
-        let two = TcpListener::new(addr, exchanger)
-            .await
-            .expect("failed to bind");
+        let two = Direct::new(addr, exchanger).await.expect("failed to bind");
 
         assert_eq!(one.local_addr().unwrap(), two.local_addr().unwrap());
     }
@@ -132,7 +130,7 @@ mod tests {
     #[tokio::test]
     async fn tcp_listener_addr() {
         let addr = next_test_ip4();
-        let listener = TcpListener::new(addr, Exchanger::random())
+        let listener = Direct::new(addr, Exchanger::random())
             .await
             .expect("bind failed");
 
