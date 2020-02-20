@@ -15,7 +15,7 @@ macro_rules! generate_connection {
             .await
             .expect("listen failed");
 
-        let mut connector = <$connector>::new(client_ex);
+        let connector = <$connector>::new(client_ex);
 
         let handle = tokio::task::spawn(async move {
             listener
