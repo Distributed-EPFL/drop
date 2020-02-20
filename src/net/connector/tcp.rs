@@ -13,11 +13,11 @@ use tokio::net::TcpStream;
 use tracing::info;
 
 /// A `Connector` that uses direct TCP connections to a remote peer
-pub struct TcpDirect {
+pub struct Direct {
     exchanger: Exchanger,
 }
 
-impl TcpDirect {
+impl Direct {
     /// Create a new `TcpDirect` `Connector` using the given
     /// `Exchanger` to compute shared secrets
     ///
@@ -30,7 +30,7 @@ impl TcpDirect {
 }
 
 #[async_trait]
-impl Connector for TcpDirect {
+impl Connector for Direct {
     /// This `Connector` uses a pair of `IpAddr` and port as destination
     type Candidate = SocketAddr;
 
@@ -41,7 +41,7 @@ impl Connector for TcpDirect {
 
     /// Open a `Socket` to the specified destination using TCP
     async fn establish(
-        &mut self,
+        &self,
         _: &PublicKey,
         candidate: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError> {
@@ -59,17 +59,20 @@ mod test {
     use super::super::Connection;
     use super::*;
     use crate::crypto::key::exchange::PublicKey;
-    use crate::net::listener::Listener;
-    use crate::net::listener::TcpListener;
-    use crate::test::next_test_ip4;
+    use crate::net::{Listener, TcpConnector, TcpListener};
+    use crate::test::*;
     use crate::{exchange_data_and_compare, generate_connection};
 
     use serde::{Deserialize, Serialize};
 
+    use futures::future;
+
     use tokio::task;
 
+    const NR_CONN: usize = 10;
+
     pub async fn setup_tcp() -> (Connection, Connection) {
-        generate_connection!(TcpListener, TcpDirect);
+        generate_connection!(TcpListener, Direct);
     }
 
     #[tokio::test]
@@ -196,7 +199,7 @@ mod test {
     #[tokio::test]
     async fn tcp_non_existent() {
         let exchanger = Exchanger::random();
-        let mut connector = TcpDirect::new(exchanger.clone());
+        let connector = Direct::new(exchanger.clone());
         let addr = next_test_ip4();
 
         connector
@@ -211,7 +214,7 @@ mod test {
         let mut listener = TcpListener::new(srv, Exchanger::random())
             .await
             .expect("bind failed");
-        let mut connector = TcpDirect::new(Exchanger::random());
+        let connector = Direct::new(Exchanger::random());
 
         let handle = task::spawn(async move {
             let mut bad_conn = listener.accept().await.expect("accept failed");
@@ -255,7 +258,7 @@ mod test {
         let mut listener = TcpListener::new(srv, exchanger)
             .await
             .expect("listen failed");
-        let mut connector = TcpDirect::new(Exchanger::random());
+        let connector = Direct::new(Exchanger::random());
 
         let handle = task::spawn(async move {
             listener.accept().await.expect_err("accept suceeded");
@@ -281,5 +284,108 @@ mod test {
             .expect_err("send on insecure connection");
 
         handle.await.expect("listener failure");
+    }
+
+    #[tokio::test]
+    async fn connect_any() {
+        init_logger();
+        let addrs = (0..NR_CONN).map(|_| next_test_ip4()).collect::<Vec<_>>();
+        let exchanger = Exchanger::random();
+        let listeners = addrs
+            .iter()
+            .map(|x| TcpListener::new(x, exchanger.clone()))
+            .collect::<Vec<_>>();
+
+        let mut resolved = future::join_all(listeners)
+            .await
+            .drain(..)
+            .map(|x| x.expect("bind failed"))
+            .collect::<Vec<_>>();
+
+        let handle = task::spawn(async move {
+            let mut connection = future::select_all(
+                resolved.iter_mut().map(|x: &mut TcpListener| x.accept()),
+            )
+            .await
+            .0
+            .expect("accept failed");
+
+            assert_eq!(
+                connection.receive::<u32>().await.unwrap(),
+                0u32,
+                "recv failed"
+            );
+        });
+
+        let connector = TcpConnector::new(Exchanger::random());
+        let mut connection = connector
+            .connect_any(exchanger.keypair().public(), addrs.as_slice())
+            .await
+            .expect("connect failed");
+
+        connection.send(&0u32).await.expect("send failed");
+
+        handle.await.expect("listener failed");
+    }
+
+    #[tokio::test]
+    async fn connect_many() {
+        init_logger();
+        let addrs = (0..NR_CONN)
+            .map(|_| (next_test_ip4(), Exchanger::random()))
+            .collect::<Vec<_>>();
+
+        let mut listeners = future::join_all(
+            addrs
+                .iter()
+                .map(|(addr, exch)| TcpListener::new(addr, exch.clone())),
+        )
+        .await
+        .drain(..)
+        .map(|x| x.expect("listen failed"))
+        .collect::<Vec<_>>();
+
+        let handle = task::spawn(async move {
+            let mut connections =
+                future::join_all(listeners.iter_mut().map(|x| x.accept()))
+                    .await
+                    .drain(..)
+                    .collect::<Result<Vec<_>, _>>()
+                    .expect("accept failed");
+
+            connections.iter().for_each(|x| assert!(x.is_secured()));
+
+            future::join_all(
+                connections.iter_mut().map(|x| x.receive::<u32>()),
+            )
+            .await
+            .drain(..)
+            .for_each(|x| assert_eq!(0u32, x.expect("recv failed")));
+        });
+
+        let connector = TcpConnector::new(Exchanger::random());
+        let candidates = addrs
+            .iter()
+            .map(|(addr, exch)| (*addr, *exch.keypair().public()))
+            .collect::<Vec<_>>();
+
+        let connections: Result<Vec<Connection>, ConnectError> = connector
+            .connect_many(candidates.as_slice())
+            .await
+            .drain(..)
+            .collect();
+
+        future::join_all(connections.expect("connect failed").iter_mut().map(
+            |x| {
+                assert!(x.is_secured());
+                x.send(&0u32)
+            },
+        ))
+        .await
+        .drain(..)
+        .collect::<Result<Vec<_>, _>>()
+        .expect("send failed");
+
+        handle.await.expect("listeners failed");
     }
 }
