@@ -9,9 +9,7 @@ use super::super::Connection;
 use super::ServerError;
 use crate::crypto::key::exchange::PublicKey;
 
-use tokio::sync::broadcast::{
-    channel as bcast_channel, Receiver as BcastReceiver, Sender as BcastSender,
-};
+use tokio::sync::broadcast::{channel as bcast_channel, Sender as BcastSender};
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::sync::RwLock;
 use tokio::task;
@@ -25,25 +23,44 @@ type PeerDirectory = Arc<RwLock<HashMap<PublicKey, SocketAddr>>>;
 /// A server that serves directory requests from peers. The incoming
 /// connection must be plain text to avoid having to know a public key for
 /// the directory server.
+/// # Example
+/// ```
+/// # use std::net::{Ipv4Addr, SocketAddr};
+/// use drop::net::{DirectoryServer, TcpListener, ServerError};
+/// use drop::crypto::key::exchange::Exchanger;
+///
+/// # async fn doc() -> Result<(), ServerError> {
+/// let addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, 0).into();
+/// let tcp = TcpListener::new(addr, Exchanger::random()).await
+///     .expect("bind failed");
+/// let (server, exit) = DirectoryServer::new(tcp);
+/// let handle = tokio::task::spawn(async move {
+///      server.serve().await
+/// });
+/// exit.send(());
+/// handle.await.expect("server failure");
+/// # Ok(())
+/// # }
+/// ```
 pub struct DirectoryServer {
     peers: PeerDirectory,
     listener: Box<dyn Listener<Candidate = SocketAddr>>,
     exit: Receiver<()>,
-    sender: BcastSender<usize>,
+    sender: BcastSender<Info>,
 }
 
 impl DirectoryServer {
     /// Create a new directory server that will use the provided `Listener`
     /// to accept incoming directory `Connection`s.
-    pub fn new(
-        listener: Box<dyn Listener<Candidate = SocketAddr>>,
+    pub fn new<L: Listener<Candidate = SocketAddr> + 'static>(
+        listener: L,
     ) -> (Self, Sender<()>) {
         let (tx, rx) = channel();
         let (sender, _) = bcast_channel(32);
 
         (
             Self {
-                listener,
+                listener: Box::new(listener),
                 peers: PeerDirectory::default(),
                 exit: rx,
                 sender,
@@ -55,36 +72,32 @@ impl DirectoryServer {
     /// Serve requests according to parameters given at server creation
     pub async fn serve(mut self) -> Result<(), ListenerError> {
         let to = Duration::from_secs(1);
+
         loop {
             if self.exit.try_recv().is_ok() {
                 info!("stopping directory server");
                 break;
             }
 
-            let socket = match timeout(to, self.listener.establish()).await {
+            let connection = match timeout(to, self.listener.accept()).await {
                 Ok(Ok(socket)) => socket,
                 Ok(Err(e)) => {
                     error!("failed to accept directory connection: {}", e);
-                    return Err(e.into());
+                    return Err(e);
                 }
                 Err(_) => continue,
             };
 
-            let peer_addr = socket.peer_addr()?;
+            let peer_addr = connection.peer_addr()?;
 
             info!("new directory connection from {}", peer_addr);
 
             let peers = self.peers.clone();
-            let (tx, rx) = (self.sender.clone(), self.sender.subscribe());
+            let tx = self.sender.clone();
 
             task::spawn(
                 async move {
-                    let servicer = PeerServicer::new(
-                        Connection::new(socket),
-                        peers,
-                        tx,
-                        rx,
-                    );
+                    let servicer = PeerServicer::new(connection, peers, tx);
 
                     if let Err(e) = servicer.serve().await {
                         error!("failed to service peer: {}", e);
@@ -104,108 +117,130 @@ struct PeerServicer {
     peers: PeerDirectory,
     connection: Connection,
     /// Broadcast channel to let other `PeerService` know a peer was added
-    sender: BcastSender<usize>,
-    /// Broadcast receiver to receive notifications from other `PeerServicer`
-    receiver: BcastReceiver<usize>,
+    sender: BcastSender<Info>,
 }
 
 impl PeerServicer {
     fn new(
         connection: Connection,
         peers: PeerDirectory,
-        sender: BcastSender<usize>,
-        receiver: BcastReceiver<usize>,
+        sender: BcastSender<Info>,
     ) -> Self {
         Self {
             peers,
             connection,
             sender,
-            receiver,
         }
     }
 
     /// Notify other `PeerServicer` that a new peer has been added
-    async fn notify(&mut self) -> Result<(), ()> {
-        self.sender
-            .send(self.peers.read().await.len())
-            .map(|_| ())
-            .map_err(|_| ())
+    async fn notify(&mut self, peer: &Info) -> Result<(), ()> {
+        // errors just mean no outstanding wait request
+        self.sender.send(*peer).map(|_| ()).map_err(|_| ())
     }
 
-    /// List current content of the directory to the remote peer
-    async fn list_directory(&mut self) -> Result<(), ServerError> {
-        info!("listing directory for {}", self.connection.peer_addr()?);
-        for peer in self.peers.read().await.iter() {
-            let peer: DirectoryPeer = (*peer.0, *peer.1).into();
-            self.connection.send_plain(&peer).await?;
-        }
-        Ok(())
+    async fn send_peer(&mut self, peer: &Info) -> Result<(), ServerError> {
+        Ok(self
+            .connection
+            .send_plain(&Response::Found(*peer.public(), peer.addr()))
+            .await?)
     }
 
     /// Fetch and address from the directory by its `PublicKey`
-    async fn handle_fetch(&mut self, pkey: &PublicKey) -> DirectoryResponse {
+    async fn handle_fetch(&mut self, pkey: &PublicKey) -> Response {
         info!("request for {}", pkey);
 
         if let Some(addr) = self.peers.read().await.get(pkey) {
-            DirectoryResponse::Found(*addr)
+            Response::Found(*pkey, *addr)
         } else {
-            DirectoryResponse::NotFound(*pkey)
+            Response::NotFound(*pkey)
         }
     }
 
-    async fn handle_add(&mut self, peer: &DirectoryPeer) -> DirectoryResponse {
+    async fn handle_add(&mut self, peer: &Info) -> Response {
         info!("request to add {}", peer);
 
         self.peers.write().await.insert(*peer.public(), peer.addr());
 
-        if self.notify().await.is_err() {
-            error!("no peer is waiting on directory listing");
+        let info = (*peer.public(), peer.addr()).into();
+
+        if self.notify(&info).await.is_err() {
+            warn!("no peer is waiting on directory listing");
+        } else {
+            debug!("notified of peer {}", info);
         }
 
-        DirectoryResponse::Ok
+        Response::Ok
     }
 
-    async fn handle_wait(&mut self, peer_nr: usize) {
-        debug!("peer wants to wait for {} total peers", peer_nr);
+    async fn handle_wait(
+        &mut self,
+        peer_nr: usize,
+    ) -> Result<Response, ServerError> {
+        info!("wait request for {} peers", peer_nr);
 
-        if self.peers.read().await.len() < peer_nr {
-            info!("not enough peers, waiting for more...");
-            loop {
-                if let Ok(count) = self.receiver.recv().await {
-                    if count == peer_nr {
-                        break;
-                    }
-                } else {
-                    warn!("all other peer died, stopping wait");
-                    task::yield_now().await;
-                }
+        let sent = self.flush_existing(peer_nr).await?;
+
+        debug!("sent {} peers out of {}", sent, peer_nr);
+
+        if sent < peer_nr {
+            self.wait_notify(sent, peer_nr).await?;
+        }
+
+        info!("wait request complete");
+
+        Ok(Response::Ok)
+    }
+
+    async fn wait_notify(
+        &mut self,
+        sent: usize,
+        expected: usize,
+    ) -> Result<(), ServerError> {
+        let mut receiver = self.sender.subscribe();
+
+        for _ in sent..expected {
+            if let Ok(peer) = receiver.recv().await {
+                debug!("new peer {}", peer);
+                self.send_peer(&peer).await?;
+            } else {
+                warn!("server has stopped, we won't get any new peers");
+                return Ok(());
             }
         }
+        Ok(())
+    }
+
+    async fn flush_existing(
+        &mut self,
+        max: usize,
+    ) -> Result<usize, ServerError> {
+        let mut count = 0;
+
+        for (pkey, addr) in self.peers.read().await.iter() {
+            if count >= max {
+                break;
+            }
+            count += 1;
+            self.connection
+                .send_plain(&Response::Found(*pkey, *addr))
+                .await?;
+        }
+
+        Ok(count)
     }
 
     /// Serve directory request to the peer we are connected to.
     async fn serve(mut self) -> Result<(), ServerError> {
         info!("servicing directory request");
 
-        while let Ok(request) =
-            self.connection.receive_plain::<DirectoryRequest>().await
+        while let Ok(request) = self.connection.receive_plain::<Request>().await
         {
+            trace!("received {:?}", request);
             let response = match request {
-                DirectoryRequest::Fetch(ref pkey) => {
-                    self.handle_fetch(pkey).await
-                }
-                DirectoryRequest::Add(ref peer) => self.handle_add(peer).await,
-                DirectoryRequest::Wait(peer_nr) => {
-                    self.handle_wait(peer_nr).await;
-                    info!(
-                        "reached {} peers in the system, notifying...",
-                        peer_nr
-                    );
-
-                    self.list_directory().await?;
-
-                    DirectoryResponse::Ok
-                }
+                Request::Fetch(ref pkey) => self.handle_fetch(pkey).await,
+                Request::Add(ref peer) => self.handle_add(peer).await,
+                Request::Wait(peer_nr) => self.handle_wait(peer_nr).await?,
             };
 
             trace!("sending response {:?}", response);
@@ -213,7 +248,9 @@ impl PeerServicer {
             self.connection.send_plain(&response).await?;
         }
 
-        error!("corrupted request");
+        self.connection.close().await?;
+
+        info!("end of directory connection");
 
         Ok(())
     }
@@ -221,26 +258,27 @@ impl PeerServicer {
 
 #[cfg(test)]
 mod test {
-    use super::super::super::connector::{Connector, TcpDirect};
-    use super::super::super::listener::TcpListener;
+    use super::super::super::connector::Connector;
     use super::*;
     use crate::crypto::key::exchange::Exchanger;
+    use crate::net::{TcpConnector, TcpListener};
     use crate::test::*;
+
+    use futures::future;
 
     use tokio::task::{self, JoinHandle};
 
     async fn setup_server(server: SocketAddr) -> (Sender<()>, JoinHandle<()>) {
         let server_exchanger = Exchanger::random();
-        let listener = Box::new(
-            TcpListener::new(server, server_exchanger)
-                .await
-                .expect("listen failed"),
-        );
+        let listener = TcpListener::new(server, server_exchanger)
+            .await
+            .expect("listen failed");
         let (dir_server, exit_tx) = DirectoryServer::new(listener);
 
-        let handle = task::spawn(async move {
-            dir_server.serve().await.expect("serve failed")
-        });
+        let handle = task::spawn(
+            async move { dir_server.serve().await.expect("serve failed") }
+                .instrument(trace_span!("directory_serve")),
+        );
 
         (exit_tx, handle)
     }
@@ -256,28 +294,32 @@ mod test {
         server: SocketAddr,
         addr: SocketAddr,
         pkey: PublicKey,
-        connector: &mut dyn Connector<Candidate = SocketAddr>,
+        connector: &dyn Connector<Candidate = SocketAddr>,
     ) -> Connection {
         let peer = (pkey, addr).into();
-        let req = DirectoryRequest::Add(peer);
+        let req = Request::Add(peer);
 
-        let mut connection = Connection::new(
-            connector
-                .establish(&pkey, &server)
-                .await
-                .expect("connect failed"),
-        );
-
-        connection.send_plain(&req).await.expect("send failed");
-
-        let resp = connection
-            .receive_plain::<DirectoryResponse>()
+        let mut connection = connector
+            .connect(&pkey, &server)
+            .instrument(trace_span!("adder"))
             .await
-            .expect("recv failed");
+            .expect("connect failed");
+        let local = connection.local_addr().expect("getaddr failed");
 
-        assert_eq!(resp, DirectoryResponse::Ok, "invalid response");
+        async move {
+            connection.send_plain(&req).await.expect("send failed");
 
-        connection
+            let resp = connection
+                .receive_plain::<Response>()
+                .await
+                .expect("recv failed");
+
+            assert_eq!(resp, Response::Ok, "invalid response");
+
+            connection
+        }
+        .instrument(trace_span!("adder", client = %local))
+        .await
     }
 
     async fn wait_for_server(exit_tx: Sender<()>, handle: JoinHandle<()>) {
@@ -285,30 +327,110 @@ mod test {
         handle.await.expect("server failed");
     }
 
-    #[tokio::test]
+    #[tokio::test(threaded_scheduler)]
     async fn serve_many() {
         init_logger();
+        const TOTAL: usize = 10;
         let server = next_test_ip4();
-        let mut connector = TcpDirect::new(Exchanger::random());
         let (exit_tx, handle) = setup_server(server).await;
+        let mut handles = Vec::new();
 
-        for i in 1..10usize {
-            let (pkey, peer_addr) = new_peer();
-            let mut connection =
-                add_peer(server, peer_addr, pkey, &mut connector).await;
-            let req = DirectoryRequest::Wait(i);
+        for i in 1..TOTAL {
+            handles.push(task::spawn(async move {
+                let count = i * 2;
+                let req = Request::Wait(count);
+                let mut peers = Vec::new();
+                let connector = TcpConnector::new(Exchanger::random());
+                let (pkey, addr) = new_peer();
+                let mut connection =
+                    add_peer(server, addr, pkey, &connector).await;
 
-            connection.send_plain(&req).await.expect("send failed");
-            let mut peers = Vec::new();
+                connection.send_plain(&req).await.expect("send failed");
 
-            while let Ok(peer) =
-                connection.receive_plain::<DirectoryPeer>().await
-            {
-                peers.push(peer);
+                for _ in 0..count {
+                    let peer = connection
+                        .receive_plain::<Response>()
+                        .await
+                        .expect("recv failed");
+
+                    peers.push(peer);
+                }
+
+                let end = connection
+                    .receive_plain::<Response>()
+                    .await
+                    .expect("recv failed");
+
+                assert_eq!(end, Response::Ok, "invalid end of list");
+                assert_eq!(count, peers.len(), "incorrect number of peers");
+            }));
+
+            handles.push(task::spawn(async move {
+                let connector = TcpConnector::new(Exchanger::random());
+                let (pkey, peer_addr) = new_peer();
+                add_peer(server, peer_addr, pkey, &connector).await;
+            }));
+        }
+
+        future::join_all(handles)
+            .await
+            .drain(..)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("some task failed");
+
+        wait_for_server(exit_tx, handle).await;
+    }
+
+    #[tokio::test(threaded_scheduler)]
+    async fn wait_for_enough_peers() {
+        init_logger();
+        const TOTAL: usize = 10;
+        let server = next_test_ip4();
+        let (exit_tx, handle) = setup_server(server).await;
+        let connector = TcpConnector::new(Exchanger::random());
+        let (pkey, addr) = new_peer();
+
+        let mut connection = add_peer(server, addr, pkey, &connector).await;
+        let (tx, rx) = channel();
+
+        task::spawn(async move {
+            connection
+                .send_plain(&Request::Wait(TOTAL))
+                .await
+                .expect("wait failed");
+
+            let mut count = 0;
+            tx.send(()).expect("notify failed");
+
+            while let Ok(_) = connection.receive_plain::<Response>().await {
+                count += 1;
             }
 
-            assert_eq!(i, peers.len(), "incorrect number of peers");
-        }
+            let end = connection
+                .receive_plain::<Response>()
+                .await
+                .expect("recv failed");
+
+            assert_eq!(end, Response::Ok, "wrong delimiter");
+            assert_eq!(count, TOTAL, "wrong number of peers");
+        });
+
+        // delay until wait request has been sent to trigger the active wait case
+        rx.await.expect("recv failed");
+
+        let futures = (0..TOTAL).map(|_| {
+            task::spawn(async move {
+                let connector = TcpConnector::new(Exchanger::random());
+                let (pkey, addr) = new_peer();
+                add_peer(server, addr, pkey, &connector).await;
+            })
+        });
+
+        future::join_all(futures)
+            .await
+            .drain(..)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("some task failed");
 
         wait_for_server(exit_tx, handle).await;
     }
@@ -318,37 +440,36 @@ mod test {
         init_logger();
         let server = next_test_ip4();
         let (exit_tx, handle) = setup_server(server).await;
-        let mut connector = TcpDirect::new(Exchanger::random());
+        let connector = TcpConnector::new(Exchanger::random());
+        const TOTAL: usize = 2;
 
         let (pkey, peer) = new_peer();
-        let mut w_connection =
-            add_peer(server, peer, pkey, &mut connector).await;
+        let mut w_connection = add_peer(server, peer, pkey, &connector).await;
 
-        let waiter = task::spawn(async move {
-            w_connection
-                .send_plain(&DirectoryRequest::Wait(3))
-                .await
-                .expect("wait failed");
+        let waiter = task::spawn(
+            async move {
+                w_connection
+                    .send_plain(&Request::Wait(3))
+                    .await
+                    .expect("wait failed");
 
-            let mut i = 0usize;
+                for _ in 0..TOTAL {
+                    w_connection
+                        .receive_plain::<Response>()
+                        .await
+                        .expect("recv failed");
+                }
 
-            while let Ok(_) =
-                w_connection.receive_plain::<DirectoryPeer>().await
-            {
-                i += 1;
+                wait_for_server(exit_tx, handle).await;
             }
+            .instrument(trace_span!("waiter")),
+        );
 
-            assert_eq!(i, 3, "waited for wrong number of peer");
-
-            wait_for_server(exit_tx, handle).await;
-        });
-
-        for _ in 0..2usize {
-            let peer = next_test_ip4();
-            let pkey = *Exchanger::random().keypair().public();
+        for _ in 0..TOTAL {
+            let (pkey, peer) = new_peer();
 
             task::yield_now().await;
-            add_peer(server, peer, pkey, &mut connector).await;
+            add_peer(server, peer, pkey, &connector).await;
         }
 
         waiter.await.expect("waiter failed");
@@ -363,63 +484,58 @@ mod test {
 
         let handles = (0..TOTAL)
             .map(|_| {
-                task::spawn(async move {
-                    let exc = Exchanger::random();
-                    let public = *exc.keypair().public();
-                    let mut connector = TcpDirect::new(exc);
+                {
+                    task::spawn(async move {
+                        let exc = Exchanger::random();
+                        let public = *exc.keypair().public();
+                        let connector = TcpConnector::new(exc);
 
-                    let mut connection = Connection::new(
-                        connector
-                            .establish(&public, &server)
+                        let mut connection = connector
+                            .connect(&public, &server)
                             .await
-                            .expect("connect failed"),
-                    );
+                            .expect("connect failed");
 
-                    connection
-                        .send_plain(&DirectoryRequest::Wait(TOTAL))
-                        .await
-                        .expect("send failed");
+                        connection
+                            .send_plain(&Request::Wait(TOTAL))
+                            .await
+                            .expect("send failed");
 
-                    let mut peers = Vec::new();
-                    while let Ok(peer) =
-                        connection.receive_plain::<DirectoryPeer>().await
-                    {
-                        peers.push(peer);
-                    }
+                        let mut peers = Vec::new();
 
-                    assert_eq!(TOTAL, peers.len(), "wrong number of peers");
-                })
+                        for _ in 0..TOTAL {
+                            let peer = connection
+                                .receive_plain::<Response>()
+                                .await
+                                .expect("recv failed");
+                            peers.push(peer);
+                        }
+
+                        assert_eq!(TOTAL, peers.len(), "wrong number of peers");
+                    })
+                }
+                .instrument(trace_span!("waiter"))
             })
             .collect::<Vec<_>>();
 
         let exch = Exchanger::random();
-        let public = *exch.keypair().public();
-
-        let mut connection = Connection::new(
-            TcpDirect::new(exch)
-                .establish(&public, &server)
-                .await
-                .expect("connect failed"),
-        );
+        let connector = TcpConnector::new(exch);
 
         for _ in 0..TOTAL {
-            let dir_peer = new_peer().into();
-            connection
-                .send_plain(&DirectoryRequest::Add(dir_peer))
-                .await
-                .expect("add failed");
+            let (pkey, addr) = new_peer();
 
-            let resp = connection
-                .receive_plain::<DirectoryResponse>()
+            add_peer(server, addr, pkey, &connector)
                 .await
-                .expect("add failed");
-
-            assert_eq!(resp, DirectoryResponse::Ok, "bad response");
+                .send_plain(&0u32)
+                .await
+                .expect("failed to close connection");
         }
 
-        for handle in handles {
-            handle.await.expect("client failure");
-        }
+        future::join_all(handles)
+            .await
+            .drain(..)
+            .collect::<Result<Vec<_>, _>>()
+            .expect("failed to join peers");
+
         wait_for_server(exit_tx, handle).await;
     }
 
@@ -427,26 +543,26 @@ mod test {
     async fn add_then_fetch() {
         let server = next_test_ip4();
         let (exit_tx, handle) = setup_server(server).await;
-        let mut connector = TcpDirect::new(Exchanger::random());
+        let connector = TcpConnector::new(Exchanger::random());
 
         let peer_addr = next_test_ip4();
         let peer_pkey = *Exchanger::random().keypair().public();
         let mut connection =
-            add_peer(server, peer_addr, peer_pkey, &mut connector).await;
+            add_peer(server, peer_addr, peer_pkey, &connector).await;
 
         connection
-            .send_plain(&DirectoryRequest::Fetch(peer_pkey))
+            .send_plain(&Request::Fetch(peer_pkey))
             .await
             .expect("fetch failed");
 
         let resp = connection
-            .receive_plain::<DirectoryResponse>()
+            .receive_plain::<Response>()
             .await
             .expect("recv failed");
 
         assert_eq!(
             resp,
-            DirectoryResponse::Found(peer_addr),
+            Response::Found(peer_pkey, peer_addr),
             "wrong directory entry"
         );
 
@@ -458,26 +574,24 @@ mod test {
         let server = next_test_ip4();
         let (exit_tx, handle) = setup_server(server).await;
 
-        let mut connector = TcpDirect::new(Exchanger::random());
+        let connector = TcpConnector::new(Exchanger::random());
         let public = *connector.exchanger().keypair().public();
-        let mut connection = Connection::new(
-            connector
-                .establish(&public, &server)
-                .await
-                .expect("connect failed"),
-        );
+        let mut connection = connector
+            .connect(&public, &server)
+            .await
+            .expect("connect failed");
 
         connection
-            .send_plain(&DirectoryRequest::Fetch(public))
+            .send_plain(&Request::Fetch(public))
             .await
             .expect("send failed");
 
         let resp = connection
-            .receive_plain::<DirectoryResponse>()
+            .receive_plain::<Response>()
             .await
             .expect("recv failed");
 
-        assert_eq!(resp, DirectoryResponse::NotFound(public), "wrong response");
+        assert_eq!(resp, Response::NotFound(public), "wrong response");
 
         wait_for_server(exit_tx, handle).await;
     }
