@@ -7,12 +7,12 @@ pub use utp::BufferedUtpStream;
 
 impl Socket for BufferedUtpStream {
     fn peer_addr(&self) -> Result<SocketAddr> {
-        self.peer_addr()
+        BufferedUtpStream::peer_addr(self)
             .map_or_else(|_| Err(ErrorKind::AddrNotAvailable.into()), Ok)
     }
 
     fn local_addr(&self) -> Result<SocketAddr> {
-        self.local_addr()
+        Self::local_addr(self)
             .map_or_else(|_| Err(ErrorKind::AddrNotAvailable.into()), Ok)
     }
 }
