@@ -5,8 +5,8 @@ use crate::crypto::key::exchange::PublicKey;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub(crate) enum Request {
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub enum Request {
     /// Add this peer to the directory
     Add(Info),
     /// Fetch a peer from the directory by its public key
@@ -15,12 +15,13 @@ pub(crate) enum Request {
     Wait(usize),
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub(crate) enum Response {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+/// A response used by the directory protocol
+pub enum Response {
     /// Add request was a success
     Ok,
     /// Requested peer was found in directory
-    Found(SocketAddr),
+    Found(PublicKey, SocketAddr),
     /// Requested peer is unknown in the directory
     NotFound(PublicKey),
 }
@@ -32,24 +33,28 @@ impl fmt::Display for Response {
             "{}",
             match self {
                 Self::Ok => "success".to_string(),
-                Self::Found(addr) => format!("found at {}", addr),
+                Self::Found(pkey, addr) =>
+                    format!("found {} at {}", pkey, addr),
                 Self::NotFound(_) => "not found".to_string(),
             }
         )
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+/// Information needed to connect to a remote peer.
 pub struct Info {
     pkey: PublicKey,
     addr: SocketAddr,
 }
 
 impl Info {
+    /// Get the `PublicKey` contained in this `Info`
     pub fn public(&self) -> &PublicKey {
         &self.pkey
     }
 
+    /// Get the remote `SocketAddr` that can be used to connect
     pub fn addr(&self) -> SocketAddr {
         self.addr
     }
@@ -83,8 +88,8 @@ mod test {
         assert_eq!(format!("{}", Response::Ok), "success");
         assert_eq!(format!("{}", Response::NotFound(pkey)), "not found");
         assert_eq!(
-            format!("{}", Response::Found(addr)),
-            format!("found at {}", addr)
+            format!("{}", Response::Found(pkey, addr)),
+            format!("found {} at {}", pkey, addr)
         );
     }
 }
