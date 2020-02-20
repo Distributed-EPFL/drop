@@ -11,6 +11,8 @@ sodiumoxide = "0.2.2"
 serde = { version = "1.0.102", features = [ "derive" ] }
 bincode = "1.2.0"
 tokio = { version = "0.2.0", features = [ "full" ] }
+futures = "0.3.4"
+ccl = "4.12.1"
 async-trait = "0.1.19"
 tracing = "0.1.12"
 tracing-futures = "0.2.0"
