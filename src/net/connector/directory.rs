@@ -1,11 +1,12 @@
 use std::collections::HashMap;
+use std::fmt;
+use std::future::Future;
 use std::io::{Error as IoError, ErrorKind};
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::Arc;
 
 use super::super::common::directory::{Info, Request, Response};
-use super::super::{
-    Connection, CorruptedConnection, ReceiveError, SendError, Socket,
-};
+use super::super::{Connection, ReceiveError, SendError, Socket};
 use super::{ConnectError, Connector};
 use crate as drop;
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
@@ -13,9 +14,17 @@ use crate::error::Error;
 
 use async_trait::async_trait;
 
+use ccl::nestedmap::NestedMap;
+
+use futures::future::{select, Either, FutureExt};
+use futures::stream::StreamExt;
+
 use macros::error;
 
-use tracing::{debug, error as log_error, info, trace_span};
+use tokio::sync::broadcast::{channel, Receiver, Sender};
+use tokio::task;
+
+use tracing::{debug, error as log_error, info, trace_span, warn};
 use tracing_futures::Instrument;
 
 error! {
@@ -27,73 +36,26 @@ error! {
 /// A `Connector` that makes use of a centralized directory in order
 /// to discover peers by their `PublicKey`. This `Connector` uses `PublicKey`s
 /// as `Candidate` and finds out the actual address from the directory server.
-pub struct DirectoryConnector {
+pub struct Directory {
     /// `Connector` that will be used to open `Connection`s to peers
-    connector: Box<dyn Connector<Candidate = SocketAddr>>,
-    /// Previously established connections to directories
-    connections: HashMap<SocketAddr, Connection>,
-    /// Local cache of mappings between `PublicKey`s and peer addresses
-    peer_cache: HashMap<PublicKey, SocketAddr>,
+    connector: Arc<dyn Connector<Candidate = SocketAddr>>,
+    /// Channels for requests to handlers
+    handlers: NestedMap<Info, (Sender<Response>, Sender<Request>)>,
 }
 
-impl DirectoryConnector {
+impl Directory {
     /// Create a new `DirectoryConnector` that will use the given `Connector` to
     /// establish connections to both the directory server and then to peers.
     ///
     /// # Arguments
-    /// * `connector` - the `Connector` that will be used to establish all
+    /// * `connector` the `Connector` that will be used to establish all
     /// `Connection`s including the `Connection` to the directory server
-    pub fn new(connector: Box<dyn Connector<Candidate = SocketAddr>>) -> Self {
+    pub fn new<C: Connector<Candidate = SocketAddr> + 'static>(
+        connector: C,
+    ) -> Self {
         Self {
-            connector,
-            connections: HashMap::new(),
-            peer_cache: HashMap::new(),
-        }
-    }
-
-    /// Registers a local `SocketAddr` on the directory server that can be
-    /// reached by other peers. This will use the provided `Exchanger` as the
-    /// `PublicKey` when registering.
-    ///
-    /// # Arguments
-    /// * `dir_addr`: Address of the directory server to register with
-    /// * `local_addr`: Local address to register with the directory server
-    pub async fn register(
-        &mut self,
-        dir_addr: SocketAddr,
-        local_addr: SocketAddr,
-    ) -> Result<(), SendError> {
-        let peer_info =
-            (*self.exchanger().keypair().public(), local_addr).into();
-
-        info!(
-            "registering {} as local destination with directory at {}",
-            local_addr, dir_addr
-        );
-
-        let public = *self.connector.exchanger().keypair().public();
-        let connection = self
-            .find_directory_server(&public, &dir_addr)
-            .await
-            .map_err(|e| {
-            IoError::new(ErrorKind::NotConnected, format!("{}", e))
-        })?;
-
-        connection.send(&Request::Add(peer_info)).await?;
-
-        match connection.receive::<Response>().await {
-            Err(e) => {
-                log_error!("bad response from directory: {}", e);
-                Err(CorruptedConnection::new().into())
-            }
-            Ok(Response::Ok) => {
-                info!("registration succesfull");
-                Ok(())
-            }
-            Ok(v) => {
-                log_error!("unexpected answer from directory: {}", v);
-                Err(CorruptedConnection::new().into())
-            }
+            connector: Arc::new(connector),
+            handlers: NestedMap::new(),
         }
     }
 
@@ -104,93 +66,86 @@ impl DirectoryConnector {
     ///
     /// # Arguments
     /// * `nr_peer` The number of peers to wait before returning
-    /// * `dir_addr` The address of the directory server to contact
-    /// * `pkey` The directory server's `PublicKey`
+    /// * `info` The information (public key and address) needed to contact the
+    /// directory server
     pub async fn wait(
         &mut self,
         nr_peer: usize,
-        dir_addr: SocketAddr,
-        pkey: &PublicKey,
+        info: &Info,
     ) -> Result<Vec<Info>, DirectoryError> {
-        let connection = self.find_directory_server(pkey, &dir_addr).await?;
+        let (mut rx, tx) = self.find_directory_handler(info).await?;
         let mut peers = Vec::with_capacity(nr_peer);
+        let req = Request::Wait(nr_peer);
+        let mut i = 0;
 
-        connection.send_plain(&Request::Wait(nr_peer)).await?;
+        tx.send(req).map_err(|_| {
+            log_error!("failed to send message, handler died");
+            IoError::new(ErrorKind::NotConnected, "")
+        })?;
 
         debug!("waiting for {} peers in the directory", nr_peer);
 
-        for _ in 0..nr_peer {
-            let peer = connection.receive_plain::<Info>().await?;
-            debug!("got {} from directory", peer);
-            peers.push(peer);
+        loop {
+            if let Ok(peer) = rx.recv().await {
+                if let Response::Found(pkey, addr) = peer {
+                    info!("found peer {} at {}", pkey, addr);
+                    peers.push((pkey, addr).into());
+                }
+            } else {
+                log_error!("handler died, while waiting for directory");
+            }
+
+            i += 1;
+
+            if i == nr_peer {
+                break;
+            }
         }
 
         info!("got {} peers from directory", nr_peer);
         Ok(peers)
     }
 
-    async fn find_directory_server(
-        &mut self,
-        pkey: &PublicKey,
-        dir_addr: &SocketAddr,
-    ) -> Result<&mut Connection, ConnectError> {
+    async fn find_directory_handler(
+        &self,
+        info: &Info,
+    ) -> Result<(Receiver<Response>, Sender<Request>), ConnectError> {
+        let dir_addr = info.addr();
+        let pkey = info.public();
+
         // `Entry` API does not support async so really no way to avoid double
         // lookup...
-        if !self.connections.contains_key(dir_addr) {
-            let socket = self.connector.establish(pkey, dir_addr).await?;
+        if self.handlers.get(info).is_none() {
+            let connection = self
+                .connector
+                .connect(pkey, &dir_addr)
+                .instrument(trace_span!("directory_connect"))
+                .await?;
+            let (resp_tx, _) = channel(32);
+            let (req_tx, req_rx) = channel(32);
+            let handler = Handler::spawn(req_rx, resp_tx.clone(), connection);
 
-            self.connections.insert(*dir_addr, Connection::new(socket));
+            task::spawn(handler);
+
+            self.handlers.insert(*info, (resp_tx, req_tx));
         }
 
-        self.connections
-            .get_mut(dir_addr)
-            .ok_or_else(|| IoError::new(ErrorKind::NotConnected, "").into())
-    }
-
-    /// Closes the `Connection`s to every directory server
-    pub async fn close(&mut self) -> Result<(), IoError> {
-        for c in self.connections.values_mut() {
-            c.close().await?;
-        }
-        Ok(())
-    }
-
-    async fn handle_response(
-        &mut self,
-        response: Result<Response, ReceiveError>,
-        pkey: &PublicKey,
-    ) -> Result<Box<dyn Socket>, ConnectError> {
-        match response {
-            Ok(Response::Found(s_addr)) => {
-                info!("peer {} is at {}", pkey, s_addr);
-
-                self.peer_cache.insert(*pkey, s_addr);
-
-                self.connector
-                    .establish(pkey, &s_addr)
-                    .instrument(trace_span!("peer_connect"))
-                    .await
-            }
-            Ok(Response::NotFound(pkey)) => {
-                log_error!("directory server does not know peer {}", pkey);
-                self.peer_cache.remove(&pkey);
-                Err(IoError::from(ErrorKind::AddrNotAvailable).into())
-            }
-            Ok(_) => {
-                log_error!("invalid response from directory server");
-                Err(IoError::from(ErrorKind::AddrNotAvailable).into())
-            }
-            Err(e) => {
-                log_error!("error reading response from directory: {}", e);
-                Err(IoError::from(ErrorKind::BrokenPipe).into())
-            }
-        }
+        self.handlers
+            .get(info)
+            .map(|x| (x.0.subscribe(), x.1.clone()))
+            .ok_or_else(|| {
+                IoError::new(
+                    ErrorKind::NotConnected,
+                    "not connected to directory",
+                )
+                .into()
+            })
     }
 }
 
 #[async_trait]
-impl Connector for DirectoryConnector {
-    type Candidate = SocketAddr; // FIXME: make this a tuple of directory pkey and socketaddr
+impl Connector for Directory {
+    type Candidate = Info;
 
     fn exchanger(&self) -> &Exchanger {
         self.connector.exchanger()
@@ -200,36 +155,297 @@ impl Connector for DirectoryConnector {
     /// from some directory server.
     ///
     /// # Arguments
-    /// * `pkey`: `PublicKey` of the peer we are trying to connect to
-    /// * `dir_addr`: Address of the directory server to search in
+    /// * `pkey` `PublicKey` of the peer we are trying to connect to
+    /// * `dir_addr` Address of the directory server to search in
     async fn establish(
-        &mut self,
+        &self,
         pkey: &PublicKey,
-        dir_addr: &Self::Candidate,
+        directory_info: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError> {
         info!("finding peer address for public key {}", pkey);
 
-        if let Some(peer_addr) = self.peer_cache.get(pkey) {
-            info!("found address {} for {} in cache", peer_addr, pkey);
-            let result = self.connector.establish(pkey, peer_addr).await;
+        let (mut rx, tx) = self.find_directory_handler(directory_info).await?;
 
-            if result.is_ok() {
-                return result; // cache entry is valid
+        if tx.send(Request::Fetch(*pkey)).is_err() {
+            return Err(IoError::new(ErrorKind::NotConnected, "").into());
+        }
+
+        while let Ok(response) = rx.recv().await {
+            match response {
+                Response::Found(recvd_pkey, addr) => {
+                    if recvd_pkey == *pkey {
+                        return self.connector.establish(&pkey, &addr).await;
+                    }
+                }
+                Response::NotFound(pkey) => {
+                    log_error!("directory does not known {}", pkey);
+                    return Err(
+                        IoError::new(ErrorKind::NotConnected, "").into()
+                    );
+                }
+                _ => {
+                    return Err(IoError::new(ErrorKind::InvalidData, "").into());
+                }
             }
         }
+        Err(IoError::new(ErrorKind::UnexpectedEof, "").into())
+    }
+}
 
-        // cache was stale or did not exist, fetch again
-        let req = Request::Fetch(*pkey);
+/// This is an agent that takes care of sending requests to one directory server
+/// and updating the local peer cache accordingly
+struct Handler;
 
-        let connection = self.find_directory_server(pkey, dir_addr).await?;
+impl Handler {
+    fn spawn(
+        mut receiver: Receiver<Request>,
+        mut notifier: Sender<Response>,
+        mut connection: Connection,
+    ) -> impl Future<Output = Result<(), DirectoryError>> {
+        let peer_addr = connection
+            .peer_addr()
+            .map_or_else(|_| IpAddr::V4(Ipv4Addr::UNSPECIFIED), |x| x.ip());
 
-        if let Err(e) = connection.send_plain(&req).await {
-            log_error!("directory server is unavailable: {}", e);
-            return Err(IoError::from(ErrorKind::AddrNotAvailable).into());
+        async move {
+            let mut cache = HashMap::new();
+            let mut request_opt = None;
+
+            loop {
+                let response_fut =
+                    connection.receive_plain::<Response>().boxed();
+                let request_fut = receiver.next().boxed();
+
+                {
+                    match select(response_fut, request_fut).await {
+                        Either::Left((response, _)) => {
+                            process_response(
+                                response,
+                                &mut cache,
+                                &mut notifier,
+                            )
+                            .await?;
+                        }
+                        Either::Right((result, _)) => {
+                            if let Some(Ok(request)) = result {
+                                match request {
+                                    Request::Fetch(pkey) => {
+                                        request_opt = Some(request);
+
+                                        if let Some(peer) = cache.get(&pkey) {
+                                            if notifier.send(Response::Found(
+                                                pkey, *peer,
+                                            )).is_err() {
+                                                log_error!("connector died, exiting handler");
+                                                return Ok(());
+                                            };
+                                        }
+                                    }
+                                    _ => request_opt = Some(request),
+                                }
+                            } else {
+                                info!("exiting handler");
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+
+                if let Some(ref request) = request_opt.take() {
+                    connection.send_plain(request).await?;
+                }
+            }
         }
+        .instrument(trace_span!("directory_handler", server=%peer_addr))
+    }
+}
 
-        let resp = connection.receive_plain::<Response>().await;
+async fn process_response(
+    response: Result<Response, ReceiveError>,
+    cache: &mut HashMap<PublicKey, SocketAddr>,
+    notifier: &mut Sender<Response>,
+) -> Result<(), ReceiveError> {
+    match response {
+        Err(e) => {
+            log_error!("bad response received: {}", e);
+            Err(e)
+        }
+        Ok(response) => {
+            match response {
+                Response::Found(pkey, addr) => {
+                    cache.insert(pkey, addr);
+                }
+                Response::NotFound(pkey) => warn!("peer {} not found", pkey),
+                Response::Ok => info!("end of directory listing"),
+            }
+            if notifier.send(response).is_err() {
+                log_error!("no one waiting for response");
+                Err(IoError::new(ErrorKind::NotConnected, "").into())
+            } else {
+                Ok(())
+            }
+        }
+    }
+}
 
-        self.handle_response(resp, pkey).await
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+struct PeerInfo(IpAddr, u16);
+
+impl fmt::Display for PeerInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.0, self.0)
+    }
+}
+
+impl Into<SocketAddr> for PeerInfo {
+    fn into(self) -> SocketAddr {
+        (self.0, self.1).into()
+    }
+}
+
+impl From<&PeerInfo> for SocketAddr {
+    fn from(val: &PeerInfo) -> Self {
+        (val.0, val.1).into()
+    }
+}
+
+impl From<SocketAddr> for PeerInfo {
+    fn from(addr: SocketAddr) -> Self {
+        Self(addr.ip(), addr.port())
+    }
+}
+
+impl From<&SocketAddr> for PeerInfo {
+    fn from(addr: &SocketAddr) -> Self {
+        Self::from(*addr)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::crypto::key::exchange::Exchanger;
+    use crate::net::{DirectoryConnector, Listener, TcpConnector, TcpListener};
+    use crate::test::*;
+
+    #[tokio::test]
+    async fn wait_whitebox() {
+        init_logger();
+
+        const NR_PEER: usize = 10;
+        let connector = TcpConnector::new(Exchanger::random());
+        let mut directory = Directory::new(connector);
+        let server = next_test_ip4();
+        let exchanger = Exchanger::random();
+        let directory_exchanger = exchanger.clone();
+        let peers: Vec<_> = (0..NR_PEER)
+            .map(|_| (next_test_ip4(), Exchanger::random()))
+            .collect();
+        let peers_copy = peers.clone();
+        let mut listener = TcpListener::new(server, exchanger)
+            .await
+            .expect("bind failed");
+
+        let handle = task::spawn(async move {
+            let peers = peers_copy;
+
+            let mut connection =
+                listener.accept().await.expect("accept failed");
+
+            assert_eq!(
+                connection
+                    .receive_plain::<Request>()
+                    .await
+                    .expect("recv failed"),
+                Request::Wait(NR_PEER),
+                "bad message received from peer"
+            );
+
+            for (addr, exchanger) in peers {
+                connection
+                    .send_plain(&Response::Found(
+                        *exchanger.keypair().public(),
+                        addr,
+                    ))
+                    .await
+                    .expect("send failed");
+            }
+        });
+
+        let info = (*directory_exchanger.keypair().public(), server).into();
+        let recv_peers =
+            directory.wait(NR_PEER, &info).await.expect("wait failed");
+
+        let keys: Vec<_> = recv_peers.iter().map(|x| *x.public()).collect();
+        let addresses: Vec<_> = recv_peers.iter().map(|x| x.addr()).collect();
+
+        assert_eq!(
+            addresses,
+            peers.iter().map(|x| x.0).collect::<Vec<_>>(),
+            "address of peers are wrong"
+        );
+        assert_eq!(
+            keys,
+            peers
+                .iter()
+                .map(|x| *x.1.keypair().public())
+                .collect::<Vec<_>>()
+        );
+
+        handle.await.expect("listener failed");
+    }
+
+    #[tokio::test]
+    async fn establish_whitebox() {
+        let server = next_test_ip4();
+        let server_exchanger = Exchanger::random();
+        let server_public = *server_exchanger.keypair().public();
+        let directory_server = next_test_ip4();
+        let directory_exchanger = Exchanger::random();
+        let connector =
+            DirectoryConnector::new(TcpConnector::new(Exchanger::random()));
+        let mut listener = TcpListener::new(server, server_exchanger.clone())
+            .await
+            .expect("listen failed");
+        let mut dir_listener =
+            TcpListener::new(directory_server, directory_exchanger.clone())
+                .await
+                .expect("dir listen failed");
+        let dir_info =
+            (*directory_exchanger.keypair().public(), directory_server).into();
+
+        let handle = task::spawn(async move {
+            let mut connection =
+                listener.accept().await.expect("accept failed");
+
+            let msg = connection.receive::<u32>().await.expect("recv failed");
+            assert_eq!(msg, 0u32, "wrong message received");
+        });
+
+        let dir_handle = task::spawn(async move {
+            let mut connection =
+                dir_listener.accept().await.expect("dir accept failed");
+
+            let msg = connection
+                .receive_plain::<Request>()
+                .await
+                .expect("dir recv failed");
+
+            assert_eq!(msg, Request::Fetch(server_public));
+
+            connection
+                .send_plain(&Response::Found(server_public, server))
+                .await
+                .expect("dir send failed");
+        });
+
+        let mut connection = connector
+            .connect(server_exchanger.keypair().public(), &dir_info)
+            .await
+            .expect("connect failed");
+
+        connection.send(&0u32).await.expect("send failed");
+
+        handle.await.expect("listener failed");
+        dir_handle.await.expect("dir listener failed");
     }
 }
