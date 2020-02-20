@@ -1,3 +1,4 @@
+use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 
 use super::super::socket::utp::BufferedUtpStream;
@@ -14,22 +15,22 @@ use tracing_futures::Instrument;
 use utp::UtpSocket;
 
 /// A `Connector` using the micro transport protocol
-pub struct UtpDirect {
+pub struct Direct {
     exchanger: Exchanger,
 }
 
-impl UtpDirect {
+impl Direct {
     pub fn new(exchanger: Exchanger) -> Self {
         Self { exchanger }
     }
 }
 
 #[async_trait]
-impl Connector for UtpDirect {
+impl Connector for Direct {
     type Candidate = SocketAddr;
 
     async fn establish(
-        &mut self,
+        &self,
         _: &PublicKey,
         candidate: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError> {
@@ -60,31 +61,49 @@ impl Connector for UtpDirect {
     }
 }
 
-pub struct UtpWrap {
+pub struct Wrap {
     exchanger: Exchanger,
 }
 
 #[async_trait]
-impl Connector for UtpWrap {
-    type Candidate = SocketAddr;
+impl Connector for Wrap {
+    /// The `Candidate` is a localy bound [`UdpSocket`] and a destination address.
+    /// This is mostly useful when punching holes through NATs since we can
+    /// re-use the socket used to punch the hole to establish a [`Connection`].
+    type Candidate = Info;
 
     async fn establish(
-        &mut self,
+        &self,
         _: &PublicKey,
-        candidate: &Self::Candidate,
+        _candidate: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError> {
         todo!()
     }
 
     fn exchanger(&self) -> &Exchanger {
-        todo!()
+        &self.exchanger
+    }
+}
+
+/// `Candidate` used for the [`Wrap`] uTP connector
+pub struct Info(UdpSocket, SocketAddr);
+
+impl fmt::Display for Info {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{} -> {}",
+            self.0.local_addr().map_or_else(|_| Err(fmt::Error), Ok)?,
+            self.1
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::listener::{Listener, UtpListener};
+    use crate::net::listener::Listener;
+    use crate::net::{UtpConnector, UtpListener};
     use crate::test::*;
 
     #[tokio::test]
@@ -101,7 +120,7 @@ mod tests {
 
         task::spawn(
             async move {
-                let mut utp = UtpDirect::new(client);
+                let utp = UtpConnector::new(client);
                 let mut connection = utp
                     .connect(server.keypair().public(), &addr)
                     .instrument(debug_span!("connect"))
