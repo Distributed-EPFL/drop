@@ -167,24 +167,33 @@ impl Connector for Directory {
         let (mut rx, tx) = self.find_directory_handler(directory_info).await?;
 
         if tx.send(Request::Fetch(*pkey)).is_err() {
-            return Err(IoError::new(ErrorKind::NotConnected, "").into());
+            return Err(IoError::new(
+                ErrorKind::NotConnected,
+                "couldn't send request",
+            )
+            .into());
         }
 
         while let Ok(response) = rx.recv().await {
             match response {
-                Response::Found(recvd_pkey, addr) => {
-                    if recvd_pkey == *pkey {
-                        return self.connector.establish(&pkey, &addr).await;
-                    }
+                Response::Found(recvd_pkey, addr) if recvd_pkey == *pkey => {
+                    return self.connector.establish(&pkey, &addr).await;
                 }
+                Response::Found(_, _) => continue,
                 Response::NotFound(pkey) => {
                     log_error!("directory does not known {}", pkey);
-                    return Err(
-                        IoError::new(ErrorKind::NotConnected, "").into()
-                    );
+                    return Err(IoError::new(
+                        ErrorKind::NotConnected,
+                        "unknown peer",
+                    )
+                    .into());
                 }
                 _ => {
-                    return Err(IoError::new(ErrorKind::InvalidData, "").into());
+                    return Err(IoError::new(
+                        ErrorKind::InvalidData,
+                        "protocol violation",
+                    )
+                    .into());
                 }
             }
         }
