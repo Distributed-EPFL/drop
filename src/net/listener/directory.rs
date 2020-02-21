@@ -123,22 +123,14 @@ impl Directory {
                         info!("listener is dead, stopping renewal");
                         return;
                     }
-
-                    if let Err(e) = connection.send_plain(&req).await {
-                        error!("failed to send message: {}", e);
-                        // if the connection can't be established we probably moved anyway
-                        check_connection(
-                            connector.as_mut(),
-                            &mut connection,
-                            &self_pkey,
-                            directory,
-                        )
-                        .await
-                        .expect(
-                            "failed to re-establish connection to directory",
-                        );
-                    }
-
+                    send_request(
+                        &mut connection,
+                        req,
+                        connector.as_mut(),
+                        &self_pkey,
+                        directory,
+                    )
+                    .await;
                     info!("registering with directory server");
                     let resp = connection.receive_plain::<Response>().await;
 
@@ -159,6 +151,22 @@ impl Directory {
     /// Close this `Listener` and stops the renewing of the directory entry.
     pub async fn close(self) {
         let _ = self.exit_tx.send(());
+    }
+}
+
+async fn send_request(
+    connection: &mut Connection,
+    req: Request,
+    connector: &mut dyn Connector<Candidate = SocketAddr>,
+    pkey: &PublicKey,
+    directory: SocketAddr,
+) {
+    if let Err(e) = connection.send_plain(&req).await {
+        error!("failed to send message: {}", e);
+        // if the connection can't be established we probably moved anyway
+        check_connection(connector, connection, &pkey, directory)
+            .await
+            .expect("failed to re-establish connection to directory");
     }
 }
 
