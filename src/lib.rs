@@ -10,3 +10,6 @@ pub mod net;
 pub mod test;
 
 pub use backtrace;
+
+/// Re-export `async_trait` to use in implementing custom user types
+pub use async_trait::async_trait;
