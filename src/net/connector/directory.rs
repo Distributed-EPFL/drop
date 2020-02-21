@@ -196,10 +196,8 @@ impl Connector for Directory {
 
         while let Ok(response) = rx.recv().await {
             match response {
-                Response::Found(recvd_pkey, addr) => {
-                    if recvd_pkey == *pkey {
-                        return self.connector.establish(&pkey, &addr).await;
-                    }
+                Response::Found(recvd_pkey, addr) if recvd_pkey == *pkey => {
+                    return self.connector.establish(&pkey, &addr).await;
                 }
                 Response::NotFound(pkey) => ConnectOther {
                     reason: "peer not found in directory",
