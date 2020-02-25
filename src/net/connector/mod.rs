@@ -93,8 +93,7 @@ pub trait Connector: Send + Sync {
         pkey: &PublicKey,
         candidates: &[Self::Candidate],
     ) -> Result<Connection, ConnectError> {
-        let futures: Vec<_> =
-            candidates.iter().map(|x| self.connect(pkey, x)).collect();
+        let futures = candidates.iter().map(|x| self.connect(pkey, x));
 
         future::select_all(futures).await.0
     }
@@ -105,10 +104,7 @@ pub trait Connector: Send + Sync {
         &self,
         peers: &[(Self::Candidate, PublicKey)],
     ) -> Vec<Result<Connection, ConnectError>> {
-        let futures: Vec<_> = peers
-            .iter()
-            .map(|(addr, pkey)| self.connect(pkey, addr))
-            .collect();
+        let futures = peers.iter().map(|(addr, pkey)| self.connect(pkey, addr));
 
         future::join_all(futures).await
     }
