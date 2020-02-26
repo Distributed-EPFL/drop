@@ -95,7 +95,7 @@ pub trait Connector: Send + Sync {
     ) -> Result<Connection, ConnectError> {
         let futures = candidates.iter().map(|x| self.connect(pkey, x));
 
-        future::select_all(futures).await.0
+        future::select_ok(futures).await.map(|x| x.0)
     }
 
     /// Connect to many different peers using this `Connector`. All the
