@@ -136,6 +136,7 @@ pub struct Connection {
     socket: Box<dyn Socket>,
     state: ConnectionState,
     buffer: Vec<u8>,
+    remote_pkey: Option<PublicKey>,
 }
 
 impl Connection {
@@ -145,6 +146,7 @@ impl Connection {
             socket,
             state: ConnectionState::Connected,
             buffer: Vec::new(),
+            remote_pkey: None,
         }
     }
 
@@ -305,6 +307,12 @@ impl Connection {
         Ok(())
     }
 
+    /// Returns the remote end's `PublicKey`. Returns `None` if key exchange
+    /// has not been performed on this `Connection`
+    pub fn remote_key(&self) -> Option<PublicKey> {
+        self.remote_pkey
+    }
+
     /// Secures the `Connection` to a server
     pub async fn secure_server(
         &mut self,
@@ -317,6 +325,8 @@ impl Connection {
             .context(SecureSend)?;
 
         self.exchange(local, server)?;
+
+        self.remote_pkey = Some(*server);
 
         Ok(())
     }
@@ -333,6 +343,8 @@ impl Connection {
             .context(SecureReceive)?;
 
         self.exchange(exchanger, &pkey)?;
+
+        self.remote_pkey = Some(pkey);
 
         Ok(())
     }
