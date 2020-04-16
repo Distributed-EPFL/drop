@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::super::common::directory::*;
-use super::super::listener::{Listener, ListenerError};
+use super::super::listener::Listener;
 use super::super::Connection;
 use super::*;
 use crate::crypto::key::exchange::PublicKey;
