@@ -46,9 +46,12 @@ use macros::error;
 
 use serde::{Deserialize, Serialize};
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{
+    split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf,
+    WriteHalf,
+};
 
-use tracing::{debug, debug_span, info, trace};
+use tracing::{debug, debug_span, info};
 use tracing_futures::Instrument;
 
 /// Type of errors returned when serializing/deserializing
@@ -126,7 +129,7 @@ impl Connection {
     where
         T: for<'de> Deserialize<'de> + Sized,
     {
-        let size = Self::read_size(self.socket.as_mut()).await? as usize;
+        let size = Self::read_size(&mut self.socket).await? as usize;
 
         self.buffer.resize(size, 0);
 
@@ -150,7 +153,7 @@ impl Connection {
 
         debug!("sending {} bytes as plain data", serialized.len());
 
-        Self::write_size(self.socket.as_mut(), serialized.len() as u32).await?;
+        Self::write_size(&mut self.socket, serialized.len() as u32).await?;
 
         self.socket
             .write_all(&serialized)
@@ -158,15 +161,17 @@ impl Connection {
             .map_err(|e| e.into())
     }
 
-    async fn read_size(socket: &mut dyn Socket) -> Result<u32, ReceiveError> {
+    async fn read_size<R: AsyncRead + Unpin>(
+        socket: &mut R,
+    ) -> Result<u32, ReceiveError> {
         let mut buf = [0u8; mem::size_of::<u32>()];
         socket.read_exact(&mut buf).await?;
 
         deserialize(&buf[..]).map_err(|e| e.into())
     }
 
-    async fn write_size(
-        socket: &mut dyn Socket,
+    async fn write_size<W: AsyncWrite + Unpin>(
+        socket: &mut W,
         size: u32,
     ) -> Result<(), SendError> {
         let data = serialize(&size)?;
@@ -183,37 +188,9 @@ impl Connection {
     {
         match &mut self.state {
             ConnectionState::Secured(ref mut pull, _) => {
-                async fn receive_internal<
-                    T: Sized + for<'de> Deserialize<'de> + Send + fmt::Debug,
-                >(
-                    pull: &mut Pull,
-                    socket: &mut dyn Socket,
-                    mut buffer: &mut Vec<u8>,
-                ) -> Result<T, ReceiveError> {
-                    let size = Connection::read_size(socket)
-                        .instrument(debug_span!("read_size"))
-                        .await? as usize;
-
-                    trace!(
-                        "receiving message of {} bytes from {}",
-                        size,
-                        socket.peer_addr()?
-                    );
-
-                    // FIXME: avoid trusting network input and run out of memory
-                    buffer.resize(size, 0);
-
-                    socket
-                        .read_exact(&mut buffer)
-                        .instrument(debug_span!("read_data"))
-                        .await?;
-
-                    pull.decrypt(&buffer).map_err(|e| e.into())
-                }
-
-                let msg = receive_internal(
+                let msg = Self::receive_internal(
                     pull,
-                    self.socket.as_mut(),
+                    &mut self.socket,
                     &mut self.buffer,
                 )
                 .await;
@@ -231,6 +208,29 @@ impl Connection {
         }
     }
 
+    async fn receive_internal<
+        T: Sized + for<'de> Deserialize<'de> + Send + fmt::Debug,
+        R: AsyncRead + Unpin,
+    >(
+        pull: &mut Pull,
+        socket: &mut R,
+        mut buffer: &mut Vec<u8>,
+    ) -> Result<T, ReceiveError> {
+        let size = Connection::read_size(socket)
+            .instrument(debug_span!("read_size"))
+            .await? as usize;
+
+        // FIXME: avoid trusting network input and run out of memory
+        buffer.resize(size, 0);
+
+        socket
+            .read_exact(&mut buffer)
+            .instrument(debug_span!("read_data"))
+            .await?;
+
+        pull.decrypt(&buffer).map_err(|e| e.into())
+    }
+
     /// Send a `Serialize` message using the underlying `Connection`.
     pub async fn send<T>(&mut self, message: &T) -> Result<(), SendError>
     where
@@ -238,27 +238,7 @@ impl Connection {
     {
         match &mut self.state {
             ConnectionState::Secured(_, ref mut push) => {
-                async fn send_internal<T: Serialize + Send + fmt::Debug>(
-                    message: &T,
-                    socket: &mut dyn Socket,
-                    push: &mut Push,
-                ) -> Result<(), SendError> {
-                    let data = push.encrypt(message)?;
-
-                    debug!("sending {:?}", message);
-
-                    trace!(
-                        "sending {} bytes of data to {}",
-                        data.len(),
-                        socket.peer_addr()?
-                    );
-
-                    Connection::write_size(socket, data.len() as u32).await?;
-
-                    socket.write_all(&data).await.map_err(|e| e.into())
-                }
-
-                send_internal(message, self.socket.as_mut(), push)
+                Self::send_internal(message, &mut self.socket, push)
                     .await
                     .map_err(|e| {
                         self.state = ConnectionState::Broken;
@@ -268,6 +248,24 @@ impl Connection {
             ConnectionState::Connected => Err(NeedsSecureError::new().into()),
             ConnectionState::Broken => Err(CorruptedConnection::new().into()),
         }
+    }
+
+    async fn send_internal<T, W>(
+        message: &T,
+        socket: &mut W,
+        push: &mut Push,
+    ) -> Result<(), SendError>
+    where
+        T: Serialize + Send + fmt::Debug,
+        W: AsyncWrite + Unpin,
+    {
+        let data = push.encrypt(message)?;
+
+        debug!("sending {:?}", message);
+
+        Connection::write_size(socket, data.len() as u32).await?;
+
+        socket.write_all(&data).await.map_err(|e| e.into())
     }
 
     /// Perform the key exchange and create a new `Session`
@@ -359,6 +357,32 @@ impl Connection {
     pub fn local_addr(&self) -> Result<SocketAddr, IoError> {
         self.socket.local_addr()
     }
+
+    /// Split this `Connection` into a `ReadHalf` and a `WriteHalf` to allow
+    /// simultaneous reading and writing from the same `Connection`.
+    /// This returns `None` if the `Connection` wasn't secured prior to this
+    /// call.
+    pub fn split(self) -> Option<(ConnectionRead, ConnectionWrite)> {
+        match self.state {
+            ConnectionState::Secured(pull, push) => {
+                let (read, write) = split(self.socket);
+                let writer = ConnectionWrite {
+                    write,
+                    push,
+                    remote: self.remote_pkey.unwrap(),
+                };
+                let reader = ConnectionRead {
+                    read,
+                    pull,
+                    buffer: Vec::with_capacity(4096),
+                    remote: self.remote_pkey.unwrap(),
+                };
+
+                Some((reader, writer))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Debug for Connection {
@@ -383,5 +407,67 @@ impl fmt::Debug for Connection {
         };
 
         write!(f, "{} connection {} -> {}", sec, local, remote)
+    }
+}
+
+/// The read end of a `Connection` resulting from `Connection::split`
+pub struct ConnectionRead {
+    read: ReadHalf<Box<dyn Socket>>,
+    pull: Pull,
+    remote: PublicKey,
+    buffer: Vec<u8>,
+}
+
+impl ConnectionRead {
+    /// See `Connection::receive`for more details
+    pub async fn receive<T: for<'de> Deserialize<'de> + fmt::Debug + Send>(
+        &mut self,
+    ) -> Result<T, ReceiveError> {
+        Connection::receive_internal(
+            &mut self.pull,
+            &mut self.read,
+            &mut self.buffer,
+        )
+        .await
+    }
+
+    /// Get the `PublicKey` associated with this `ConnectionRead`
+    pub fn remote_pkey(&self) -> &PublicKey {
+        &self.remote
+    }
+}
+
+impl fmt::Display for ConnectionRead {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "connection read end for {}", self.remote)
+    }
+}
+
+/// The write end of `Connection` resulting from `Connection::split`
+pub struct ConnectionWrite {
+    write: WriteHalf<Box<dyn Socket>>,
+    push: Push,
+    remote: PublicKey,
+}
+
+impl ConnectionWrite {
+    /// See `Connection::send` for more details
+    pub async fn send<M: Serialize + fmt::Debug + Send>(
+        &mut self,
+        message: &M,
+    ) -> Result<(), SendError> {
+        Connection::send_internal(message, &mut self.write, &mut self.push)
+            .await
+    }
+
+    /// Get the remote `PublicKey` associated with this `ConnectionWrite`
+    pub fn remote_pkey(&self) -> &PublicKey {
+        &self.remote
+    }
+}
+
+impl fmt::Display for ConnectionWrite {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "connection write end for {}", self.remote)
     }
 }
