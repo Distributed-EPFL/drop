@@ -49,6 +49,8 @@ pub enum DirectoryError {
     Other { reason: String },
 }
 
+type HandleInfo = (Sender<Response>, Sender<Request>);
+
 /// A `Connector` that makes use of a centralized directory in order
 /// to discover peers by their `PublicKey`. This `Connector` uses `PublicKey`s
 /// as `Candidate` and finds out the actual address from the directory server.
@@ -56,7 +58,7 @@ pub struct Directory {
     /// `Connector` that will be used to open `Connection`s to peers
     connector: Arc<dyn Connector<Candidate = SocketAddr>>,
     /// Channels for requests to handlers
-    handlers: Mutex<HashMap<Info, (Sender<Response>, Sender<Request>)>>,
+    handlers: Mutex<HashMap<Info, HandleInfo>>,
 }
 
 impl Directory {
