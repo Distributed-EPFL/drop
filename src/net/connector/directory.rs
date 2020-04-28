@@ -199,7 +199,7 @@ impl Connector for Directory {
                 Response::Found(recvd_pkey, addr) if recvd_pkey == *pkey => {
                     return self.connector.establish(&pkey, &addr).await;
                 }
-                Response::NotFound(pkey) => ConnectOther {
+                Response::NotFound(_) => ConnectOther {
                     reason: "peer not found in directory",
                 }
                 .fail()?,

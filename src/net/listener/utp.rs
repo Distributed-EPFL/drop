@@ -92,7 +92,7 @@ impl fmt::Display for Direct {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::net::{Connection, UtpConnector, UtpListener};
+    use crate::net::{Connection, Connector, UtpConnector, UtpListener};
     use crate::test::*;
     use crate::{exchange_data_and_compare, generate_connection};
 

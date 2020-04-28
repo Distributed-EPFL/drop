@@ -1,23 +1,24 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
 
 use super::super::common::directory::*;
-use super::super::listener::Listener;
+use super::super::listener::{Listener, ListenerError};
 use super::super::Connection;
 use super::*;
 use crate::crypto::key::exchange::PublicKey;
 
-use snafu::ResultExt;
+use snafu::{IntoError, ResultExt};
+
+use futures::future::{self, Either};
 
 use tokio::sync::broadcast::{
     channel as bcast_channel, Receiver as BcastReceiver, Sender as BcastSender,
 };
+
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::sync::RwLock;
 use tokio::task;
-use tokio::time::timeout;
 
 use tracing::{debug, error, info, trace, trace_span, warn};
 use tracing_futures::Instrument;
@@ -56,24 +57,30 @@ impl DirectoryServer {
 
     /// Serve requests according to parameters given at server creation
     pub async fn serve(mut self) -> Result<(), ServerError> {
-        let to = Duration::from_secs(1);
-        loop {
-            if self.exit.try_recv().is_ok() {
-                info!("stopping directory server");
-                break;
-            }
+        let mut exit_fut = Some(self.exit);
 
-            let socket = match timeout(to, self.listener.establish()).await {
-                Ok(Ok(socket)) => socket,
-                Ok(Err(e)) => {
-                    error!("failed to accept directory connection: {}", e);
-                    return Err(e.into());
+        loop {
+            let (exit, connection) = match Self::poll_incoming(
+                self.listener.as_mut(),
+                exit_fut.take().unwrap(),
+            )
+            .await
+            {
+                PollResult::Error(e) => {
+                    error!("failed to accept incoming connection: {}", e);
+                    return Err(Accept.into_error(e));
                 }
-                Err(_) => continue,
+                PollResult::Exit => {
+                    info!("directory server exiting...");
+                    return Ok(());
+                }
+                PollResult::Incoming(exit, connection) => (exit, connection),
             };
 
-            let peer_addr = socket.peer_addr().context(ServerIo {
-                when: "fetching peer address",
+            exit_fut = Some(exit);
+
+            let peer_addr = connection.peer_addr().context(ServerIo {
+                when: "accepting connection",
             })?;
 
             info!("new directory connection from {}", peer_addr);
@@ -83,12 +90,7 @@ impl DirectoryServer {
 
             task::spawn(
                 async move {
-                    let servicer = PeerServicer::new(
-                        Connection::new(socket),
-                        peers,
-                        tx,
-                        rx,
-                    );
+                    let servicer = PeerServicer::new(connection, peers, tx, rx);
 
                     if let Err(e) = servicer.serve().await {
                         error!("failed to service peer: {}", e);
@@ -99,9 +101,26 @@ impl DirectoryServer {
 
             info!("waiting for next connection");
         }
-
-        Ok(())
     }
+
+    async fn poll_incoming<L: Listener<Candidate = SocketAddr> + ?Sized>(
+        listener: &mut L,
+        exit: Receiver<()>,
+    ) -> PollResult {
+        match future::select(exit, listener.establish()).await {
+            Either::Left(_) => PollResult::Exit,
+            Either::Right((Ok(connection), exit)) => {
+                PollResult::Incoming(exit, Connection::new(connection))
+            }
+            Either::Right((Err(e), _)) => PollResult::Error(e),
+        }
+    }
+}
+
+enum PollResult {
+    Incoming(Receiver<()>, Connection),
+    Error(ListenerError),
+    Exit,
 }
 
 struct PeerServicer {
@@ -217,7 +236,7 @@ impl PeerServicer {
             })?;
         }
 
-        error!("corrupted request");
+        error!("end of client connection");
 
         Ok(())
     }
@@ -225,13 +244,15 @@ impl PeerServicer {
 
 #[cfg(test)]
 mod test {
-    use super::super::super::connector::{Connector, TcpDirect};
-    use super::super::super::listener::TcpListener;
+    use super::super::super::TcpListener;
+    use super::super::super::{Connector, TcpConnector};
     use super::*;
     use crate::crypto::key::exchange::Exchanger;
     use crate::test::*;
 
     use tokio::task::{self, JoinHandle};
+
+    static TOTAL: usize = 50;
 
     async fn setup_server(server: SocketAddr) -> (Sender<()>, JoinHandle<()>) {
         let server_exchanger = Exchanger::random();
@@ -260,7 +281,7 @@ mod test {
         server: SocketAddr,
         addr: SocketAddr,
         pkey: PublicKey,
-        connector: &mut dyn Connector<Candidate = SocketAddr>,
+        connector: &dyn Connector<Candidate = SocketAddr>,
     ) -> Connection {
         let peer = (pkey, addr).into();
         let req = Request::Add(peer);
@@ -293,7 +314,7 @@ mod test {
     async fn serve_many() {
         init_logger();
         let server = next_test_ip4();
-        let mut connector = TcpDirect::new(Exchanger::random());
+        let mut connector = TcpConnector::new(Exchanger::random());
         let (exit_tx, handle) = setup_server(server).await;
 
         for i in 1..10usize {
@@ -320,36 +341,35 @@ mod test {
         init_logger();
         let server = next_test_ip4();
         let (exit_tx, handle) = setup_server(server).await;
-        let mut connector = TcpDirect::new(Exchanger::random());
+        let connector = TcpConnector::new(Exchanger::random());
 
         let (pkey, peer) = new_peer();
-        let mut w_connection =
-            add_peer(server, peer, pkey, &mut connector).await;
+        let mut w_connection = add_peer(server, peer, pkey, &connector).await;
 
-        let waiter = task::spawn(async move {
-            w_connection
-                .send_plain(&Request::Wait(3))
-                .await
-                .expect("wait failed");
+        let waiter = task::spawn(
+            async move {
+                w_connection
+                    .send_plain(&Request::Wait(TOTAL))
+                    .await
+                    .expect("wait failed");
 
-            let mut i = 0usize;
-
-            while let Ok(_) = w_connection.receive_plain::<Info>().await {
-                i += 1;
+                for _ in 0..TOTAL {
+                    w_connection
+                        .receive_plain::<Info>()
+                        .await
+                        .expect("recv failed");
+                }
             }
+            .instrument(trace_span!("waiter")),
+        );
 
-            assert_eq!(i, 3, "waited for wrong number of peer");
+        for _ in 0..TOTAL {
+            let (pkey, peer) = new_peer();
 
-            wait_for_server(exit_tx, handle).await;
-        });
-
-        for _ in 0..2usize {
-            let peer = next_test_ip4();
-            let pkey = *Exchanger::random().keypair().public();
-
-            task::yield_now().await;
-            add_peer(server, peer, pkey, &mut connector).await;
+            add_peer(server, peer, pkey, &connector).await;
         }
+
+        wait_for_server(exit_tx, handle).await;
 
         waiter.await.expect("waiter failed");
     }
@@ -366,7 +386,7 @@ mod test {
                 task::spawn(async move {
                     let exc = Exchanger::random();
                     let public = *exc.keypair().public();
-                    let mut connector = TcpDirect::new(exc);
+                    let connector = TcpConnector::new(exc);
 
                     let mut connection = Connection::new(
                         connector
@@ -396,7 +416,7 @@ mod test {
         let public = *exch.keypair().public();
 
         let mut connection = Connection::new(
-            TcpDirect::new(exch)
+            TcpConnector::new(exch)
                 .establish(&public, &server)
                 .await
                 .expect("connect failed"),
@@ -427,7 +447,7 @@ mod test {
     async fn add_then_fetch() {
         let server = next_test_ip4();
         let (exit_tx, handle) = setup_server(server).await;
-        let mut connector = TcpDirect::new(Exchanger::random());
+        let mut connector = TcpConnector::new(Exchanger::random());
 
         let peer_addr = next_test_ip4();
         let peer_pkey = *Exchanger::random().keypair().public();
@@ -458,7 +478,7 @@ mod test {
         let server = next_test_ip4();
         let (exit_tx, handle) = setup_server(server).await;
 
-        let mut connector = TcpDirect::new(Exchanger::random());
+        let connector = TcpConnector::new(Exchanger::random());
         let public = *connector.exchanger().keypair().public();
         let mut connection = Connection::new(
             connector
