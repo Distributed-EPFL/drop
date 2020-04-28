@@ -172,9 +172,18 @@ impl Connection {
         self.socket
             .read_exact(&mut self.buffer[..size])
             .await
+            .map_err(|e| {
+                self.state = ConnectionState::Broken;
+                e
+            })
             .context(ReceiveIo)?;
 
-        deserialize(&self.buffer).context(DeserializeReceive)
+        deserialize(&self.buffer)
+            .context(DeserializeReceive)
+            .map_err(|e| {
+                self.state = ConnectionState::Broken;
+                e
+            })
     }
 
     /// Send a `Serialize` message on this `Connection` without using decryption
@@ -192,9 +201,21 @@ impl Connection {
 
         debug!("sending {} bytes as plain data", serialized.len());
 
-        Self::write_size(&mut self.socket, serialized.len() as u32).await?;
+        Self::write_size(&mut self.socket, serialized.len() as u32)
+            .await
+            .map_err(|e| {
+                self.state = ConnectionState::Broken;
+                e
+            })?;
 
-        self.socket.write_all(&serialized).await.context(SendIo)
+        self.socket
+            .write_all(&serialized)
+            .await
+            .map_err(|e| {
+                self.state = ConnectionState::Broken;
+                e
+            })
+            .context(SendIo)
     }
 
     async fn read_size<R: AsyncRead + Unpin + ?Sized>(
@@ -230,6 +251,10 @@ impl Connection {
                     &mut self.buffer,
                 )
                 .await
+                .map_err(|e| {
+                    self.state = ConnectionState::Broken;
+                    e
+                })
             }
             ConnectionState::Connected => UnsecuredReceive.fail(),
             ConnectionState::Broken => CorruptedReceive.fail(),

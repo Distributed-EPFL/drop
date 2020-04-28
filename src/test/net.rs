@@ -4,6 +4,7 @@
 macro_rules! generate_connection {
     ($listener:ty , $connector:ty) => {
         use crate::crypto::key::exchange::{Exchanger, KeyPair};
+        use crate::net::Connector;
 
         let client = KeyPair::random();
         let server = KeyPair::random();
