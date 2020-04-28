@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
 
 use super::super::common::directory::*;
 use super::super::listener::{Listener, ListenerError};
@@ -9,11 +8,12 @@ use super::super::Connection;
 use super::ServerError;
 use crate::crypto::key::exchange::PublicKey;
 
+use futures::future::{self, Either};
+
 use tokio::sync::broadcast::{channel as bcast_channel, Sender as BcastSender};
 use tokio::sync::oneshot::{channel, Receiver, Sender};
 use tokio::sync::RwLock;
 use tokio::task;
-use tokio::time::timeout;
 
 use tracing::{debug, error, info, trace, trace_span, warn};
 use tracing_futures::Instrument;
@@ -71,22 +71,27 @@ impl DirectoryServer {
 
     /// Serve requests according to parameters given at server creation
     pub async fn serve(mut self) -> Result<(), ListenerError> {
-        let to = Duration::from_secs(1);
+        let mut exit_fut = Some(self.exit);
 
         loop {
-            if self.exit.try_recv().is_ok() {
-                info!("stopping directory server");
-                break;
-            }
-
-            let connection = match timeout(to, self.listener.accept()).await {
-                Ok(Ok(socket)) => socket,
-                Ok(Err(e)) => {
-                    error!("failed to accept directory connection: {}", e);
+            let (exit, connection) = match Self::poll_incoming(
+                self.listener.as_mut(),
+                exit_fut.take().unwrap(),
+            )
+            .await
+            {
+                PollResult::Error(e) => {
+                    error!("failed to accept incoming connection: {}", e);
                     return Err(e);
                 }
-                Err(_) => continue,
+                PollResult::Exit => {
+                    info!("directory server exiting...");
+                    return Ok(());
+                }
+                PollResult::Incoming(exit, connection) => (exit, connection),
             };
+
+            exit_fut = Some(exit);
 
             let peer_addr = connection.peer_addr()?;
 
@@ -108,9 +113,26 @@ impl DirectoryServer {
 
             info!("waiting for next connection");
         }
-
-        Ok(())
     }
+
+    async fn poll_incoming<L: Listener<Candidate = SocketAddr> + ?Sized>(
+        listener: &mut L,
+        exit: Receiver<()>,
+    ) -> PollResult {
+        match future::select(exit, listener.accept()).await {
+            Either::Left(_) => PollResult::Exit,
+            Either::Right((Ok(connection), exit)) => {
+                PollResult::Incoming(exit, connection)
+            }
+            Either::Right((Err(e), _)) => PollResult::Error(e),
+        }
+    }
+}
+
+enum PollResult {
+    Incoming(Receiver<()>, Connection),
+    Error(ListenerError),
+    Exit,
 }
 
 struct PeerServicer {
@@ -441,7 +463,7 @@ mod test {
         let server = next_test_ip4();
         let (exit_tx, handle) = setup_server(server).await;
         let connector = TcpConnector::new(Exchanger::random());
-        const TOTAL: usize = 2;
+        const TOTAL: usize = 3;
 
         let (pkey, peer) = new_peer();
         let mut w_connection = add_peer(server, peer, pkey, &connector).await;
@@ -459,8 +481,6 @@ mod test {
                         .await
                         .expect("recv failed");
                 }
-
-                wait_for_server(exit_tx, handle).await;
             }
             .instrument(trace_span!("waiter")),
         );
@@ -468,9 +488,10 @@ mod test {
         for _ in 0..TOTAL {
             let (pkey, peer) = new_peer();
 
-            task::yield_now().await;
             add_peer(server, peer, pkey, &connector).await;
         }
+
+        wait_for_server(exit_tx, handle).await;
 
         waiter.await.expect("waiter failed");
     }
