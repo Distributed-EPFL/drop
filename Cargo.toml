@@ -10,6 +10,7 @@ backtrace = "0.3.30"
 sodiumoxide = "0.2.2"
 serde = { version = "1.0.102", features = [ "derive" ] }
 bincode = "1.2.0"
+snafu = "~0.6"
 
 [dev-dependencies]
 rand = "0.6.5"
