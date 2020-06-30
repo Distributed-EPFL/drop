@@ -1,8 +1,10 @@
-use super::errors::{SignError, SodiumError, VerifyError};
+use super::BincodeError;
 
 use bincode::serialize_into;
 
 use serde::{Deserialize, Serialize};
+
+use snafu::{ensure, Backtrace, ResultExt, Snafu};
 
 use sodiumoxide::crypto::sign::{
     gen_keypair, sign_detached, verify_detached, PublicKey as SodiumPublicKey,
@@ -13,6 +15,21 @@ pub use sodiumoxide::crypto::sign::{
     Signature, PUBLICKEYBYTES as PUBLIC_LENGTH,
     SECRETKEYBYTES as SECRET_LENGTH, SIGNATUREBYTES as SIGNATURE_LENGTH,
 };
+
+#[derive(Debug, Snafu)]
+pub enum SignError {
+    #[snafu(display("failed to sign data: {}", source))]
+    SignSerialize { source: BincodeError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum VerifyError {
+    #[snafu(display("failed to verify data: {}", source))]
+    VerifySerialize { source: BincodeError },
+
+    #[snafu(display("invalid signature"))]
+    Sodium { backtrace: Backtrace },
+}
 
 /// A public key used for verifying messages
 #[derive(Clone, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize)]
@@ -79,7 +96,7 @@ impl Signer {
         message: &T,
     ) -> Result<Signature, SignError> {
         self.buffer.clear();
-        serialize_into(&mut self.buffer, message)?;
+        serialize_into(&mut self.buffer, message).context(SignSerialize)?;
 
         Ok(sign_detached(&self.buffer, &self.secret().0))
     }
@@ -92,13 +109,11 @@ impl Signer {
         message: &T,
     ) -> Result<(), VerifyError> {
         self.buffer.clear();
-        serialize_into(&mut self.buffer, message)?;
+        serialize_into(&mut self.buffer, message).context(VerifySerialize)?;
 
-        if verify_detached(signature, &self.buffer, &public.0) {
-            Ok(())
-        } else {
-            Err(SodiumError::new().into())
-        }
+        ensure!(verify_detached(signature, &self.buffer, &public.0), Sodium);
+
+        Ok(())
     }
 }
 

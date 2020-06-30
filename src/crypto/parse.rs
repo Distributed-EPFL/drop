@@ -1,10 +1,18 @@
 use std::convert::TryFrom;
 
-use super::errors::MalformedHex;
-use super::errors::ParseHexError;
-use super::errors::UnexpectedSize;
 use super::hash::Digest;
 use super::key::Key;
+
+use snafu::{ensure, Backtrace, Snafu};
+
+#[derive(Debug, Snafu)]
+pub enum ParseHexError {
+    #[snafu(display("Unexpected argument size"))]
+    UnexpectedSize { backtrace: Backtrace },
+
+    #[snafu(display("malformed hexadecimal value"))]
+    MalformedHex { backtrace: Backtrace },
+}
 
 trait ParseHex<To> {
     fn parse_hex(&self) -> Result<To, ParseHexError>;
@@ -14,15 +22,14 @@ macro_rules! implement {
     ($($size:expr), *) => ($(
         impl ParseHex<[u8; $size]> for str {
             fn parse_hex(&self) -> Result<[u8; $size], ParseHexError> {
-                if self.len() != (2 * $size) { Err(UnexpectedSize::new().into()) } else {
+                ensure!(self.len() == (2 * $size), UnexpectedSize{});
                     let mut parsed = [u8::default(); $size];
                     for index in 0..$size {
                         parsed[index] = u8::from_str_radix(&self[(2 * index)..(2 * (index + 1))], 16)
-                                            .map_err(|_| ParseHexError::from(MalformedHex::new()))?;
+                            .map_err(|_| MalformedHex.build())?;
                     }
 
                     Ok(parsed)
-                }
             }
         }
     )*);

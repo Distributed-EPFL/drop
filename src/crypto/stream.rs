@@ -1,18 +1,41 @@
 use std::fmt;
 
-use super::errors::{
-    BrokenStream, DecryptError, EncryptError, InvalidHeader, InvalidMac,
-    MissingHeader,
-};
 use super::key::Key;
+use super::BincodeError;
 
 use bincode::{deserialize, serialize_into};
 
 use serde::{Deserialize, Serialize};
 
+use snafu::{ensure, Backtrace, ResultExt, Snafu};
+
 use sodiumoxide::crypto::secretstream::{
     Header, Pull as SodiumPull, Push as SodiumPush, Stream, Tag, HEADERBYTES,
 };
+
+#[derive(Debug, Snafu)]
+pub enum DecryptError {
+    #[snafu(display("missing cryptographic header"))]
+    MissingHeader { backtrace: Backtrace },
+
+    #[snafu(display("invalid cryptographic header"))]
+    InvalidHeader { backtrace: Backtrace },
+
+    #[snafu(display("failed to verify message authentication code"))]
+    InvalidMac { backtrace: Backtrace },
+
+    #[snafu(display("stream is broken, an error previously occurred"))]
+    BrokenStream { backtrace: Backtrace },
+
+    #[snafu(display("serialization failure: {}", source))]
+    SerializeDecrypt { source: BincodeError },
+}
+
+#[derive(Debug, Snafu)]
+pub enum EncryptError {
+    #[snafu(display("failed to serialize: {}", source))]
+    SerializeEncrypt { source: BincodeError },
+}
 
 enum PushState {
     Setup(Key),
@@ -62,7 +85,7 @@ impl Push {
     {
         let encrypt = |stream: &mut Stream<SodiumPush>,
                        mut buffer: &mut Vec<u8>| {
-            serialize_into(&mut buffer, message)?;
+            serialize_into(&mut buffer, message).context(SerializeEncrypt)?;
 
             let ciphertext = stream.push(&buffer, None, Tag::Message).unwrap();
             buffer.clear();
@@ -116,10 +139,8 @@ impl Pull {
     {
         match &mut self.state {
             PullState::Setup(key) => {
-                if ciphertext.len() < HEADERBYTES {
-                    self.state = PullState::Broken;
-                    return Err(MissingHeader::new().into());
-                }
+                ensure!(ciphertext.len() >= HEADERBYTES, MissingHeader);
+
                 let (ciphertext, header) =
                     ciphertext.split_at(ciphertext.len() - HEADERBYTES);
 
@@ -129,31 +150,31 @@ impl Pull {
                 )
                 .map_err(|_| {
                     self.state = PullState::Broken;
-                    InvalidHeader::new()
+                    InvalidHeader.build()
                 })?;
 
                 stream
                     .pull_to_vec(ciphertext, None, &mut self.buffer)
                     .map_err(|_| {
                         self.state = PullState::Broken;
-                        InvalidMac::new()
+                        InvalidMac.build()
                     })?;
 
                 self.state = PullState::Run(stream);
 
-                deserialize(&self.buffer).map_err(|e| e.into())
+                deserialize(&self.buffer).context(SerializeDecrypt)
             }
             PullState::Run(ref mut stream) => {
                 stream
                     .pull_to_vec(ciphertext, None, &mut self.buffer)
                     .map_err(|_| {
                         self.state = PullState::Broken;
-                        InvalidMac::new()
+                        InvalidMac.build()
                     })?;
 
-                deserialize(&self.buffer).map_err(|e| e.into())
+                deserialize(&self.buffer).context(SerializeDecrypt)
             }
-            PullState::Broken => Err(BrokenStream::new().into()),
+            PullState::Broken => BrokenStream.fail(),
         }
     }
 
