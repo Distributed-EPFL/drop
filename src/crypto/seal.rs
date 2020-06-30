@@ -1,8 +1,12 @@
-use super::errors::{DecryptError, EncryptError, InvalidMac, MissingHeader};
+use super::stream::{DecryptError, EncryptError};
 
-use bincode::{deserialize, serialize_into, serialized_size};
+use bincode::{
+    deserialize, serialize_into, serialized_size, ErrorKind as BincodeErrorKind,
+};
 
 use serde::{Deserialize, Serialize};
+
+use snafu::{ensure, Backtrace, ResultExt, Snafu};
 
 use sodiumoxide::crypto::box_::{
     gen_keypair, gen_nonce, open_detached, seal_detached, Nonce as SodiumNonce,
@@ -54,6 +58,24 @@ impl KeyPair {
     }
 }
 
+#[derive(Snafu, Debug)]
+pub enum SealError {
+    #[snafu(display("failed to encrypt data: {}", source))]
+    SealEncryptError { source: EncryptError },
+
+    #[snafu(display("failed to decrypt data: {}", source))]
+    SealDecryptError { source: DecryptError },
+
+    #[snafu(display("missing cryptographic header in box"))]
+    MissingHeader { backtrace: Backtrace },
+
+    #[snafu(display("invalid mac in sealed box"))]
+    InvalidMac { backtrace: Backtrace },
+
+    #[snafu(display("serializer error: {}", source))]
+    SerializeError { source: Box<BincodeErrorKind> },
+}
+
 /// An asymmetric encryption/decryption structure. <br />
 /// Message are in the following format:
 /// The first 16 bytes are the tag of the message.
@@ -94,14 +116,15 @@ impl Seal {
         &mut self,
         recipient_key: &PublicKey,
         message: &T,
-    ) -> Result<Vec<u8>, EncryptError> {
+    ) -> Result<Vec<u8>, SealError> {
         let nonce = gen_nonce();
         let mut output = Vec::new();
-        let size = serialized_size(message)? as usize;
+        let size = serialized_size(message).context(SerializeError)? as usize;
 
         output.resize_with(size + NONCE_LENGTH + TAG_LENGTH, || 0);
 
-        serialize_into(&mut output[HEADER_LENGTH..], message)?;
+        serialize_into(&mut output[HEADER_LENGTH..], message)
+            .context(SerializeError)?;
 
         let tag = seal_detached(
             &mut output[HEADER_LENGTH..],
@@ -130,19 +153,20 @@ impl Seal {
         &mut self,
         sender_key: &PublicKey,
         ciphertext: &[u8],
-    ) -> Result<T, DecryptError>
+    ) -> Result<T, SealError>
     where
         for<'de> T: Deserialize<'de>,
     {
-        if ciphertext.len() <= TAG_LENGTH + NONCE_LENGTH {
-            return Err(MissingHeader::new().into());
-        }
+        ensure!(
+            ciphertext.len() > TAG_LENGTH + NONCE_LENGTH,
+            MissingHeader {}
+        );
 
         let tag = SodiumTag::from_slice(&ciphertext[0..TAG_LENGTH])
-            .ok_or_else(InvalidMac::new)?;
+            .ok_or_else(|| InvalidMac {}.build())?;
         let nonce =
             SodiumNonce::from_slice(&ciphertext[TAG_LENGTH..HEADER_LENGTH])
-                .ok_or_else(InvalidMac::new)?;
+                .ok_or_else(|| InvalidMac.build())?;
 
         self.buffer.clear();
         self.buffer.extend_from_slice(&ciphertext[HEADER_LENGTH..]);
@@ -154,9 +178,9 @@ impl Seal {
             &sender_key.0,
             &self.keypair.secret.0,
         )
-        .map_err(|_| InvalidMac::new())?;
+        .map_err(|_| InvalidMac {}.build())?;
 
-        Ok(deserialize(&self.buffer)?)
+        Ok(deserialize(&self.buffer).context(SerializeError)?)
     }
 
     /// Decrypts a serializable message from a slice of bytes. This method is
@@ -166,7 +190,7 @@ impl Seal {
         &mut self,
         sender_key: &PublicKey,
         ciphertext: &[u8],
-    ) -> Result<T, DecryptError>
+    ) -> Result<T, SealError>
     where
         for<'de> T: Deserialize<'de> + ToOwned<Owned = T>,
     {

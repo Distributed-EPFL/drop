@@ -1,13 +1,20 @@
-use super::super::errors::{ExchangeError, SodiumError};
 use super::super::stream::{Pull, Push};
 use super::Key;
 
 use serde::{Deserialize, Serialize};
 
+use snafu::{Backtrace, Snafu};
+
 use sodiumoxide::crypto::kx::{
     client_session_keys, gen_keypair, server_session_keys,
     PublicKey as SodiumPubKey, SecretKey as SodiumSecKey,
 };
+
+#[derive(Debug, Snafu)]
+pub enum ExchangeError {
+    #[snafu(display("sodium failure"))]
+    Sodium { backtrace: Backtrace },
+}
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// A `PublicKey` used to compute a shared secret with a remote party
@@ -108,7 +115,7 @@ impl Exchanger {
             receive: rx.into(),
             transmit: tx.into(),
         })
-        .map_err(|_| SodiumError::new().into())
+        .map_err(|_| Sodium.build())
     }
 }
 

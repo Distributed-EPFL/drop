@@ -1,5 +1,4 @@
 mod convert;
-mod errors;
 mod format;
 pub mod hash;
 pub mod key;
@@ -14,4 +13,5 @@ pub use key::Key;
 pub use hash::authenticate;
 pub use hash::hash;
 
-pub use errors::*;
+/// Type alias for serializer errors
+pub type BincodeError = Box<bincode::ErrorKind>;

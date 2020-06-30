@@ -1,15 +1,29 @@
-use super::errors::*;
 use super::key::Key;
+use super::BincodeError;
 
 use bincode::serialize;
 
 use serde::{Deserialize, Serialize};
+
+use snafu::{ensure, Backtrace, ResultExt, Snafu};
 
 use sodiumoxide::crypto::generichash::State as SodiumState;
 use sodiumoxide::utils;
 
 /// Static size for hashes
 pub const SIZE: usize = 32;
+
+#[derive(Debug, Snafu)]
+pub enum HashError {
+    #[snafu(display("failed to serialize data: {}", source))]
+    SerializeError { source: BincodeError },
+
+    #[snafu(display("read failed: {}", source))]
+    ReadError { source: std::io::Error },
+
+    #[snafu(display("sodium error"))]
+    SodiumError { backtrace: Backtrace },
+}
 
 /// Wrapper for sodium hasher
 pub struct Hasher(SodiumState);
@@ -22,8 +36,10 @@ impl Hasher {
 
     /// Create a `Hasher` with a specified `Key`. <br/ >
     /// This, in effect, creates a MAC producer for authenticating data.
-    pub fn keyed(key: &Key) -> Self {
-        Hasher(SodiumState::new(SIZE, Some(&key.0)).unwrap())
+    pub fn keyed(key: &Key) -> Result<Self, HashError> {
+        let state = SodiumState::new(SIZE, Some(&key.0))
+            .map_err(|_| SodiumError.build())?;
+        Ok(Hasher(state))
     }
 
     /// Feed a chunk of bytes to this hasher
@@ -58,11 +74,14 @@ fn do_hash<M: Serialize>(
     mut hasher: Hasher,
     message: &M,
 ) -> Result<Digest, HashError> {
-    if hasher.update(serialize(message)?.as_slice()).is_err() {
-        Err(SodiumError::new().into())
-    } else {
-        hasher.finalize().map_err(|_| SodiumError::new().into())
-    }
+    ensure!(
+        hasher
+            .update(&serialize(message).context(SerializeError)?)
+            .is_ok(),
+        SodiumError
+    );
+
+    hasher.finalize().map_err(|_| SodiumError.build())
 }
 
 /// Computes the cryptographic hash of the specified message.
@@ -76,7 +95,7 @@ pub fn authenticate<Message: Serialize>(
     key: &Key,
     message: &Message,
 ) -> Result<Digest, HashError> {
-    let hasher = Hasher::keyed(key);
+    let hasher = Hasher::keyed(key)?;
     do_hash(hasher, message)
 }
 
