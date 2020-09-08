@@ -61,8 +61,14 @@ impl Default for Hasher {
 
 /// A hash digest
 #[allow(clippy::derive_hash_xor_eq)]
-#[derive(Clone, Deserialize, Hash, Eq, Ord, PartialOrd, Serialize)]
+#[derive(Copy, Clone, Deserialize, Hash, Eq, Ord, PartialOrd, Serialize)]
 pub struct Digest(pub(crate) [u8; SIZE]);
+
+impl AsRef<[u8; SIZE]> for Digest {
+    fn as_ref(&self) -> &[u8; SIZE] {
+        &self.0
+    }
+}
 
 impl PartialEq for Digest {
     fn eq(&self, rhs: &Digest) -> bool {
