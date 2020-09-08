@@ -34,9 +34,21 @@ impl fmt::Debug for PublicKey {
     }
 }
 
+impl AsRef<[u8]> for PublicKey {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// A `SecretKey` used to compute a shared secret with a remote party
 pub struct SecretKey(SodiumSecKey);
+
+impl AsRef<[u8]> for SecretKey {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
 
 #[derive(Clone, Eq, PartialEq)]
 /// A `KeyPair` that can be used to exchange a secret symmetric key

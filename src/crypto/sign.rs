@@ -18,9 +18,28 @@ pub use sodiumoxide::crypto::sign::{
 #[derive(Clone, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize)]
 pub struct PublicKey(SodiumPublicKey);
 
+impl AsRef<[u8]> for PublicKey {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 /// A secret key used for signing messages
 #[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SecretKey(SodiumSecretKey);
+
+impl SecretKey {
+    /// Compute the `PublicKey` associated with this `SecretKey`
+    pub fn public_key(&self) -> PublicKey {
+        PublicKey(self.0.public_key())
+    }
+}
+
+impl AsRef<[u8]> for SecretKey {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
 
 /// A key pair that can be used for both signing and verifying messages
 #[derive(Clone, PartialEq, Eq)]
@@ -37,6 +56,24 @@ impl KeyPair {
         let secret = SecretKey(secret);
 
         Self { public, secret }
+    }
+
+    /// Get the `PublicKey` in this `KeyPair`
+    pub fn public(&self) -> &PublicKey {
+        &self.public
+    }
+
+    /// Get the `SecretKey` in this `KeyPair`
+    pub fn secret(&self) -> &SecretKey {
+        &self.secret
+    }
+}
+
+impl From<SecretKey> for KeyPair {
+    fn from(secret: SecretKey) -> Self {
+        let public = secret.public_key();
+
+        Self { secret, public }
     }
 }
 
@@ -55,7 +92,7 @@ impl Signer {
         }
     }
 
-    /// Creata a new `Signer` with a randomly generated `KeyPair`
+    /// Create a new `Signer` with a randomly generated `KeyPair`
     pub fn random() -> Self {
         Self {
             keypair: KeyPair::random(),
