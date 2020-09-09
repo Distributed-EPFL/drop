@@ -212,10 +212,7 @@ mod tests {
                 .decrypt_ref::<u64>(&ciphertext)
                 .expect("failed to decrypt without copy");
 
-            assert_eq!(
-                plaintext, message,
-                "value is different after decryption"
-            );
+            assert_eq!(plaintext, message, "wrong value decrypted");
         }
     }
 
@@ -230,10 +227,7 @@ mod tests {
                 .decrypt::<u64>(&ciphertext)
                 .expect("failed to decrypt");
 
-            assert_eq!(
-                plaintext, message,
-                "value is different after decryption"
-            );
+            assert_eq!(plaintext, message, "wrong value decrypted");
         }
     }
 
@@ -300,5 +294,27 @@ mod tests {
                 receiver.state
             );
         }
+    }
+
+    #[test]
+    fn garbage_header() {
+        let (mut sender, mut receiver) = setup_test_stream();
+
+        let mut msg = sender.encrypt(&0usize).expect("encrypt failed");
+        msg[0] = 0x02;
+        msg[1] = 0xFF;
+
+        receiver
+            .decrypt::<usize>(msg.as_slice())
+            .expect_err("decrypt sucess on bad data");
+    }
+
+    #[test]
+    fn pull_state_fmt() {
+        assert_eq!(
+            "setting up",
+            format!("{:?}", PullState::Setup(Key::random()))
+        );
+        assert_eq!("broken", format!("{:?}", PullState::Broken));
     }
 }
