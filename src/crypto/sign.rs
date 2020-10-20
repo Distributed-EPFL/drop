@@ -32,7 +32,9 @@ pub enum VerifyError {
 }
 
 /// A public key used for verifying messages
-#[derive(Clone, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize)]
+#[derive(
+    Copy, Clone, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize,
+)]
 pub struct PublicKey(SodiumPublicKey);
 
 /// A secret key used for signing messages
