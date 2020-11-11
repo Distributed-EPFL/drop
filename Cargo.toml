@@ -5,16 +5,16 @@ authors = [ "Ogier Bouvier <ogier.bouvier@epfl.ch", "Matteo Monti <matteo.monti@
 edition = "2018"
 
 [dependencies]
-sodiumoxide = "0.2.2"
-serde = { version = "1.0.102", features = [ "derive" ] }
-bincode = "1.2.0"
+sodiumoxide = "0.2"
 snafu = "~0.6"
-tokio = { version = "0.2.0", features = [ "full" ] }
-futures = "0.3.4"
-ccl = "4.12.1"
+serde = { version = "~1.0", features = [ "derive" ] }
+bincode = "~1.2"
+tokio = { version = "~0.2", features = [ "full" ] }
+futures = "~0.3"
+ccl = "~4.12"
 async-trait = "0.1.19"
 tracing = "0.1.12"
-tracing-futures = "0.2.0"
+tracing-futures = "~0.2"
 tokio-utp = { version = "0.8.0-alpha1", branch = "async", git = "https://github.com/Distributed-EPFL/tokio-utp" }
 
 [dev-dependencies]
