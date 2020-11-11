@@ -9,3 +9,6 @@ pub mod net;
 #[cfg(test)]
 /// Test utilities that are used all across the framework
 pub mod test;
+
+/// Re-export `async_trait` to use in implementing custom user types
+pub use async_trait::async_trait;
