@@ -16,6 +16,7 @@ async-trait = "0.1.19"
 tracing = "0.1.12"
 tracing-futures = "~0.2"
 tokio-utp = { version = "0.8.0-alpha1", branch = "async", git = "https://github.com/Distributed-EPFL/tokio-utp" }
+peroxide = "*"
 
 [dev-dependencies]
 rand = "0.6.5"

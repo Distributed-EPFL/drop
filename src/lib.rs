@@ -5,6 +5,8 @@ pub mod data;
 
 /// Async and synchronous network utilities
 pub mod net;
+/// System management code
+pub mod system;
 
 #[cfg(test)]
 /// Test utilities that are used all across the framework
