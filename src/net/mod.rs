@@ -198,31 +198,37 @@ impl Connection {
     {
         match &mut self.state {
             ConnectionState::Secured(ref mut pull, _) => {
-                let size = Self::read_size(&mut *self.socket)
-                    .instrument(debug_span!("read_size"))
-                    .await? as usize;
+                async fn receive_internal<
+                    T: Sized + for<'de> Deserialize<'de> + Send + fmt::Debug,
+                >(
+                    pull: &mut Pull,
+                    socket: &mut dyn Socket,
+                    mut buffer: &mut Vec<u8>,
+                ) -> Result<T, ReceiveError> {
+                    let size = Connection::read_size(socket)
+                        .instrument(debug_span!("read_size"))
+                        .await? as usize;
 
-                trace!(
-                    "receiving message of {} bytes from {}",
-                    size,
-                    self.socket.peer_addr().context(ReceiveIo)?
-                );
+                    trace!(
+                        "receiving message of {} bytes from {}",
+                        size,
+                        socket.peer_addr().context(ReceiveIo)?
+                    );
 
-                // FIXME: avoid trusting network input and run out of memory
-                self.buffer.resize(size, 0);
+                    // FIXME: avoid trusting network input and run out of memory
+                    buffer.resize(size, 0);
 
-                self.socket
-                    .read_exact(&mut self.buffer)
-                    .instrument(debug_span!("read_data"))
+                    socket
+                        .read_exact(&mut buffer)
+                        .instrument(debug_span!("read_data"))
+                        .await
+                        .context(ReceiveIo)?;
+
+                    pull.decrypt(buffer).context(Decrypt)
+                }
+
+                receive_internal(pull, self.socket.as_mut(), &mut self.buffer)
                     .await
-                    .context(ReceiveIo)?;
-
-                pull.decrypt(&self.buffer)
-                    .map_err(|e| {
-                        self.state = ConnectionState::Broken;
-                        e
-                    })
-                    .context(Decrypt)
             }
             ConnectionState::Connected => UnsecuredReceive.fail(),
             ConnectionState::Broken => CorruptedReceive.fail(),
@@ -232,22 +238,34 @@ impl Connection {
     /// Send a `Serialize` message using the underlying `Connection`.
     pub async fn send<T>(&mut self, message: &T) -> Result<(), SendError>
     where
-        T: Serialize + Send,
+        T: Serialize + Send + fmt::Debug,
     {
         match &mut self.state {
             ConnectionState::Secured(_, ref mut push) => {
-                let data = push.encrypt(message).context(Encrypt)?;
+                async fn send_internal<T: Serialize + Send + fmt::Debug>(
+                    message: &T,
+                    socket: &mut dyn Socket,
+                    push: &mut Push,
+                ) -> Result<(), SendError> {
+                    let data = push.encrypt(message).context(Encrypt)?;
 
-                trace!(
-                    "sending {} bytes of data to {}",
-                    data.len(),
-                    self.socket.peer_addr().context(SendIo)?
-                );
+                    trace!(
+                        "sending {} bytes of data to {}",
+                        data.len(),
+                        socket.peer_addr().context(SendIo)?
+                    );
 
-                Self::write_size(self.socket.as_mut(), data.len() as u32)
-                    .await?;
+                    Connection::write_size(socket, data.len() as u32).await?;
 
-                self.socket.write_all(&data).await.context(SendIo)
+                    socket.write_all(&data).await.context(SendIo)
+                }
+
+                send_internal(message, self.socket.as_mut(), push)
+                    .await
+                    .map_err(|e| {
+                        self.state = ConnectionState::Broken;
+                        e
+                    })
             }
             ConnectionState::Connected => UnsecuredSend.fail(),
             ConnectionState::Broken => CorruptedSend.fail(),

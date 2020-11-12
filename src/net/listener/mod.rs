@@ -1,14 +1,14 @@
-/// Listeners that use TCP as a transport protocol
 mod tcp;
-pub use tcp::*;
+/// Listeners that use TCP as a transport protocol
+pub use tcp::Direct as Tcp;
 
-/// Listeners that use uTP as a transport protocol
 mod utp;
-pub use self::utp::*;
+/// Listeners that use uTP as a transport protocol
+pub use self::utp::Direct as Utp;
 
-/// Directory listener
 mod directory;
-pub use directory::*;
+/// Directory listener
+pub use directory::Directory;
 
 use std::fmt;
 use std::io::Error;
