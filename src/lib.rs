@@ -3,9 +3,9 @@ pub mod crypto;
 
 pub mod data;
 
-/// Connection utilities and listeners
+/// Async and synchronous network utilities
 pub mod net;
 
 #[cfg(test)]
-/// Testing utilities
+/// Test utilities that are used all across the framework
 pub mod test;
