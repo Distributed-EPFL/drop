@@ -8,7 +8,7 @@ mod utp;
 pub use self::utp::*;
 
 use std::fmt;
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 
 use super::{Connection, SecureError, Socket};
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
@@ -24,10 +24,23 @@ use tracing_futures::Instrument;
 pub enum ConnectError {
     #[snafu(display("i/o error: {}", source))]
     #[snafu(visibility(pub))]
+    /// OS error when connecting
     Io { source: Error },
     #[snafu(display("could not secure connection: {}", source))]
     #[snafu(visibility(pub))]
+    /// Error encountered when attempting to secure an outgoing `Connection`
     Secure { source: SecureError },
+    #[snafu(display("underlying connector error: {}", reason))]
+    #[snafu(visibility(pub))]
+    Other { reason: String },
+}
+
+impl Into<ConnectError> for ErrorKind {
+    fn into(self) -> ConnectError {
+        use snafu::IntoError;
+
+        Io {}.into_error(self.into())
+    }
 }
 
 /// The `Connector` trait is used to connect to peers using some `Candidate`.
@@ -45,7 +58,7 @@ pub trait Connector: Send + Sync {
     /// * `candidate` - Information needed to connect to the remote peer,
     /// the concrete type depends on the actual `Connector` used
     async fn connect(
-        &mut self,
+        &self,
         pkey: &PublicKey,
         candidate: &Self::Candidate,
     ) -> Result<Connection, ConnectError> {
@@ -77,7 +90,7 @@ pub trait Connector: Send + Sync {
     /// after the connection has been established in order not to make the
     /// remote end close the connection.
     async fn establish(
-        &mut self,
+        &self,
         pkey: &PublicKey,
         candidate: &Self::Candidate,
     ) -> Result<Box<dyn Socket>, ConnectError>;

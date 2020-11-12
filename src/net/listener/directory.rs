@@ -3,7 +3,7 @@ use std::io::{Error, ErrorKind};
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use super::super::common::directory::{DirectoryRequest, DirectoryResponse};
+use super::super::common::directory::{Request, Response};
 use super::super::connector::Connector;
 use super::super::socket::Socket;
 use super::super::utils::resolve_addr;
@@ -101,7 +101,7 @@ impl DirectoryListener {
 
         Ok(task::spawn(
             async move {
-                let req = DirectoryRequest::Add((self_pkey, local).into());
+                let req = Request::Add((self_pkey, local).into());
                 let socket = connector
                     .establish(&self_pkey, &dir_addr)
                     .instrument(trace_span!("connect"))
@@ -134,8 +134,7 @@ impl DirectoryListener {
                     }
 
                     info!("registering with directory server");
-                    let resp =
-                        connection.receive_plain::<DirectoryResponse>().await;
+                    let resp = connection.receive_plain::<Response>().await;
 
                     if handle_response(resp, &mut timer, &duration)
                         .await
@@ -180,12 +179,12 @@ async fn check_connection(
 }
 
 async fn handle_response(
-    resp: Result<DirectoryResponse, ReceiveError>,
+    resp: Result<Response, ReceiveError>,
     timer: &mut Interval,
     duration: &Duration,
 ) -> Result<(), ()> {
     match resp {
-        Ok(DirectoryResponse::Ok) => {
+        Ok(Response::Ok) => {
             info!(
                 "renewed lease successfully, next renew in {} seconds",
                 duration.as_secs(),
@@ -264,18 +263,18 @@ mod test {
             );
 
             let request = connection
-                .receive_plain::<DirectoryRequest>()
+                .receive_plain::<Request>()
                 .await
                 .expect("read request failed");
 
             assert_eq!(
                 request,
-                DirectoryRequest::Add((srv_pub, list_addr).into()),
+                Request::Add((srv_pub, list_addr).into()),
                 "bad request"
             );
 
             connection
-                .send_plain(&DirectoryResponse::Ok)
+                .send_plain(&Response::Ok)
                 .await
                 .expect("response failed");
 

@@ -2,7 +2,7 @@ use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 
 use super::super::socket::utp::BufferedUtpStream;
-use super::{ConnectError, Connector, Socket};
+use super::*;
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
 
 use async_trait::async_trait;
@@ -12,7 +12,7 @@ use tokio::task;
 use tracing::{debug_span, info};
 use tracing_futures::Instrument;
 
-use utp::UtpSocket;
+use ::utp::UtpSocket;
 
 /// A `Connector` using the micro transport protocol
 pub struct Direct {
@@ -39,7 +39,7 @@ impl Connector for Direct {
             SocketAddr::V6(_) => (Ipv6Addr::UNSPECIFIED, 0).into(),
         };
 
-        let socket = UtpSocket::bind(local).await?;
+        let socket = UtpSocket::bind(local).await.context(Io)?;
 
         info!(
             "connecting {} -> {} using uTp",
@@ -47,7 +47,7 @@ impl Connector for Direct {
             candidate
         );
 
-        let (stream, driver) = socket.connect(*candidate).await?;
+        let (stream, driver) = socket.connect(*candidate).await.context(Io)?;
 
         info!("connection to {} established", candidate);
 
