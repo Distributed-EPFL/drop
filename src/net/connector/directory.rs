@@ -1,36 +1,52 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt;
 use std::future::Future;
-use std::io::{Error as IoError, ErrorKind};
+use std::io::{Error, ErrorKind};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use super::super::common::directory::{Info, Request, Response};
 use super::super::{Connection, ReceiveError, SendError, Socket};
-use super::{ConnectError, Connector};
-use crate as drop;
+use super::Other as ConnectOther;
+use super::*;
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
-use crate::error::Error;
 
 use async_trait::async_trait;
-
-use ccl::nestedmap::NestedMap;
 
 use futures::future::{select, Either, FutureExt};
 use futures::stream::StreamExt;
 
-use macros::error;
+use snafu::{ResultExt, Snafu};
 
 use tokio::sync::broadcast::{channel, Receiver, Sender};
+use tokio::sync::Mutex;
 use tokio::task;
 
-use tracing::{debug, error as log_error, info, trace_span, warn};
+use tracing::{debug, error, info, trace_span};
 use tracing_futures::Instrument;
 
-error! {
-    type: DirectoryError,
-    description: "directory server failure",
-    causes: (ConnectError, IoError, SendError, ReceiveError)
+#[derive(Debug, Snafu)]
+pub enum DirectoryError {
+    #[snafu(display("connect error when {}: {}", when, source))]
+    Connect {
+        when: &'static str,
+        source: ConnectError,
+    },
+    #[snafu(display("connect error when {}: {}", when, source))]
+    DirectoryIo { when: &'static str, source: Error },
+    #[snafu(display("connect error when {}: {}", when, source))]
+    Send {
+        when: &'static str,
+        source: SendError,
+    },
+    #[snafu(display("connect error when {}: {}", when, source))]
+    Receive {
+        when: &'static str,
+        source: ReceiveError,
+    },
+    #[snafu(display("{}", reason))]
+    Other { reason: String },
 }
 
 /// A `Connector` that makes use of a centralized directory in order
@@ -40,7 +56,7 @@ pub struct Directory {
     /// `Connector` that will be used to open `Connection`s to peers
     connector: Arc<dyn Connector<Candidate = SocketAddr>>,
     /// Channels for requests to handlers
-    handlers: NestedMap<Info, (Sender<Response>, Sender<Request>)>,
+    handlers: Mutex<HashMap<Info, (Sender<Response>, Sender<Request>)>>,
 }
 
 impl Directory {
@@ -55,7 +71,7 @@ impl Directory {
     ) -> Self {
         Self {
             connector: Arc::new(connector),
-            handlers: NestedMap::new(),
+            handlers: Mutex::new(HashMap::new()),
         }
     }
 
@@ -73,15 +89,22 @@ impl Directory {
         nr_peer: usize,
         info: &Info,
     ) -> Result<Vec<Info>, DirectoryError> {
-        let (mut rx, tx) = self.find_directory_handler(info).await?;
+        let (mut rx, tx) =
+            self.find_directory_handler(info).await.context(Connect {
+                when: "connecting to directory",
+            })?;
         let mut peers = Vec::with_capacity(nr_peer);
         let req = Request::Wait(nr_peer);
         let mut i = 0;
 
-        tx.send(req).map_err(|_| {
-            log_error!("failed to send message, handler died");
-            IoError::new(ErrorKind::NotConnected, "")
-        })?;
+        tx.send(req)
+            .map_err(|_| {
+                error!("failed to send message, handler died");
+                Error::new(ErrorKind::NotConnected, "")
+            })
+            .context(DirectoryIo {
+                when: "sending request",
+            })?;
 
         debug!("waiting for {} peers in the directory", nr_peer);
 
@@ -92,7 +115,7 @@ impl Directory {
                     peers.push((pkey, addr).into());
                 }
             } else {
-                log_error!("handler died, while waiting for directory");
+                error!("handler died, while waiting for directory");
             }
 
             i += 1;
@@ -113,33 +136,31 @@ impl Directory {
         let dir_addr = info.addr();
         let pkey = info.public();
 
-        // `Entry` API does not support async so really no way to avoid double
-        // lookup...
-        if self.handlers.get(info).is_none() {
-            let connection = self
-                .connector
-                .connect(pkey, &dir_addr)
-                .instrument(trace_span!("directory_connect"))
-                .await?;
-            let (resp_tx, _) = channel(32);
-            let (req_tx, req_rx) = channel(32);
-            let handler = Handler::spawn(req_rx, resp_tx.clone(), connection);
+        match self.handlers.lock().await.entry(*info) {
+            Entry::Occupied(e) => {
+                let (bsender, sender) = e.get();
+                Ok((bsender.subscribe(), sender.clone()))
+            }
+            Entry::Vacant(e) => {
+                let connection = self
+                    .connector
+                    .connect(pkey, &dir_addr)
+                    .instrument(trace_span!("directory_connect"))
+                    .await?;
+                let (resp_tx, _) = channel(32);
+                let (req_tx, req_rx) = channel(32);
+                let handler =
+                    Handler::spawn(req_rx, resp_tx.clone(), connection);
 
-            task::spawn(handler);
+                task::spawn(handler);
 
-            self.handlers.insert(*info, (resp_tx, req_tx));
+                let tuple = (resp_tx, req_tx);
+
+                e.insert(tuple.clone());
+
+                Ok((tuple.0.subscribe(), tuple.1))
+            }
         }
-
-        self.handlers
-            .get(info)
-            .map(|x| (x.0.subscribe(), x.1.clone()))
-            .ok_or_else(|| {
-                IoError::new(
-                    ErrorKind::NotConnected,
-                    "not connected to directory",
-                )
-                .into()
-            })
     }
 }
 
@@ -167,7 +188,10 @@ impl Connector for Directory {
         let (mut rx, tx) = self.find_directory_handler(directory_info).await?;
 
         if tx.send(Request::Fetch(*pkey)).is_err() {
-            return Err(IoError::new(ErrorKind::NotConnected, "").into());
+            ConnectOther {
+                reason: "no handler for directory",
+            }
+            .fail()?;
         }
 
         while let Ok(response) = rx.recv().await {
@@ -177,18 +201,20 @@ impl Connector for Directory {
                         return self.connector.establish(&pkey, &addr).await;
                     }
                 }
-                Response::NotFound(pkey) => {
-                    log_error!("directory does not known {}", pkey);
-                    return Err(
-                        IoError::new(ErrorKind::NotConnected, "").into()
-                    );
+                Response::NotFound(pkey) => ConnectOther {
+                    reason: "peer not found in directory",
                 }
-                _ => {
-                    return Err(IoError::new(ErrorKind::InvalidData, "").into());
+                .fail()?,
+                _ => ConnectOther {
+                    reason: "directory protocol violation",
                 }
+                .fail()?,
             }
         }
-        Err(IoError::new(ErrorKind::UnexpectedEof, "").into())
+        ConnectOther {
+            reason: "directory did not provide an address",
+        }
+        .fail()
     }
 }
 
@@ -235,7 +261,7 @@ impl Handler {
                                             if notifier.send(Response::Found(
                                                 pkey, *peer,
                                             )).is_err() {
-                                                log_error!("connector died, exiting handler");
+                                                error!("connector died, exiting handler");
                                                 return Ok(());
                                             };
                                         }
@@ -251,7 +277,7 @@ impl Handler {
                 }
 
                 if let Some(ref request) = request_opt.take() {
-                    connection.send_plain(request).await?;
+                    connection.send_plain(request).await.context(Send { when: "sending request" })?;
                 }
             }
         }
@@ -263,27 +289,23 @@ async fn process_response(
     response: Result<Response, ReceiveError>,
     cache: &mut HashMap<PublicKey, SocketAddr>,
     notifier: &mut Sender<Response>,
-) -> Result<(), ReceiveError> {
-    match response {
-        Err(e) => {
-            log_error!("bad response received: {}", e);
-            Err(e)
+) -> Result<(), DirectoryError> {
+    if let Ok(Response::Found(pkey, addr)) = response {
+        cache.insert(pkey, addr);
+    }
+
+    let response = response.context(Receive {
+        when: "reading response",
+    })?;
+
+    if notifier.send(response).is_err() {
+        error!("no one waiting for response");
+        Other {
+            reason: "no connector waiting for response",
         }
-        Ok(response) => {
-            match response {
-                Response::Found(pkey, addr) => {
-                    cache.insert(pkey, addr);
-                }
-                Response::NotFound(pkey) => warn!("peer {} not found", pkey),
-                Response::Ok => info!("end of directory listing"),
-            }
-            if notifier.send(response).is_err() {
-                log_error!("no one waiting for response");
-                Err(IoError::new(ErrorKind::NotConnected, "").into())
-            } else {
-                Ok(())
-            }
-        }
+        .fail()
+    } else {
+        Ok(())
     }
 }
 
