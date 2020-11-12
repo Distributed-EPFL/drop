@@ -24,45 +24,51 @@ use tracing::{error, info, trace_span};
 use tracing_futures::Instrument;
 
 /// A `Listener` that registers its local address with a given directory server.
-pub struct DirectoryListener {
+pub struct Directory {
     listener: Box<dyn Listener<Candidate = SocketAddr>>,
     exit_tx: Sender<()>,
 }
 
-impl DirectoryListener {
+impl Directory {
     /// Create a new `DirectoryListener` that will listen for incoming
     /// connection on the given address.
     ///
     /// # Arguments
     /// * `listener` The `Listener` to accept `Connection`s with
     /// * `connector` The `Connector` to use when connecting to the directory
-    /// * `dir_addr` The `Candidate`s used for reaching the directory server
+    /// * `directory` The `Candidate`s used for reaching the directory server
     ///
     /// # Example
     /// ```
     /// # use std::net::SocketAddr;
     /// use drop::crypto::key::exchange::{Exchanger, KeyPair};
-    /// use drop::net::listener::{DirectoryListener, ListenerError, TcpListener};
-    /// use drop::net::connector::TcpDirect;
+    /// use drop::net::{DirectoryListener, ListenerError, TcpConnector, TcpListener};
     ///
     /// # async fn doc() -> Result<(), ListenerError> {
     /// let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
     /// let exchanger = Exchanger::random();
-    /// let listener = Box::new(TcpListener::new(addr, exchanger.clone()).await?);
-    /// let connector = Box::new(TcpDirect::new(exchanger));
+    /// let listener = TcpListener::new(addr, exchanger.clone()).await?;
+    /// let connector = TcpConnector::new(exchanger);
     /// let dir_pubkey = *KeyPair::random().public();
     /// let dir_addr = "somewhere.com:80";
     /// let mut listener = DirectoryListener::new(listener, connector, dir_addr)
     ///     .await?;
     /// # Ok(()) }
     /// ```
-    pub async fn new<A: ToSocketAddrs + fmt::Display>(
-        listener: Box<dyn Listener<Candidate = SocketAddr>>,
-        connector: Box<dyn Connector<Candidate = SocketAddr>>,
-        dir_addr: A,
-    ) -> Result<Self, ListenerError> {
-        let resolved = resolve_addr(dir_addr).await.context(Io)?;
+    pub async fn new<A, C, L>(
+        listener: L,
+        connector: C,
+        directory: A,
+    ) -> Result<Self, ListenerError>
+    where
+        A: ToSocketAddrs + fmt::Display,
+        C: Connector<Candidate = SocketAddr> + 'static,
+        L: Listener<Candidate = SocketAddr> + 'static,
+    {
+        let resolved = resolve_addr(directory).await.context(Io)?;
         let (exit_tx, exit_rx) = channel();
+        let listener = Box::new(listener);
+        let connector = Box::new(connector);
 
         let mut listener = Self { listener, exit_tx };
 
@@ -82,12 +88,12 @@ impl DirectoryListener {
     ///
     /// # Arguments
     /// `connector` The `Connector` used when connecting to directory
-    /// `dir_addr` Address of the directory server
+    /// `directory` Address of the directory server
     /// `exit_rx` The receiving of the channel for exit notice
     async fn register(
         &mut self,
         mut connector: Box<dyn Connector<Candidate = SocketAddr>>,
-        dir_addr: SocketAddr,
+        directory: SocketAddr,
         mut exit_rx: Receiver<()>,
     ) -> Result<JoinHandle<()>, ListenerError> {
         let local = self
@@ -102,35 +108,35 @@ impl DirectoryListener {
         Ok(task::spawn(
             async move {
                 let req = Request::Add((self_pkey, local).into());
-                let socket = connector
-                    .establish(&self_pkey, &dir_addr)
+                let mut connection = connector
+                    .connect(&self_pkey, &directory)
                     .instrument(trace_span!("connect"))
                     .await
                     .expect("failed to connect to directory");
                 let duration = Duration::from_secs(600);
                 let mut timer = interval(duration);
-                let mut connection = Connection::new(socket);
 
                 info!("connected to directory!");
 
                 loop {
                     if exit_rx.try_recv().is_ok() {
+                        info!("listener is dead, stopping renewal");
                         return;
                     }
 
-                    // if the connection can't be established we probably moved anyway
-                    check_connection(
-                        connector.as_mut(),
-                        &mut connection,
-                        &self_pkey,
-                        dir_addr,
-                    )
-                    .await
-                    .expect("failed to re-establish connection to directory");
-
                     if let Err(e) = connection.send_plain(&req).await {
                         error!("failed to send message: {}", e);
-                        continue;
+                        // if the connection can't be established we probably moved anyway
+                        check_connection(
+                            connector.as_mut(),
+                            &mut connection,
+                            &self_pkey,
+                            directory,
+                        )
+                        .await
+                        .expect(
+                            "failed to re-establish connection to directory",
+                        );
                     }
 
                     info!("registering with directory server");
@@ -145,15 +151,14 @@ impl DirectoryListener {
                 }
             }
             .instrument(
-                trace_span!("directory_renew", local=%local, server=%dir_addr),
+                trace_span!("directory_renew", local=%local, server=%directory),
             ),
         ))
     }
 
     /// Close this `Listener` and stops the renewing of the directory entry.
-    pub async fn close(self) -> Result<(), ListenerError> {
+    pub async fn close(self) {
         let _ = self.exit_tx.send(());
-        Ok(())
     }
 }
 
@@ -163,17 +168,15 @@ async fn check_connection(
     pkey: &PublicKey,
     dir_addr: SocketAddr,
 ) -> Result<(), ()> {
-    if connection.is_broken() {
-        error!("lost connection to directory, reconnecting");
+    error!("lost connection to directory, reconnecting");
 
-        *connection = match connector.establish(&pkey, &dir_addr).await {
-            Ok(socket) => Connection::new(socket),
-            Err(e) => {
-                error!("failed to reconnect to directory: {}", e);
-                return Err(());
-            }
+    *connection = match connector.connect(&pkey, &dir_addr).await {
+        Ok(connection) => connection,
+        Err(e) => {
+            error!("failed to reconnect to directory: {}", e);
+            return Err(());
         }
-    }
+    };
 
     Ok(())
 }
@@ -204,7 +207,7 @@ async fn handle_response(
 }
 
 #[async_trait]
-impl Listener for DirectoryListener {
+impl Listener for Directory {
     type Candidate = SocketAddr;
 
     async fn establish(&mut self) -> Result<Box<dyn Socket>, ListenerError> {
@@ -224,7 +227,7 @@ impl Listener for DirectoryListener {
     }
 }
 
-impl fmt::Display for DirectoryListener {
+impl fmt::Display for Directory {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "directory listener at {}", self.local_addr().unwrap(),)
     }
@@ -232,10 +235,9 @@ impl fmt::Display for DirectoryListener {
 
 #[cfg(test)]
 mod test {
-    use super::super::super::connector::TcpDirect;
-    use super::super::super::listener::TcpListener;
     use super::*;
     use crate::crypto::key::exchange::Exchanger;
+    use crate::net::{Connector, Listener, TcpConnector, TcpListener};
     use crate::test::*;
 
     use tokio::task;
@@ -258,9 +260,8 @@ mod test {
                 .await
                 .expect("listen failed");
 
-            let mut connection = Connection::new(
-                listener.establish().await.expect("accept failed"),
-            );
+            let mut connection =
+                listener.accept().await.expect("accept failed");
 
             let request = connection
                 .receive_plain::<Request>()
@@ -278,7 +279,7 @@ mod test {
                 .await
                 .expect("response failed");
 
-            let mut connector = TcpDirect::new(Exchanger::random());
+            let connector = TcpConnector::new(Exchanger::random());
 
             connector
                 .connect(&srv_pub, &list_addr)
@@ -286,14 +287,10 @@ mod test {
                 .expect("connect failed");
         });
 
-        let connector = TcpDirect::new(server_exchanger);
-        let mut listener = DirectoryListener::new(
-            Box::new(dir_listener),
-            Box::new(connector),
-            dir_server,
-        )
-        .await
-        .expect("dir_bind failed");
+        let connector = TcpConnector::new(server_exchanger);
+        let mut listener = Directory::new(dir_listener, connector, dir_server)
+            .await
+            .expect("dir_bind failed");
 
         listener.accept().await.expect("accept failed");
 

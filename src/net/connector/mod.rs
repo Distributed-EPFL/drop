@@ -1,11 +1,14 @@
+/// Connector that uses a central directory server to find peers
 mod directory;
-pub use directory::*;
+pub use directory::Directory;
 
+/// Tcp related connectors
 mod tcp;
-pub use tcp::*;
+pub use tcp::Direct as Tcp;
 
+/// uTP connector
 mod utp;
-pub use self::utp::*;
+pub use self::utp::Direct as Utp;
 
 use std::fmt;
 use std::io::{Error, ErrorKind};
@@ -14,6 +17,8 @@ use super::{Connection, SecureError, Socket};
 use crate::crypto::key::exchange::{Exchanger, PublicKey};
 
 use async_trait::async_trait;
+
+use futures::future;
 
 use snafu::{ResultExt, Snafu};
 
@@ -54,7 +59,7 @@ pub trait Connector: Send + Sync {
     /// the `Connector`
     ///
     /// # Arguments
-    /// * `pkey` - Public key of the remote peer we are connectiong to
+    /// * `pkey` - Public key of the remote peer we are connecting to
     /// * `candidate` - Information needed to connect to the remote peer,
     /// the concrete type depends on the actual `Connector` used
     async fn connect(
@@ -65,8 +70,9 @@ pub trait Connector: Send + Sync {
         let socket = self
             .establish(pkey, candidate)
             .instrument(debug_span!("establish"))
-            .await?;
-        let mut connection = Connection::new(socket);
+            .await;
+
+        let mut connection = Connection::new(socket?);
 
         info!("connected to {}, exchanging keys", candidate);
 
@@ -99,10 +105,27 @@ pub trait Connector: Send + Sync {
     /// given `PublicKey`. Only returns a `Connection` to the fastest
     /// responding `Candidate`
     async fn connect_any(
-        &mut self,
-        _pkey: &PublicKey,
-        _candidates: &[Self::Candidate],
+        &self,
+        pkey: &PublicKey,
+        candidates: &[Self::Candidate],
     ) -> Result<Connection, ConnectError> {
-        unimplemented!() // FIXME: need join! from tokio 0.1 to be ported
+        let futures: Vec<_> =
+            candidates.iter().map(|x| self.connect(pkey, x)).collect();
+
+        future::select_all(futures).await.0
+    }
+
+    /// Connect to many different peers using this `Connector`. All the
+    /// `Connection`s will be established in parallel.
+    async fn connect_many(
+        &self,
+        peers: &[(Self::Candidate, PublicKey)],
+    ) -> Vec<Result<Connection, ConnectError>> {
+        let futures: Vec<_> = peers
+            .iter()
+            .map(|(addr, pkey)| self.connect(pkey, addr))
+            .collect();
+
+        future::join_all(futures).await
     }
 }
