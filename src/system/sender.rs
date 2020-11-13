@@ -6,7 +6,7 @@ use std::sync::Arc;
 use super::Message;
 use crate::async_trait;
 use crate::crypto::key::exchange::PublicKey;
-use crate::net::ConnectionWrite;
+use crate::net::{ConnectionWrite, SendError};
 
 use futures::future;
 
@@ -24,7 +24,10 @@ pub enum SenderError {
     NoSuchPeer { remote: PublicKey },
     #[snafu(display("connection with {} is broken", remote))]
     /// The `Connection` encountered an error while sending
-    ConnectionError { remote: PublicKey },
+    ConnectionError {
+        remote: PublicKey,
+        source: SendError,
+    },
 
     #[snafu(display("{} send errors", errors.len()))]
     /// Many send errors were encountered
@@ -117,7 +120,6 @@ impl<M: Message + 'static> Sender<M> for NetworkSender<M> {
             .await
             .send(message.deref())
             .await
-            .map_err(|_| snafu::NoneError) // FIXME: once drop has erros merged
             .context(ConnectionError { remote: *pkey })
     }
 
@@ -197,68 +199,6 @@ where
 
     async fn add_connection(&self, write: ConnectionWrite) {
         self.sender.add_connection(write).await
-    }
-}
-
-/// A `Sender` that can be use to transform messages before passing them to
-/// an underlying `Sneder`.
-pub struct WrappingSender<F, I, O, S>
-where
-    I: Message + 'static,
-    O: Message + 'static,
-    S: Sender<O>,
-    F: Fn(&I) -> Result<O, SenderError>,
-{
-    sender: Arc<S>,
-    closure: F,
-    _i: PhantomData<I>,
-    _o: PhantomData<O>,
-}
-
-impl<F, I, O, S> WrappingSender<F, I, O, S>
-where
-    I: Message + 'static,
-    O: Message + 'static,
-    S: Sender<O>,
-    F: Fn(&I) -> Result<O, SenderError> + Send + Sync,
-{
-    /// Create a new `WrappingSender` that will pass each message through
-    /// the specified closure before passing it on to the underlying `Sender`
-    pub fn new(sender: Arc<S>, closure: F) -> Self {
-        Self {
-            closure,
-            sender,
-            _i: PhantomData,
-            _o: PhantomData,
-        }
-    }
-}
-
-#[async_trait]
-impl<F, I, O, S> Sender<I> for WrappingSender<F, I, O, S>
-where
-    I: Message + 'static,
-    O: Message + 'static,
-    S: Sender<O>,
-    F: Fn(&I) -> Result<O, SenderError> + Send + Sync,
-{
-    async fn send(
-        &self,
-        message: Arc<I>,
-        to: &PublicKey,
-    ) -> Result<(), SenderError> {
-        let new = (self.closure)(message.deref())
-            .map_err(|_| snafu::NoneError)
-            .context(ConnectionError { remote: *to })?;
-        self.sender.send(Arc::new(new), to).await
-    }
-
-    async fn add_connection(&self, write: ConnectionWrite) {
-        self.sender.add_connection(write).await
-    }
-
-    async fn keys(&self) -> Vec<PublicKey> {
-        self.sender.keys().await
     }
 }
 
