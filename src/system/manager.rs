@@ -1,20 +1,19 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use super::{Message, NetworkSender, Sampler, Sender, System};
+use super::sender::NetworkSender;
+use super::{Message, Sampler, Sender, System};
 
 use crate::async_trait;
 use crate::crypto::key::exchange::PublicKey;
 use crate::net::{Connection, ConnectionRead, ConnectionWrite};
 
-use futures::future::{self, FutureExt};
 use futures::{Stream, StreamExt};
 
 use tokio::sync::mpsc;
-use tokio::task;
+use tokio::task::{self, JoinHandle};
 
-use tracing::{debug, debug_span, error, info, warn};
-use tracing_futures::Instrument;
+use tracing::{debug, error, info, warn};
 
 #[async_trait]
 /// Trait used to process incoming messages from a `SystemManager`
@@ -52,14 +51,15 @@ pub trait Handle<M>: Send + Sync {
     /// Type of errors returned by this `Handle` type
     type Error: std::error::Error;
 
-    /// Deliver a message using this `Handle`. This method will block until
-    /// either: <br />
-    /// 1. the delivery fails, then the function will return `None`
-    /// 2. the delivery suceeds then the function will return `Some`(message)
+    /// Deliver a message using this `Handle`. <br />
+    /// This method returns `Ok` if some message can be delivered or an `Err`
+    /// otherwise
     async fn deliver(&mut self) -> Result<M, Self::Error>;
 
-    /// Poll this `Handle` for delivery, returning immediately with `None` if no
-    /// message is available for delivery or `Some`
+    /// Poll this `Handle` for delivery, returning immediately with `Ok(None)`
+    /// if no message is available for delivery or `Ok(Some)` if a message is
+    /// ready to be delivered. `Err` is returned like `Handle::deliver`
+    /// otherwise
     fn try_deliver(&mut self) -> Result<Option<M>, Self::Error>;
 
     /// Starts broadcasting a message using this `Handle`
@@ -111,7 +111,6 @@ macro_rules! implement_handle {
             }
         }
 
-        #[allow(clippy::redundant_closure_call)]
         #[async_trait]
         impl<M: Message> Handle<M> for $name<M> {
             type Error = $error;
@@ -217,8 +216,6 @@ impl<M: Message + 'static> SystemManager<M> {
         mut processor: P,
         sampler: S,
     ) -> H {
-        let mut receiver = Self::receive(self.reads);
-
         info!("beginning system setup");
 
         debug!("setting up dispatcher...");
@@ -227,19 +224,26 @@ impl<M: Message + 'static> SystemManager<M> {
         let sender = Arc::new(NetworkSender::new(self.writes));
         let sender_add = sender.clone();
         let mut incoming = self.incoming;
+        let (mut read_tx, read_rx) = mpsc::channel(8);
 
         task::spawn(async move {
             while let Some(connection) = incoming.next().await {
-                // TODO: send the read end of the connection to receive task
-                if let Some((_, write)) = connection.split() {
-                    debug!(
+                if let Some((read, write)) = connection.split() {
+                    info!(
                         "new incoming connection from {}",
                         write.remote_pkey()
                     );
                     sender_add.add_connection(write).await;
+
+                    if let Err(e) = read_tx.send(read).await {
+                        error!("receive task isn't running anymore: {}", e);
+                        return;
+                    }
                 }
             }
         });
+
+        let mut receiver = Self::new_receive(self.reads, read_rx);
 
         let handle = processor.output(sampler, sender.clone()).await;
         let processor = Arc::new(processor);
@@ -253,7 +257,11 @@ impl<M: Message + 'static> SystemManager<M> {
                         let processor = processor.clone();
 
                         task::spawn(async move {
-                            processor.process(message, pkey, sender).await;
+                            match processor.process(message, pkey, sender).await
+                            {
+                                Err(e) => error!("processing error :{}", e),
+                                _ => return,
+                            }
                         });
                     }
                     None => {
@@ -269,91 +277,58 @@ impl<M: Message + 'static> SystemManager<M> {
         handle
     }
 
-    fn receive(
-        read: Vec<ConnectionRead>,
-    ) -> mpsc::Receiver<(PublicKey, Arc<M>)> {
-        let (mut sender, receiver) = mpsc::channel(64);
+    fn new_receive<I, S>(
+        reads: I,
+        mut read_rx: S,
+    ) -> mpsc::Receiver<(PublicKey, Arc<M>)>
+    where
+        I: IntoIterator<Item = ConnectionRead>,
+        S: Stream<Item = ConnectionRead> + Unpin + Send + 'static,
+    {
+        let (tx, rx) = mpsc::channel(32);
 
-        let task = async move {
-            debug!("receive task started for {} conections", read.len());
+        reads.into_iter().for_each(|connection| {
+            Self::receive_task(connection, tx.clone());
+        });
 
-            let mut future =
-                Some(future::select_all(read.into_iter().map(|mut x| {
-                    async move {
-                        let m: Result<M, _> = x.receive().await;
+        task::spawn(async move {
+            while let Some(connection) = read_rx.next().await {
+                Self::receive_task(connection, tx.clone());
+            }
+        });
 
-                        (m, x)
-                    }
-                    .boxed()
-                })));
-            let mut next = None;
+        rx
+    }
+
+    fn receive_task(
+        mut connection: ConnectionRead,
+        mut tx: mpsc::Sender<(PublicKey, Arc<M>)>,
+    ) -> JoinHandle<()> {
+        task::spawn(async move {
+            let remote = *connection.remote_pkey();
 
             loop {
-                let (res, _, mut others) = if let Some(initial) = future.take()
-                {
-                    initial
-                } else {
-                    next.take()?
-                }
-                .await;
-
-                let output = match res {
-                    (Ok(msg), mut connection) => {
-                        let message = Arc::new(msg);
-                        let pkey = *connection.remote_pkey();
-
-                        debug!("received message {:?} from {}", message, pkey);
-
-                        others.push(
-                            async move {
-                                let message = connection.receive().await;
-
-                                (message, connection)
-                            }
-                            .boxed(),
-                        );
-
-                        next = Some(future::select_all(others));
-
-                        (pkey, message)
-                    }
-                    (Err(e), connection) => {
-                        error!(
-                            "connection broken with {}, {}",
-                            e,
-                            connection.remote_pkey()
-                        );
-
-                        if others.is_empty() {
-                            warn!("no more active connections, exiting task");
-                            break;
-                        } else {
-                            debug!("still {} connections alive", others.len());
-                            next = Some(future::select_all(others));
-                            continue;
+                match connection.receive().await {
+                    Ok(msg) => {
+                        if tx.send((remote, Arc::new(msg))).await.is_err() {
+                            info!("manager is not running anymore exiting");
+                            return;
                         }
                     }
-                };
-
-                if sender.send(output).await.is_err() {
-                    error!("system manager not running, exiting...");
-                    break;
+                    Err(e) => {
+                        error!("receive error: {}", e);
+                        return;
+                    }
                 }
             }
-            None::<usize>
-        }
-        .instrument(debug_span!("manager_receive"));
-
-        task::spawn(task);
-
-        receiver
+        })
     }
 }
 
 #[cfg(test)]
 mod test {
+    use super::super::sampler::AllSampler;
     use super::super::test::*;
-    use super::super::AllSampler;
     use super::*;
 
     use std::sync::atomic::{AtomicUsize, Ordering};

@@ -1,45 +1,33 @@
-use std::env;
 use std::future::Future;
 use std::marker::PhantomData;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 
-use super::sampler::AllSampler;
-use super::sender::CollectingSender;
-use super::{Message, Processor, System};
-
-use crate::crypto::key::exchange::{Exchanger, PublicKey};
-use crate::net::{Connection, Listener, TcpConnector, TcpListener};
+use super::*;
+use crate::crypto::key::exchange::{Exchanger, KeyPair, PublicKey};
+use crate::net::*;
+use crate::system::sampler::AllSampler;
+use crate::system::sender::CollectingSender;
+use crate::system::{Message, Processor, System};
 
 use futures::future;
 
 use tokio::task::{self, JoinHandle};
 
-use tracing::{info, trace, Level};
-use tracing_subscriber::FmtSubscriber;
+use tracing::{info, trace};
 
-static PORT_OFFSET: AtomicU16 = AtomicU16::new(0);
+/// Get the next available port for testing purposes
+pub fn next_test_port() -> u16 {
+    static PORT_OFFSET: AtomicU16 = AtomicU16::new(0);
+    const PORT_START: u16 = 9600;
 
-/// Initialize an asynchronous logger for test environment
-pub fn init_logger() {
-    let var: Option<Level> =
-        env::var("RUST_LOG").ok().map(|x| x.parse().ok()).flatten();
-
-    if let Some(level) = var {
-        let subscriber =
-            FmtSubscriber::builder().with_max_level(level).finish();
-
-        let _ = tracing::subscriber::set_global_default(subscriber);
-    }
+    PORT_START + PORT_OFFSET.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Get the next available `SocketAddr` that can be used for testing
 pub fn next_test_ip4() -> SocketAddr {
-    (
-        Ipv4Addr::LOCALHOST,
-        10000 + PORT_OFFSET.fetch_add(1, Ordering::AcqRel),
-    )
-        .into()
+    (Ipv4Addr::new(127, 0, 0, 1), next_test_port()).into()
 }
 
 pub fn test_addrs(count: usize) -> Vec<(Exchanger, SocketAddr)> {
@@ -114,9 +102,8 @@ pub async fn create_system<
     )
 }
 
-pub(crate) fn keyset(count: usize) -> impl Iterator<Item = PublicKey> + Clone {
-    use crate::crypto::key::exchange::KeyPair;
-
+#[allow(dead_code)]
+pub fn keyset(count: usize) -> impl Iterator<Item = PublicKey> + Clone {
     (0..count).map(|_| *KeyPair::random().public())
 }
 

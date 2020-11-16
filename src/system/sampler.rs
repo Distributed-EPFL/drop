@@ -5,24 +5,47 @@ use crate::crypto::key::exchange::PublicKey;
 
 use peroxide::fuga::*;
 
-use snafu::{OptionExt, Snafu};
+use snafu::{ensure, OptionExt, Snafu};
 
 #[derive(Snafu, Debug)]
+#[snafu(visibility(pub))]
 /// Error returned when sampling fails
 pub enum SampleError {
-    #[snafu(display("unable to compute size"))]
+    #[snafu(display("unable to compute size from iterator"))]
     /// Unable to compute size from supplied iterator
     BadIterator,
+    #[snafu(display(
+        "too few peers ({}) to achieve required sample size ({})",
+        actual,
+        expected
+    ))]
+    /// Amount of keys is too low to satisfy expected size
+    TooSmall { expected: usize, actual: usize },
 }
 
 /// Trait used when sampling a set of known peers
 #[async_trait]
 pub trait Sampler: Send + Sync {
     /// Take a sample of keys from the provided `Sender`
-    async fn sample<I: IntoIterator<Item = PublicKey> + Send>(
+    async fn sample<I: Iterator<Item = PublicKey> + Send>(
         &self,
         keys: I,
-        expected_size: usize,
+        expected: usize,
+    ) -> Result<HashSet<PublicKey>, SampleError> {
+        let actual: usize = keys.size_hint().1.context(BadIterator)?;
+
+        ensure!(expected <= actual, TooSmall { expected, actual });
+
+        self.sample_unchecked(keys, expected, actual).await
+    }
+
+    /// Takes a sample from an `Iterator` already knowing its bounds.
+    /// This is the only method that should be implemented in custom `Sampler`s
+    async fn sample_unchecked<I: Iterator<Item = PublicKey> + Send>(
+        &self,
+        keys: I,
+        expected: usize,
+        total: usize,
     ) -> Result<HashSet<PublicKey>, SampleError>;
 }
 
@@ -38,19 +61,17 @@ impl Default for PoissonSampler {
 
 #[async_trait]
 impl Sampler for PoissonSampler {
-    async fn sample<I: IntoIterator<Item = PublicKey> + Send>(
+    async fn sample_unchecked<I: Iterator<Item = PublicKey> + Send>(
         &self,
         keys: I,
         expected: usize,
+        size: usize,
     ) -> Result<HashSet<PublicKey>, SampleError> {
-        let iter = keys.into_iter();
-        let size: usize = iter.size_hint().1.context(BadIterator)?;
-
         let prob = expected as f64 / size as f64;
         let sampler = Bernoulli(prob);
         let mut sample = sampler.sample(size as usize);
 
-        Ok(iter
+        Ok(keys
             .filter(move |_| {
                 if let Some(x) = sample.pop() {
                     (x - 1.0).abs() < f64::EPSILON
@@ -74,21 +95,22 @@ impl Default for AllSampler {
 
 #[async_trait]
 impl Sampler for AllSampler {
-    async fn sample<I: IntoIterator<Item = PublicKey> + Send>(
+    async fn sample_unchecked<I: Iterator<Item = PublicKey> + Send>(
         &self,
         keys: I,
         _: usize,
+        _: usize,
     ) -> Result<HashSet<PublicKey>, SampleError> {
-        Ok(keys.into_iter().collect())
+        Ok(keys.collect())
     }
 }
 
 #[cfg(test)]
 mod test {
+    use super::super::sampler::{AllSampler, PoissonSampler};
+    use super::super::sender::CollectingSender;
     use super::super::test::*;
-    use super::super::{
-        AllSampler, CollectingSender, Message, PoissonSampler, Sender,
-    };
+    use super::super::{Message, Sender};
     use super::*;
 
     impl Message for () {}
@@ -123,7 +145,7 @@ mod test {
         let keys = sender.keys().await;
 
         D::default()
-            .sample(keys, expected)
+            .sample(keys.iter().copied(), expected)
             .await
             .expect("sampling failed")
     }

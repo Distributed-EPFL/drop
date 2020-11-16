@@ -1,5 +1,6 @@
 use std::env;
 
+use tracing::subscriber;
 use tracing_subscriber::FmtSubscriber;
 
 /// Initialize an asynchronous logger for test environment
@@ -8,6 +9,6 @@ pub fn init_logger() {
         let subscriber =
             FmtSubscriber::builder().with_max_level(level).finish();
 
-        let _ = tracing::subscriber::set_global_default(subscriber);
+        let _ = subscriber::set_global_default(subscriber);
     }
 }

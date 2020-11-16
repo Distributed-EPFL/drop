@@ -1,8 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::future::Future;
 use std::hash::Hash;
-use std::net::Ipv4Addr;
+use std::net::{
+    IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6,
+};
+use std::sync::Arc;
 
 use crate::crypto::key::exchange::PublicKey;
 use crate::net::{
@@ -20,14 +23,19 @@ use tokio::task::{self, JoinHandle};
 use tracing::{debug_span, error, info, warn};
 use tracing_futures::Instrument;
 
-mod manager;
-pub use manager::*;
+pub use drop_derive::message;
 
-mod sender;
-pub use sender::*;
+/// System manager and related traits
+pub mod manager;
+pub use manager::Processor;
 
-mod sampler;
-pub use sampler::*;
+/// Wrappers around collections of `Connection` for easier use
+pub mod sender;
+pub use sender::{Sender, SenderError};
+
+/// Sampling utilities
+pub mod sampler;
+pub use sampler::{SampleError, Sampler};
 
 #[cfg(test)]
 pub mod test;
@@ -52,10 +60,48 @@ macro_rules! impl_m {
     };
 }
 
-impl_m!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, String);
+impl_m!(
+    char,
+    bool,
+    u8,
+    i8,
+    u16,
+    i16,
+    u32,
+    i32,
+    u64,
+    i64,
+    u128,
+    i128,
+    isize,
+    usize,
+    String,
+    SocketAddr,
+    SocketAddrV4,
+    SocketAddrV6,
+    IpAddr,
+    Ipv4Addr,
+    Ipv6Addr
+);
 
-impl<T: Message> Message for Vec<T> {}
-impl<T: Message> Message for std::collections::VecDeque<T> {}
+macro_rules! impl_g {
+    ( $($t:ty),* ) => {
+        $(impl<T: Message> Message for $t {})*
+    }
+}
+
+impl_g!(Vec<T>, VecDeque<T>, Box<T>, Arc<T>);
+
+macro_rules! impl_a {
+    ( $($sz:expr),* ) => {
+        $( impl<T: Message> Message for [T; $sz] {} )*
+    };
+}
+
+impl_a!(
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+    21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32
+);
 
 /// A representation of a distributed `System` that manages connections to and
 /// from other peers.
