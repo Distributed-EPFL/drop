@@ -18,9 +18,6 @@ pub enum HashError {
     #[snafu(display("failed to serialize data: {}", source))]
     SerializeError { source: BincodeError },
 
-    #[snafu(display("read failed: {}", source))]
-    ReadError { source: std::io::Error },
-
     #[snafu(display("sodium error"))]
     SodiumError { backtrace: Backtrace },
 }
@@ -44,13 +41,16 @@ impl Hasher {
     }
 
     /// Feed a chunk of bytes to this hasher
-    pub fn update(&mut self, chunk: &[u8]) -> Result<(), ()> {
-        self.0.update(chunk)
+    pub fn update(&mut self, chunk: &[u8]) -> Result<(), HashError> {
+        self.0.update(chunk).map_err(|_| SodiumError.build())
     }
 
     /// Considers the data complete and returns the resulting hash
-    pub fn finalize(self) -> Result<Digest, ()> {
-        self.0.finalize().map(|x| x.into())
+    pub fn finalize(self) -> Result<Digest, HashError> {
+        self.0
+            .finalize()
+            .map(|x| x.into())
+            .map_err(|_| SodiumError.build())
     }
 }
 

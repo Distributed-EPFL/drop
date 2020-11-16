@@ -145,11 +145,10 @@ impl System {
         .map(|(pkey, connection)| (pkey, connection))
         .collect::<HashMap<_, _>>();
 
-        let mut result = Self::default();
-
-        result.connections = connections;
-
-        result
+        Self {
+            connections,
+            ..Default::default()
+        }
     }
 
     /// Create a new `System` using a list of peers and some `Connector`
