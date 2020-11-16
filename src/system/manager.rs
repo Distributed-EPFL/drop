@@ -257,10 +257,10 @@ impl<M: Message + 'static> SystemManager<M> {
                         let processor = processor.clone();
 
                         task::spawn(async move {
-                            match processor.process(message, pkey, sender).await
+                            if let Err(e) =
+                                processor.process(message, pkey, sender).await
                             {
-                                Err(e) => error!("processing error :{}", e),
-                                _ => return,
+                                error!("processing error :{}", e);
                             }
                         });
                     }
