@@ -22,13 +22,12 @@ pub enum SenderError {
     #[snafu(display("peer {} is unknown", remote))]
     /// The destination `PublicKey` was not known by this `Sender`
     NoSuchPeer { remote: PublicKey },
-    #[snafu(display("connection with {} is broken", remote))]
+    #[snafu(display("connection with {} is broken: {}", remote, source))]
     /// The `Connection` encountered an error while sending
     ConnectionError {
         remote: PublicKey,
         source: SendError,
     },
-
     #[snafu(display("{} send errors", errors.len()))]
     /// Many send errors were encountered
     ManyErrors { errors: Vec<SenderError> },
@@ -95,13 +94,6 @@ impl<M: Message> NetworkSender<M> {
             _m: PhantomData,
         }
     }
-
-    /// Get an `Iterator` of all known keys in this `Sender`.
-    /// FIXME: migrate this to `impl Iterator` if it is ever allowed in trait
-    /// functions
-    pub async fn keys(&self) -> Vec<PublicKey> {
-        self.connections.read().await.keys().copied().collect()
-    }
 }
 
 #[async_trait]
@@ -137,12 +129,7 @@ impl<M: Message + 'static> Sender<M> for NetworkSender<M> {
     }
 
     async fn keys(&self) -> Vec<PublicKey> {
-        self.connections
-            .read()
-            .await
-            .iter()
-            .map(|(key, _)| *key)
-            .collect()
+        self.connections.read().await.keys().copied().collect()
     }
 }
 
