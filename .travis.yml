@@ -38,7 +38,7 @@ script:
 - cargo fmt --all -- --check
 - cargo clippy --all-targets --all-features -- -D warnings
 - cargo build
-- cargo test
+- cargo test --all-features
 
 after_success: |
   wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
