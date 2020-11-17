@@ -355,9 +355,6 @@ mod test {
         }
     }
 
-    impl Message for PublicKey {}
-    impl<M: Message> Message for (PublicKey, M) {}
-
     #[tokio::test(threaded_scheduler)]
     async fn receive_from_manager() {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
