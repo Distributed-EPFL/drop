@@ -81,7 +81,11 @@ impl_m!(
     SocketAddrV6,
     IpAddr,
     Ipv4Addr,
-    Ipv6Addr
+    Ipv6Addr,
+    crate::crypto::sign::Signature,
+    crate::crypto::sign::PublicKey,
+    crate::crypto::hash::Digest,
+    crate::crypto::key::exchange::PublicKey
 );
 
 macro_rules! impl_g {
@@ -92,6 +96,7 @@ macro_rules! impl_g {
 
 impl_g!(Vec<T>, VecDeque<T>, Box<T>, Arc<T>);
 
+/// Implement `Message` for array of sizes up to 32
 macro_rules! impl_a {
     ( $($sz:expr),* ) => {
         $( impl<T: Message> Message for [T; $sz] {} )*
@@ -102,6 +107,28 @@ impl_a!(
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
     21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32
 );
+
+/// Implement Message for tuples of types that implement Message
+macro_rules! impl_t {
+    ($(
+        $Tuple:ident { $($T:ident )+ }
+    ),+) => {
+        $(
+            impl<$($T:Message),+> Message for ($($T,)+) {}
+        )+
+    }
+}
+
+impl_t! {
+    T1 { A },
+    T2 { A B },
+    T3 { A B C },
+    T4 { A B C D },
+    T5 { A B C D E },
+    T6 { A B C D E F },
+    T7 { A B C D E F G},
+    T8 { A B C D E F G H }
+}
 
 /// A representation of a distributed `System` that manages connections to and
 /// from other peers.
