@@ -10,7 +10,7 @@ sodiumoxide = "0.2"
 snafu = "~0.6"
 serde = { version = "~1.0", features = [ "derive", "rc" ] }
 bincode = "~1.2"
-tokio = { version = "~0.2", features = [ "full" ], optional = true }
+tokio = { version = "~0.2", features = [ "net", "rt-util", "stream" ], optional = true }
 tokio-utp = { version = "0.8.0-alpha1", branch = "async", git = "https://github.com/Distributed-EPFL/tokio-utp", optional = true }
 futures = { version = "0.3", optional = true }
 async-trait = { version = "0.1", optional = true }
