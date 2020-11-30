@@ -345,10 +345,7 @@ impl<Data: Syncable> Node<Data> {
 
     /// Returns true for empty leaves, and false for everything else
     pub fn is_empty(&self) -> bool {
-        match self {
-            Node::Empty => true,
-            _ => false,
-        }
+        matches!(self, Node::Empty)
     }
 
     /// Returns the node's label. This is a hash of the hashes for a branch,

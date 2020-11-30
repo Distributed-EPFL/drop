@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use super::errors::PathLengthError;
 use crate::crypto::hash::{hash, Digest, SIZE as HASH_SIZE};
 use crate::crypto::HashError;
@@ -80,9 +78,6 @@ impl PartialEq for Prefix {
     fn eq(&self, other: &Prefix) -> bool {
         if self.depth == other.depth {
             let (num_full_bytes, overflow_bits) = split_bits(self.depth);
-            let num_full_bytes = num_full_bytes
-                .try_into()
-                .expect("Couldn't cast 32-bit integer to usize.");
 
             // Check all full bytes for equality
             if self.inner[0..num_full_bytes] != other.inner[0..num_full_bytes] {
@@ -190,9 +185,6 @@ impl Prefix {
     /// Checks if the Prefix is the prefix of the full path
     pub fn is_prefix_of(&self, rhs: &Path) -> bool {
         let (num_full_bytes, overflow_bits) = split_bits(self.depth);
-        let num_full_bytes = num_full_bytes
-            .try_into()
-            .expect("Couldn't cast 32-bit integer to usize.");
 
         if self.inner[0..num_full_bytes] != (rhs.0).0[0..num_full_bytes] {
             return false;
