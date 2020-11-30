@@ -180,8 +180,6 @@ mod tests {
 
     use super::*;
 
-    use rand;
-
     macro_rules! encrypt_decrypt_gen {
         ($func:ident, $value:expr) => {
             let mut sealer = Seal::random();
