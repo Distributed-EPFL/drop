@@ -1,3 +1,5 @@
+use std::hash::Hash;
+
 use super::BincodeError;
 
 use bincode::serialize_into;
@@ -37,11 +39,11 @@ pub enum VerifyError {
     Clone,
     Deserialize,
     Eq,
+    Hash,
     PartialEq,
     PartialOrd,
     Ord,
     Serialize,
-    Hash,
     Debug,
 )]
 pub struct PublicKey(SodiumPublicKey);
