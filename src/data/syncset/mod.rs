@@ -1,7 +1,5 @@
 use std::cmp::Ordering;
 
-use crate::crypto::hash;
-
 use serde::Serialize;
 
 mod errors;
@@ -9,10 +7,13 @@ mod node;
 mod path;
 mod set;
 
+use crate::crypto::hash;
 pub use errors::*;
 use node::Node;
 pub use path::*;
 pub use set::Set;
+
+use snafu::ResultExt;
 
 pub trait Syncable: Serialize + PartialEq {}
 impl<T: Serialize + PartialEq> Syncable for T {}
@@ -44,7 +45,7 @@ impl<Data: Syncable> SyncSet<Data> {
     /// Note that unlike all of the other functions implemented here, this can
     /// also fail when a hash collision occurs
     pub fn insert(&mut self, data: Data) -> Result<bool, SyncError> {
-        let path = Path::new(&data)?;
+        let path = Path::new(&data).context(Hash)?;
         self.root.insert(data, 0, path)
     }
 
@@ -52,7 +53,7 @@ impl<Data: Syncable> SyncSet<Data> {
     /// returns Ok(true) if the element was contained in the
     /// syncset, Ok(false) if it wasn't
     pub fn delete(&mut self, data_to_delete: &Data) -> Result<bool, SyncError> {
-        let path = Path::new(data_to_delete)?;
+        let path = Path::new(data_to_delete).context(Hash)?;
         Ok(self.root.delete(data_to_delete, path, 0))
     }
 
@@ -100,7 +101,7 @@ impl<Data: Syncable> SyncSet<Data> {
     /// Checks if the element is contained in the set
     pub fn contains(&self, data: &Data) -> Result<bool, SyncError> {
         use Node::*;
-        let path = Prefix::new(data, Path::NUM_BITS)?;
+        let path = Prefix::new(data, Path::NUM_BITS).context(Hash)?;
         let node_at_path = self.root.node_at(&path, 0);
         match node_at_path {
             Leaf {
@@ -227,15 +228,21 @@ impl<Data: Syncable> SyncSet<Data> {
                             {
                                 // Update hashes
                                 if local_hash_opt == None {
-                                    local_hash_opt = Some(hash(unsafe {
-                                        local_data.get_unchecked(j)
-                                    })?);
+                                    local_hash_opt = Some(
+                                        hash(unsafe {
+                                            local_data.get_unchecked(j)
+                                        })
+                                        .context(Hash)?,
+                                    );
                                 };
 
                                 if remote_hash_opt == None {
-                                    remote_hash_opt = Some(hash(unsafe {
-                                        remote_data.get_unchecked(i)
-                                    })?);
+                                    remote_hash_opt = Some(
+                                        hash(unsafe {
+                                            remote_data.get_unchecked(i)
+                                        })
+                                        .context(Hash)?,
+                                    );
                                 };
 
                                 // Borrow, explicitely avoid moving out
