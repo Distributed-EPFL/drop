@@ -6,6 +6,8 @@ use super::path::*;
 use super::Syncable;
 use crate::crypto::hash::{hash, Digest};
 
+use snafu::ResultExt;
+
 /// Private type used for the binary tree
 #[derive(Debug)]
 pub(super) enum Node<Data: Syncable> {
@@ -193,7 +195,7 @@ impl<Data: Syncable> Node<Data> {
                     if self.cmp_item(&item) {
                         Ok(false)
                     } else {
-                        Err(CollisionError::new().into())
+                        Collision.fail()
                     }
                 } else {
                     let old = self.swap(Node::Empty);
@@ -353,7 +355,7 @@ impl<Data: Syncable> Node<Data> {
     pub fn label(&self) -> Result<Digest, SyncError> {
         match self {
             // Error: hash of an empty leaf (should this be a hash of unit instead?)
-            Node::Empty => Err(EmptyHashError::new().into()),
+            Node::Empty => EmptyHash.fail(),
 
             // Non-empty leaf: label == path == hash
             Node::Leaf { hash, .. } => Ok(hash.clone()),
@@ -380,7 +382,7 @@ impl<Data: Syncable> Node<Data> {
                         let left_hash = left.label()?;
                         let right_hash = right.label()?;
                         let concat = ConcatDigest(left_hash, right_hash);
-                        hash(&concat)?
+                        hash(&concat).context(Hash)?
                     };
 
                     // Update cache, return
