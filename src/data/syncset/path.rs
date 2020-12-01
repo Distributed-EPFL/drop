@@ -1,6 +1,5 @@
-use super::errors::PathLengthError;
-use crate::crypto::hash::{hash, Digest, SIZE as HASH_SIZE};
-use crate::crypto::HashError;
+use super::errors::{PathLength, SyncError};
+use crate::crypto::hash::{hash, Digest, HashError, SIZE as HASH_SIZE};
 
 use serde::{Deserialize, Serialize};
 
@@ -50,7 +49,7 @@ impl Path {
     /// Returns the direction at a given bit index
     /// Note that this function will panic if given an index
     /// greater or equal to the number of bits in a hash digest
-    pub fn at(&self, idx: usize) -> Result<Direction, PathLengthError> {
+    pub fn at(&self, idx: usize) -> Result<Direction, SyncError> {
         if idx < Path::NUM_BITS {
             let (byte_idx, bit_idx) = split_bits(idx);
 
@@ -58,7 +57,10 @@ impl Path {
 
             Ok(Direction::from_bit(byte, bit_idx))
         } else {
-            Err(PathLengthError::new("Out of bounds on path"))
+            PathLength {
+                what: "Out of bounds on path",
+            }
+            .fail()
         }
     }
 
@@ -105,11 +107,12 @@ impl PartialEq for Prefix {
 }
 
 impl Prefix {
-    fn add_one(&self, dir: Direction) -> Result<Prefix, PathLengthError> {
+    fn add_one(&self, dir: Direction) -> Result<Prefix, SyncError> {
         if self.depth >= Path::NUM_BITS {
-            return Err(PathLengthError::new(
-                "Cannot add depth to max-depth Prefix",
-            ));
+            return PathLength {
+                what: "Cannot add depth to max-depth Prefix",
+            }
+            .fail();
         }
 
         // Copy old path, and increase depth
@@ -138,12 +141,12 @@ impl Prefix {
     }
 
     /// Extends the path with a 0
-    pub fn left(&self) -> Result<Prefix, PathLengthError> {
+    pub fn left(&self) -> Result<Prefix, SyncError> {
         self.add_one(Direction::Left)
     }
 
     /// Extends the path with a 1
-    pub fn right(&self) -> Result<Prefix, PathLengthError> {
+    pub fn right(&self) -> Result<Prefix, SyncError> {
         self.add_one(Direction::Right)
     }
 
