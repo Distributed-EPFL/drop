@@ -28,6 +28,33 @@ jobs:
         name: cargo clippy
         with:
           command: clippy
+          args: --all-features --all-targets -- -D warnings
+
+      - uses: actions-rs/cargo@v1
+        name: cargo test
+        with:
+          command: test
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        name: install toolchain
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+
+      - uses: actions-rs/cargo@v1
+        name: cargo check
+        with:
+          command: check
+
+      - uses: actions-rs/cargo@v1
+        name: cargo clippy
+        with:
+          command: clippy
           args: -- -D warnings
 
       - uses: actions-rs/cargo@v1
@@ -35,7 +62,7 @@ jobs:
         with:
           command: test
 
-      - name: install kcov
+      - name: generate kcov report
         shell: bash
         run: |
           wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
@@ -45,12 +72,8 @@ jobs:
           cd build &&
           cmake .. &&
           make &&
-          make install DESTDIR=../../kcov-build || exit 0
+          make install DESTDIR=../../kcov-build  && cd ../.. &&
+          for file in target/debug/deps/murmur-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done
 
       - name: upload coverage
-        shell: bash
-        run: |
-          rm -rf kcov-master &&
-          for file in target/debug/deps/murmur-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
-          bash <(curl -s https://codecov.io/bash) &&
-          echo "Uploaded code coverage" || exit 0
+        uses: codecov/codecov-action@v1
