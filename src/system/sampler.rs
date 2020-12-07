@@ -110,10 +110,8 @@ mod test {
     use super::super::sampler::{AllSampler, PoissonSampler};
     use super::super::sender::CollectingSender;
     use super::super::test::*;
-    use super::super::{Message, Sender};
+    use super::super::Sender;
     use super::*;
-
-    impl Message for () {}
 
     static EXPECTED: usize = 100;
     static ROUNDS: usize = 100;
