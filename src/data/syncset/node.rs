@@ -358,7 +358,7 @@ impl<Data: Syncable> Node<Data> {
             Node::Empty => EmptyHash.fail(),
 
             // Non-empty leaf: label == path == hash
-            Node::Leaf { hash, .. } => Ok(hash.clone()),
+            Node::Leaf { hash, .. } => Ok(*hash),
 
             Node::Internal {
                 left,
@@ -369,7 +369,7 @@ impl<Data: Syncable> Node<Data> {
                 let mut cached_label_borrowed = cached_label.borrow_mut();
                 if let Some(digest) = cached_label_borrowed.as_ref() {
                     // Return cached hash
-                    Ok(digest.clone())
+                    Ok(*digest)
                 } else {
                     let new_hash = if left.is_empty() {
                         // Note: having two empty children to a branch would violate the invariant
@@ -386,7 +386,7 @@ impl<Data: Syncable> Node<Data> {
                     };
 
                     // Update cache, return
-                    *cached_label_borrowed = Some(new_hash.clone());
+                    *cached_label_borrowed = Some(new_hash);
                     Ok(new_hash)
                 }
             }
@@ -416,8 +416,8 @@ mod tests {
         // hash(13) = 1101 ...
         let elem_r = 13;
         let hash_right = hash(&elem_r).unwrap();
-        root.insert(elem_l, 0, Path(hash_left.clone())).unwrap();
-        root.insert(elem_r, 0, Path(hash_right.clone())).unwrap();
+        root.insert(elem_l, 0, Path(hash_left)).unwrap();
+        root.insert(elem_r, 0, Path(hash_right)).unwrap();
 
         let expected_label =
             hash(&ConcatDigest(hash_left, hash_right)).unwrap();
