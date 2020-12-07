@@ -52,7 +52,7 @@ impl<Data: Syncable + Clone> Set<&Data> {
         match self {
             LabelSet { prefix, label } => LabelSet {
                 prefix: prefix.clone(),
-                label: label.clone(),
+                label: *label,
             },
             ListSet {
                 underlying,
