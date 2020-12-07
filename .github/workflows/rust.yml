@@ -44,36 +44,22 @@ jobs:
         name: install toolchain
         with:
           profile: minimal
-          toolchain: ${{ matrix.rust }}
-
-      - uses: actions-rs/cargo@v1
-        name: cargo check
-        with:
-          command: check
-
-      - uses: actions-rs/cargo@v1
-        name: cargo clippy
-        with:
-          command: clippy
-          args: -- -D warnings
+          toolchain: stable
 
       - uses: actions-rs/cargo@v1
         name: cargo test
         with:
           command: test
 
+      - name: install kcov
+        uses: ryankurte/action-apt@v0.2.0
+        with:
+          packages: "kcov"
+
       - name: generate kcov report
         shell: bash
         run: |
-          wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
-          tar xzf master.tar.gz &&
-          cd kcov-master &&
-          mkdir build &&
-          cd build &&
-          cmake .. &&
-          make &&
-          make install DESTDIR=../../kcov-build  && cd ../.. &&
-          for file in target/debug/deps/murmur-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done
+          for file in target/debug/deps/drop-*; do [ -x "${file}" ] || continue; mkdir -p "target/cov/$(basename $file)"; kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done
 
       - name: upload coverage
         uses: codecov/codecov-action@v1
