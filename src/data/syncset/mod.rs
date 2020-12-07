@@ -72,7 +72,7 @@ impl<Data: Syncable> SyncSet<Data> {
         match node_at_prefix {
             Leaf { hash, .. } => {
                 // Because this is a leaf, its hash is that of its data element, thus label == path
-                let leaf_path = Path(hash.clone());
+                let leaf_path = Path(*hash);
 
                 // Check if the prefix actually matches, or if we just ran out of nodes
                 if prefix.is_prefix_of(&leaf_path) {
