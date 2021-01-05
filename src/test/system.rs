@@ -108,34 +108,41 @@ pub fn keyset(count: usize) -> impl Iterator<Item = PublicKey> + Clone {
 }
 
 /// A `SystemManager` that uses a set sequence of messages for testing
-pub struct DummyManager<M: Message, O: Message> {
+pub struct DummyManager<M: Message, I: Message, O: Message> {
     incoming: Vec<(PublicKey, M)>,
     sender: Arc<CollectingSender<M>>,
     _o: PhantomData<O>,
+    _i: PhantomData<I>,
 }
 
-impl<M: Message + 'static, O: Message + 'static> DummyManager<M, O> {
+impl<M, I, O> DummyManager<M, I, O>
+where
+    M: Message + 'static,
+    I: Message + 'static,
+    O: Message + 'static,
+{
     /// Create a `DummyManager` that will deliver from a specified set of
     /// `PublicKey`
     pub fn with_key<
-        I: IntoIterator<Item = (PublicKey, M)>,
-        I1: IntoIterator<Item = PublicKey>,
+        I1: IntoIterator<Item = (PublicKey, M)>,
+        I2: IntoIterator<Item = PublicKey>,
     >(
-        messages: I,
-        keys: I1,
+        messages: I1,
+        keys: I2,
     ) -> Self {
         let keys = keys.into_iter();
 
         Self {
             sender: Arc::new(CollectingSender::new(keys)),
             incoming: messages.into_iter().collect(),
+            _i: PhantomData,
             _o: PhantomData,
         }
     }
 
     /// Run a `Processor` using the sequence of message specified at creation.
     /// This manager uses `PoissonSampler` internally to sample the known peers.
-    pub async fn run<P: Processor<M, O, CollectingSender<M>> + 'static>(
+    pub async fn run<P: Processor<M, I, O, CollectingSender<M>> + 'static>(
         self,
         mut processor: P,
     ) -> P::Handle {

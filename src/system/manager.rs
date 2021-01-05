@@ -17,11 +17,15 @@ use tracing::{debug, error, info, warn};
 
 #[async_trait]
 /// Trait used to process incoming messages from a `SystemManager`
-pub trait Processor<M: Message + 'static, O: Message, S: Sender<M>>:
-    Send + Sync
+pub trait Processor<M, I, O, S>: Send + Sync
+where
+    M: Message + 'static,
+    I: Message,
+    O: Message,
+    S: Sender<M>,
 {
     /// The handle used to send and receive messages from the `Processor`
-    type Handle: Handle<O>;
+    type Handle: Handle<I, O>;
 
     /// Type of errors returned by `Processor::process`
     type Error: std::error::Error;
@@ -47,26 +51,26 @@ pub trait Processor<M: Message + 'static, O: Message, S: Sender<M>>:
 /// has been scheduled to run on a `SystemManager`. This type will usually be
 /// obtained by calling SystemManager::run on a previously created `Processor`
 #[async_trait]
-pub trait Handle<M>: Send + Sync {
+pub trait Handle<I, O>: Send + Sync {
     /// Type of errors returned by this `Handle` type
     type Error: std::error::Error;
 
     /// Deliver a message using this `Handle`. <br />
     /// This method returns `Ok` if some message can be delivered or an `Err`
     /// otherwise
-    async fn deliver(&mut self) -> Result<M, Self::Error>;
+    async fn deliver(&mut self) -> Result<O, Self::Error>;
 
     /// Poll this `Handle` for delivery, returning immediately with `Ok(None)`
     /// if no message is available for delivery or `Ok(Some)` if a message is
     /// ready to be delivered. `Err` is returned like `Handle::deliver`
     /// otherwise
-    fn try_deliver(&mut self) -> Result<Option<M>, Self::Error>;
+    fn try_deliver(&mut self) -> Result<Option<O>, Self::Error>;
 
     /// Starts broadcasting a message using this `Handle`
-    async fn broadcast(&mut self, message: &M) -> Result<(), Self::Error>;
+    async fn broadcast(&mut self, message: &I) -> Result<(), Self::Error>;
 }
 
-/// A macro to create a Handle for some `Processor` and `Message` type
+/// A macro to create a `Handle` for some `Processor` and `Message` type
 #[macro_export]
 macro_rules! implement_handle {
     ($name:ident, $error:ident, $msg:ident) => {
@@ -112,7 +116,7 @@ macro_rules! implement_handle {
         }
 
         #[async_trait]
-        impl<M: Message> Handle<M> for $name<M> {
+        impl<M: Message> Handle<M, M> for $name<M> {
             type Error = $error;
 
             /// Deliver a `Message` using the algorithm associated with this
@@ -208,9 +212,10 @@ impl<M: Message + 'static> SystemManager<M> {
     /// running
     pub async fn run<
         S: Sampler,
-        P: Processor<M, O, NetworkSender<M>, Handle = H> + 'static,
+        P: Processor<M, I, O, NetworkSender<M>, Handle = H> + 'static,
         O: Message,
-        H: Handle<O>,
+        I: Message,
+        H: Handle<I, O>,
     >(
         self,
         mut processor: P,
@@ -334,7 +339,7 @@ mod test {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[async_trait]
-    impl<M: Message> Handle<(PublicKey, M)> for mpsc::Receiver<(PublicKey, M)> {
+    impl<M: Message> Handle<M, (PublicKey, M)> for mpsc::Receiver<(PublicKey, M)> {
         type Error = mpsc::error::RecvError;
 
         async fn deliver(&mut self) -> Result<(PublicKey, M), Self::Error> {
@@ -347,10 +352,7 @@ mod test {
             unreachable!()
         }
 
-        async fn broadcast(
-            &mut self,
-            _: &(PublicKey, M),
-        ) -> Result<(), Self::Error> {
+        async fn broadcast(&mut self, _: &M) -> Result<(), Self::Error> {
             unreachable!()
         }
     }
@@ -366,7 +368,9 @@ mod test {
         }
 
         #[async_trait]
-        impl Processor<usize, (PublicKey, usize), NetworkSender<usize>> for Dummy {
+        impl Processor<usize, usize, (PublicKey, usize), NetworkSender<usize>>
+            for Dummy
+        {
             type Handle = mpsc::Receiver<(PublicKey, usize)>;
 
             type Error = mpsc::error::RecvError;
