@@ -131,11 +131,11 @@ impl<M: Message + 'static, O: Message + 'static> DummyManager<M, O> {
     /// Create a `DummyManager` that will deliver from a specified set of
     /// `PublicKey`
     pub fn with_key<
-        I: IntoIterator<Item = (PublicKey, M)>,
-        I1: IntoIterator<Item = PublicKey>,
+        I1: IntoIterator<Item = (PublicKey, M)>,
+        I2: IntoIterator<Item = PublicKey>,
     >(
-        messages: I,
-        keys: I1,
+        messages: I1,
+        keys: I2,
     ) -> Self {
         let keys = keys.into_iter();
 
@@ -148,10 +148,11 @@ impl<M: Message + 'static, O: Message + 'static> DummyManager<M, O> {
 
     /// Run a `Processor` using the sequence of message specified at creation.
     /// This manager uses `PoissonSampler` internally to sample the known peers.
-    pub async fn run<P: Processor<M, O, CollectingSender<M>> + 'static>(
-        self,
-        mut processor: P,
-    ) -> P::Handle {
+    pub async fn run<I, P>(self, mut processor: P) -> P::Handle
+    where
+        I: Message,
+        P: Processor<M, I, O, CollectingSender<M>> + 'static,
+    {
         let sampler = Arc::new(AllSampler::default());
         let handle = processor.output(sampler, Arc::clone(&self.sender)).await;
         let processor = Arc::new(processor);
