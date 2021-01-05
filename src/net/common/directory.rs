@@ -2,10 +2,12 @@ use std::fmt;
 use std::net::SocketAddr;
 
 use crate::crypto::key::exchange::PublicKey;
+use drop_derive::message;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[message]
+#[derive(Copy)]
 pub enum Request {
     /// Add this peer to the directory
     Add(Info),
@@ -15,7 +17,7 @@ pub enum Request {
     Wait(usize),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[message]
 /// A response used by the directory protocol
 pub enum Response {
     /// Add request was a success
@@ -41,7 +43,8 @@ impl fmt::Display for Response {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[message]
+#[derive(Copy)]
 /// Information needed to connect to a remote peer.
 pub struct Info {
     pkey: PublicKey,
