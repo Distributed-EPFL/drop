@@ -89,143 +89,143 @@ impl fmt::Display for Direct {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::net::{Connection, Connector, UtpConnector, UtpListener};
-    use crate::test::*;
-    use crate::{exchange_data_and_compare, generate_connection};
+// #[cfg(test)]
+// mod test {
+//     use super::*;
+//     use crate::net::{Connection, Connector, UtpConnector, UtpListener};
+//     use crate::test::*;
+//     use crate::{exchange_data_and_compare, generate_connection};
 
-    use serde::{Deserialize, Serialize};
+//     use serde::{Deserialize, Serialize};
 
-    #[tokio::test]
-    async fn utp_listener_fmt() {
-        let addr = next_test_ip4();
-        let exchanger = Exchanger::random();
-        let listener = UtpListener::new(addr, exchanger)
-            .await
-            .expect("bind failed");
+//     #[tokio::test]
+//     async fn utp_listener_fmt() {
+//         let addr = next_test_ip4();
+//         let exchanger = Exchanger::random();
+//         let listener = UtpListener::new(addr, exchanger)
+//             .await
+//             .expect("bind failed");
 
-        assert_eq!(
-            format!("{}", listener),
-            format!("utp listener on {}", listener.local_addr().unwrap()),
-        );
-    }
+//         assert_eq!(
+//             format!("{}", listener),
+//             format!("utp listener on {}", listener.local_addr().unwrap()),
+//         );
+//     }
 
-    #[tokio::test]
-    async fn utp_double_accept() {
-        init_logger();
+//     #[tokio::test]
+//     async fn utp_double_accept() {
+//         init_logger();
 
-        let addr = next_test_ip4();
-        let exchanger = Exchanger::random();
-        let mut listener = UtpListener::new(addr, exchanger.clone())
-            .await
-            .expect("bind failed");
-        let addr = listener.local_addr().unwrap();
+//         let addr = next_test_ip4();
+//         let exchanger = Exchanger::random();
+//         let mut listener = UtpListener::new(addr, exchanger.clone())
+//             .await
+//             .expect("bind failed");
+//         let addr = listener.local_addr().unwrap();
 
-        let handle = task::spawn(async move {
-            let exch = Exchanger::random();
-            let connector = UtpConnector::new(exch);
-            let mut connection = connector
-                .connect(exchanger.keypair().public(), &addr)
-                .await
-                .expect("connect failed");
+//         let handle = task::spawn(async move {
+//             let exch = Exchanger::random();
+//             let connector = UtpConnector::new(exch);
+//             let mut connection = connector
+//                 .connect(exchanger.keypair().public(), &addr)
+//                 .await
+//                 .expect("connect failed");
 
-            connection.close().await.expect("close failed");
-        });
+//             connection.close().await.expect("close failed");
+//         });
 
-        let mut connection = listener.accept().await.expect("accept failed");
+//         let mut connection = listener.accept().await.expect("accept failed");
 
-        listener
-            .accept()
-            .await
-            .expect_err("second accept succeeded");
+//         listener
+//             .accept()
+//             .await
+//             .expect_err("second accept succeeded");
 
-        connection.close().await.expect("close failed");
+//         connection.close().await.expect("close failed");
 
-        handle.await.expect("connector failed");
-    }
+//         handle.await.expect("connector failed");
+//     }
 
-    pub async fn setup_utp() -> (Connection, Connection) {
-        generate_connection!(UtpListener, UtpConnector);
-    }
+//     pub async fn setup_utp() -> (Connection, Connection) {
+//         generate_connection!(UtpListener, UtpConnector);
+//     }
 
-    #[tokio::test]
-    async fn utp_u8_exchange() {
-        crate::test::init_logger();
-        exchange_data_and_compare!(0, u8, setup_utp);
-    }
+//     #[tokio::test]
+//     async fn utp_u8_exchange() {
+//         crate::test::init_logger();
+//         exchange_data_and_compare!(0, u8, setup_utp);
+//     }
 
-    #[tokio::test]
-    async fn utp_u16_exchange() {
-        exchange_data_and_compare!(0, u16, setup_utp);
-    }
+//     #[tokio::test]
+//     async fn utp_u16_exchange() {
+//         exchange_data_and_compare!(0, u16, setup_utp);
+//     }
 
-    #[tokio::test]
-    async fn utp_u32_exchange() {
-        exchange_data_and_compare!(0, u32, setup_utp);
-    }
+//     #[tokio::test]
+//     async fn utp_u32_exchange() {
+//         exchange_data_and_compare!(0, u32, setup_utp);
+//     }
 
-    #[tokio::test]
-    async fn utp_u64_exchange() {
-        exchange_data_and_compare!(0, u64, setup_utp);
-    }
+//     #[tokio::test]
+//     async fn utp_u64_exchange() {
+//         exchange_data_and_compare!(0, u64, setup_utp);
+//     }
 
-    #[tokio::test]
-    async fn utp_i8_exchange() {
-        exchange_data_and_compare!(0, i8, setup_utp);
-    }
+//     #[tokio::test]
+//     async fn utp_i8_exchange() {
+//         exchange_data_and_compare!(0, i8, setup_utp);
+//     }
 
-    #[tokio::test]
-    async fn utp_i16_exchange() {
-        exchange_data_and_compare!(0, i16, setup_utp);
-    }
+//     #[tokio::test]
+//     async fn utp_i16_exchange() {
+//         exchange_data_and_compare!(0, i16, setup_utp);
+//     }
 
-    #[tokio::test]
-    async fn utp_i32_exchange() {
-        exchange_data_and_compare!(0, i32, setup_utp);
-    }
+//     #[tokio::test]
+//     async fn utp_i32_exchange() {
+//         exchange_data_and_compare!(0, i32, setup_utp);
+//     }
 
-    #[tokio::test]
-    async fn utp_i64_exchange() {
-        exchange_data_and_compare!(0, i64, setup_utp);
-    }
+//     #[tokio::test]
+//     async fn utp_i64_exchange() {
+//         exchange_data_and_compare!(0, i64, setup_utp);
+//     }
 
-    #[tokio::test]
-    async fn utp_struct_exchange() {
-        #[derive(Debug, PartialEq, Serialize, Deserialize)]
-        struct T {
-            a: u32,
-            b: u64,
-            c: A,
-        }
+//     #[tokio::test]
+//     async fn utp_struct_exchange() {
+//         #[derive(Debug, PartialEq, Serialize, Deserialize)]
+//         struct T {
+//             a: u32,
+//             b: u64,
+//             c: A,
+//         }
 
-        #[derive(Debug, PartialEq, Serialize, Deserialize)]
-        struct A {
-            a: u8,
-            b: u16,
-        }
+//         #[derive(Debug, PartialEq, Serialize, Deserialize)]
+//         struct A {
+//             a: u8,
+//             b: u16,
+//         }
 
-        let data = T {
-            a: 258,
-            b: 30567,
-            c: A { a: 66, b: 245 },
-        };
+//         let data = T {
+//             a: 258,
+//             b: 30567,
+//             c: A { a: 66, b: 245 },
+//         };
 
-        exchange_data_and_compare!(data, T, setup_utp);
-    }
+//         exchange_data_and_compare!(data, T, setup_utp);
+//     }
 
-    #[ignore] // until tokio-utp crate is fixed
-    #[tokio::test]
-    async fn utp_hashmap_exchange() {
-        use std::collections::HashMap;
+//     #[ignore] // until tokio-utp crate is fixed
+//     #[tokio::test]
+//     async fn utp_hashmap_exchange() {
+//         use std::collections::HashMap;
 
-        let mut hashmap: HashMap<u32, u128> = HashMap::default();
+//         let mut hashmap: HashMap<u32, u128> = HashMap::default();
 
-        for _ in 0..rand::random::<usize>() % 2048 {
-            hashmap.insert(rand::random(), rand::random());
-        }
+//         for _ in 0..rand::random::<usize>() % 2048 {
+//             hashmap.insert(rand::random(), rand::random());
+//         }
 
-        exchange_data_and_compare!(hashmap, HashMap<u32, u128>, setup_utp);
-    }
-}
+//         exchange_data_and_compare!(hashmap, HashMap<u32, u128>, setup_utp);
+//     }
+// }

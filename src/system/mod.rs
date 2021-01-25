@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio::task::{self, JoinHandle};
 
+use tokio_stream::wrappers::ReceiverStream;
+
 use tracing::{debug_span, error, info, warn};
 use tracing_futures::Instrument;
 
@@ -210,8 +212,8 @@ impl System {
         C: fmt::Display + Sync + Send,
         L: Listener<Candidate = C> + 'static,
     {
-        let (mut err_tx, err_rx) = mpsc::channel(1);
-        let (mut peer_tx, peer_rx) = mpsc::channel(32);
+        let (err_tx, err_rx) = mpsc::channel(1);
+        let (peer_tx, peer_rx) = mpsc::channel(32);
 
         let handle =
             task::spawn(async move {
@@ -238,7 +240,7 @@ impl System {
         self.peer_input.push(peer_rx);
         self.listeners.push(handle);
 
-        err_rx
+        ReceiverStream::new(err_rx)
     }
 
     /// Get all the `Connection`s known to this `System`.
@@ -251,7 +253,7 @@ impl System {
     /// `Listener`s. Subsequent calls to this method will only produces peers
     /// from `Listener`s that have been added *after* the previous call.
     pub fn peer_source(&mut self) -> impl Stream<Item = Connection> {
-        select_all(self.peer_input.drain(..))
+        select_all(self.peer_input.drain(..).map(ReceiverStream::new))
     }
 }
 
