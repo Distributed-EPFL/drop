@@ -229,7 +229,7 @@ impl<M: Message + 'static> SystemManager<M> {
         let sender = Arc::new(NetworkSender::new(self.writes));
         let sender_add = sender.clone();
         let mut incoming = self.incoming;
-        let (mut read_tx, read_rx) = mpsc::channel(8);
+        let (read_tx, read_rx) = mpsc::channel(8);
 
         task::spawn(async move {
             while let Some(connection) = incoming.next().await {
@@ -248,7 +248,10 @@ impl<M: Message + 'static> SystemManager<M> {
             }
         });
 
-        let mut receiver = Self::new_receive(self.reads, read_rx);
+        // FIXME: pending inclusion of `Stream` in libstd
+        use tokio_stream::wrappers::ReceiverStream;
+        let mut receiver =
+            Self::new_receive(self.reads, ReceiverStream::new(read_rx));
 
         let handle = processor.output(sampler, sender.clone()).await;
         let processor = Arc::new(processor);
@@ -307,7 +310,7 @@ impl<M: Message + 'static> SystemManager<M> {
 
     fn receive_task(
         mut connection: ConnectionRead,
-        mut tx: mpsc::Sender<(PublicKey, Arc<M>)>,
+        tx: mpsc::Sender<(PublicKey, Arc<M>)>,
     ) -> JoinHandle<()> {
         task::spawn(async move {
             let remote = *connection.remote_pkey();
@@ -357,7 +360,7 @@ mod test {
         }
     }
 
-    #[tokio::test(threaded_scheduler)]
+    #[tokio::test]
     async fn receive_from_manager() {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         const COUNT: usize = 50;
