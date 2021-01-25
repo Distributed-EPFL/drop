@@ -232,6 +232,19 @@ impl Handler {
             .peer_addr()
             .map_or_else(|_| IpAddr::V4(Ipv4Addr::UNSPECIFIED), |x| x.ip());
 
+        // FIXME: pending inclusion of `Stream` in libstd
+        let mut stream = Box::pin(async_stream::stream! {
+            loop {
+                use tokio::sync::broadcast::error::RecvError::*;
+
+                match receiver.recv().await {
+                    Ok(message) => yield message,
+                    Err(Closed) => return,
+                    Err(Lagged(_)) => continue,
+                }
+            }
+        });
+
         async move {
             let mut cache = HashMap::new();
             let mut request_opt = None;
@@ -239,7 +252,7 @@ impl Handler {
             loop {
                 let response_fut =
                     connection.receive_plain::<Response>().boxed();
-                let request_fut = receiver.next().boxed();
+                let request_fut = stream.next().boxed();
 
                 {
                     match select(response_fut, request_fut).await {
@@ -252,7 +265,7 @@ impl Handler {
                             .await?;
                         }
                         Either::Right((result, _)) => {
-                            if let Some(Ok(request)) = result {
+                            if let Some(request) = result {
                                 match request {
                                     Request::Fetch(pkey) => {
                                         request_opt = Some(request);
