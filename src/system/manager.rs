@@ -337,8 +337,8 @@ impl<M: Message + 'static> SystemManager<M> {
 #[cfg(test)]
 mod test {
     use super::super::sampler::AllSampler;
-    use super::super::test::*;
     use super::*;
+    use crate::test::*;
 
     use std::sync::atomic::{AtomicUsize, Ordering};
 

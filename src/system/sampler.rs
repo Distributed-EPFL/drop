@@ -109,9 +109,10 @@ impl Sampler for AllSampler {
 mod test {
     use super::super::sampler::{AllSampler, PoissonSampler};
     use super::super::sender::CollectingSender;
-    use super::super::test::*;
     use super::super::Sender;
     use super::*;
+
+    use crate::test::*;
 
     static EXPECTED: usize = 100;
     static ROUNDS: usize = 100;

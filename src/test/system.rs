@@ -108,18 +108,16 @@ pub fn keyset(count: usize) -> impl Iterator<Item = PublicKey> + Clone {
 }
 
 /// A `SystemManager` that uses a set sequence of messages for testing
-pub struct DummyManager<M: Message, I: Message, O: Message> {
+pub struct DummyManager<M: Message, O> {
     incoming: Vec<(PublicKey, M)>,
     sender: Arc<CollectingSender<M>>,
     _o: PhantomData<O>,
-    _i: PhantomData<I>,
 }
 
-impl<M, I, O> DummyManager<M, I, O>
+impl<M, O> DummyManager<M, O>
 where
     M: Message + 'static,
-    I: Message + 'static,
-    O: Message + 'static,
+    O: Send,
 {
     /// Create a `DummyManager` that will deliver from a specified set of
     /// `PublicKey`
@@ -135,25 +133,25 @@ where
         Self {
             sender: Arc::new(CollectingSender::new(keys)),
             incoming: messages.into_iter().collect(),
-            _i: PhantomData,
             _o: PhantomData,
         }
     }
 
     /// Run a `Processor` using the sequence of message specified at creation.
     /// This manager uses `PoissonSampler` internally to sample the known peers.
-    pub async fn run<P: Processor<M, I, O, CollectingSender<M>> + 'static>(
-        self,
-        mut processor: P,
-    ) -> P::Handle {
+    pub async fn run<I, P>(&mut self, mut processor: P) -> P::Handle
+    where
+        I: Message,
+        P: Processor<M, I, O, CollectingSender<M>> + 'static,
+    {
         let sampler = Arc::new(AllSampler::default());
         let handle = processor.output(sampler, Arc::clone(&self.sender)).await;
         let processor = Arc::new(processor);
-        let sender = self.sender;
+        let sender = self.sender.clone();
         let total = self.incoming.len();
 
         self.incoming
-            .into_iter()
+            .drain(..)
             .enumerate()
             .for_each(|(idx, (key, msg))| {
                 let p = processor.clone();
