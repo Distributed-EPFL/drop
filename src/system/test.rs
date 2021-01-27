@@ -121,13 +121,17 @@ pub(crate) fn keyset(count: usize) -> impl Iterator<Item = PublicKey> + Clone {
 }
 
 /// A `SystemManager` that uses a set sequence of messages for testing
-pub struct DummyManager<M: Message, O: Message> {
+pub struct DummyManager<M: Message, O> {
     incoming: Vec<(PublicKey, M)>,
     sender: Arc<CollectingSender<M>>,
     _o: PhantomData<O>,
 }
 
-impl<M: Message + 'static, O: Message + 'static> DummyManager<M, O> {
+impl<M, O> DummyManager<M, O>
+where
+    M: Message + 'static,
+    O: Send,
+{
     /// Create a `DummyManager` that will deliver from a specified set of
     /// `PublicKey`
     pub fn with_key<
