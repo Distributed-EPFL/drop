@@ -21,6 +21,7 @@ pub trait Processor<M, I, O, S>: Send + Sync
 where
     M: Message + 'static,
     I: Message,
+    O: Send,
     S: Sender<M>,
 {
     /// The handle used to send and receive messages from the `Processor`
@@ -63,7 +64,7 @@ pub trait Handle<I, O>: Send + Sync {
     /// if no message is available for delivery or `Ok(Some)` if a message is
     /// ready to be delivered. `Err` is returned like `Handle::deliver`
     /// otherwise
-    fn try_deliver(&mut self) -> Result<Option<O>, Self::Error>;
+    async fn try_deliver(&mut self) -> Result<Option<O>, Self::Error>;
 
     /// Starts broadcasting a message using this `Handle`
     async fn broadcast(&mut self, message: &I) -> Result<(), Self::Error>;
@@ -131,12 +132,13 @@ macro_rules! implement_handle {
                     .context(NoMessage)
             }
 
-            /// Attempts delivery of a `Message` using the `Sieve` algorithm.
+            /// Attempts delivery of a `Message`.
+            ///
             /// This method returns `Ok(None)` immediately if no `Message` is
             /// ready for delivery. `Ok(Some(message))` if a message is ready.
             /// And finally `Err` if no message can be delivered using this
             /// handle
-            fn try_deliver(&mut self) -> Result<Option<M>, Self::Error> {
+            async fn try_deliver(&mut self) -> Result<Option<M>, Self::Error> {
                 let mut deliver = self.incoming.take().context(AlreadyUsed)?;
 
                 match deliver.try_recv() {
@@ -348,7 +350,7 @@ mod test {
             Ok(self.recv().await.expect("no message"))
         }
 
-        fn try_deliver(
+        async fn try_deliver(
             &mut self,
         ) -> Result<Option<(PublicKey, M)>, Self::Error> {
             unreachable!()
