@@ -21,7 +21,6 @@ pub trait Processor<M, I, O, S>: Send + Sync
 where
     M: Message + 'static,
     I: Message,
-    O: Message,
     S: Sender<M>,
 {
     /// The handle used to send and receive messages from the `Processor`
