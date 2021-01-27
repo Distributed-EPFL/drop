@@ -36,9 +36,6 @@ pub use sender::{Sender, SenderError};
 pub mod sampler;
 pub use sampler::{SampleError, Sampler};
 
-#[cfg(test)]
-pub mod test;
-
 /// A trait bound for types that can be used as messages
 pub trait Message:
     for<'de> Deserialize<'de>
@@ -282,11 +279,11 @@ impl From<Vec<Connection>> for System {
 
 #[cfg(test)]
 mod tests {
-    use super::test::*;
     use super::*;
 
     use crate::crypto::key::exchange::Exchanger;
     use crate::net::{TcpConnector, TcpListener};
+    use crate::test::*;
 
     use futures::StreamExt;
 
