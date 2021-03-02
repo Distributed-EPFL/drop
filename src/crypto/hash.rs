@@ -14,6 +14,7 @@ pub const SIZE: usize = 32;
 /// Wrapper for sodium hasher
 pub struct Hasher(SodiumState);
 
+#[allow(clippy::result_unit_err)]
 impl Hasher {
     /// Create a `Hasher` without a `Key`
     pub fn new() -> Self {
