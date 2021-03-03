@@ -26,11 +26,6 @@ jobs:
         with:
           command: check
 
-      - name: cargo deny
-        shell: bash
-        run: |
-          cargo install cargo-deny && cargo deny check
-
       - uses: actions-rs/cargo@v1
         name: cargo clippy
         with:
@@ -52,6 +47,11 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
+
+      - name: cargo deny
+        shell: bash
+        run: |
+          cargo install cargo-deny && cargo deny check
 
       - uses: actions-rs/cargo@v1
         name: cargo test
