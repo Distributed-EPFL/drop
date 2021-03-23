@@ -12,6 +12,7 @@ use crate::system::sender::CollectingSender;
 use crate::system::{Message, Processor, System};
 
 use futures::future;
+use futures::stream::StreamExt;
 
 use tokio::task::{self, JoinHandle};
 
@@ -160,26 +161,33 @@ where
 
         trace!("starting test processing for {} messages", total);
 
-        self.incoming
+        let futs: futures::stream::FuturesOrdered<_> = self
+            .incoming
             .drain(..)
             .enumerate()
-            .for_each(|(idx, (key, msg))| {
+            .map(|(idx, (key, msg))| {
                 let p = processor.clone();
                 let sender = sender.clone();
                 let msg = Arc::new(msg);
 
-                task::spawn(async move {
+                trace!("spawning task for {:?}", msg);
+
+                async move {
                     trace!(
                         "[{}/{}] staring processing for {:?}",
                         idx + 1,
                         total,
                         msg
                     );
-                    p.process(msg, key, sender)
-                        .await
-                        .expect("processing failed");
-                });
-            });
+                    p.process(msg, key, sender).await
+                }
+            })
+            .collect();
+
+        futs.for_each(|x| async move {
+            x.expect("processing failed");
+        })
+        .await;
 
         handle
     }
