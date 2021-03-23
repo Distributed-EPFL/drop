@@ -77,6 +77,13 @@ macro_rules! implement_handle {
         #[derive(Snafu, Debug)]
         /// Error type for $name
         pub enum $error {
+            #[snafu(display("unable to sign message"))]
+            /// Error encountered when signing a message
+            Signing {
+                /// Underlying error cause
+                source: drop::crypto::sign::SignError
+            },
+
             #[snafu(display("this handle is not a sender handle"))]
             /// Not a sender handle
             NotASender,
@@ -160,8 +167,7 @@ macro_rules! implement_handle {
                 message: &M,
             ) -> Result<(), Self::Error> {
                 let sender = self.outgoing.take().context(NotASender)?;
-                let signature =
-                    self.signer.sign(message).expect("failed to sign message");
+                let signature = self.signer.sign(message).context(Signing)?;
 
                 sender
                     .send((message.clone(), signature))
