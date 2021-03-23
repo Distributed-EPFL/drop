@@ -119,6 +119,14 @@ where
     M: Message + 'static,
     O: Send,
 {
+    /// Create a `DummyManager` that will deliver all specified messages
+    /// from a random set of `PublicKey`s of size *count*
+    pub fn new(messages: impl Iterator<Item = M>, count: usize) -> Self {
+        let keys = keyset(count).collect::<Vec<_>>();
+
+        Self::with_key(keys.clone().into_iter().zip(messages), keys)
+    }
+
     /// Create a `DummyManager` that will deliver from a specified set of
     /// `PublicKey`
     pub fn with_key<
@@ -149,6 +157,8 @@ where
         let processor = Arc::new(processor);
         let sender = self.sender.clone();
         let total = self.incoming.len();
+
+        trace!("starting test processing for {} messages", total);
 
         self.incoming
             .drain(..)
