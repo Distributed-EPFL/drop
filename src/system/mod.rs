@@ -172,7 +172,7 @@ impl System {
         &mut self,
         connector: &C,
         candidates: &[(CD, PublicKey)],
-    ) -> impl Iterator<Item = ConnectError>
+    ) -> impl Iterator<Item = (PublicKey, ConnectError)>
     where
         CD: fmt::Display + Send + Sync,
         C: Connector<Candidate = CD>,
@@ -189,7 +189,7 @@ impl System {
                 }
                 Err(e) => {
                     error!("failed to connect to {}: {}", pkey, e);
-                    Err(e)
+                    Err((pkey, e))
                 }
             })
             .partition(Result::is_ok);
