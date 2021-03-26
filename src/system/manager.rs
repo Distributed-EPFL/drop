@@ -32,7 +32,7 @@ where
 
     /// Process an incoming message using this `Processor`
     async fn process(
-        self: Arc<Self>,
+        &self,
         message: Arc<M>,
         from: PublicKey,
         sender: Arc<S>,
@@ -62,7 +62,7 @@ pub trait Handle<I, O>: Send + Sync {
 
     /// Poll this `Handle` for delivery, returning immediately with `Ok(None)`
     /// if no message is available for delivery or `Ok(Some)` if a message is
-    /// ready to be delivered. `Err` is returned like `Handle::deliver`
+
     /// otherwise
     async fn try_deliver(&mut self) -> Result<Option<O>, Self::Error>;
 
@@ -81,7 +81,7 @@ macro_rules! implement_handle {
             /// Error encountered when signing a message
             Signing {
                 /// Underlying error cause
-                source: drop::crypto::sign::SignError
+                source: drop::crypto::sign::SignError,
             },
 
             #[snafu(display("this handle is not a sender handle"))]
@@ -386,7 +386,7 @@ mod test {
             type Error = mpsc::error::RecvError;
 
             async fn process(
-                self: Arc<Self>,
+                &self,
                 message: Arc<usize>,
                 key: PublicKey,
                 _sender: Arc<NetworkSender<usize>>,
