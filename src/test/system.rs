@@ -170,8 +170,6 @@ where
                 let sender = sender.clone();
                 let msg = Arc::new(msg);
 
-                trace!("spawning task for {:?}", msg);
-
                 async move {
                     trace!(
                         "[{}/{}] staring processing for {:?}",
