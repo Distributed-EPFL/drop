@@ -125,7 +125,7 @@ where
     pub fn new(messages: impl Iterator<Item = M>, count: usize) -> Self {
         let keys = keyset(count).collect::<Vec<_>>();
 
-        Self::with_key(keys.clone().into_iter().zip(messages), keys)
+        Self::with_key(keys.clone().into_iter().cycle().zip(messages), keys)
     }
 
     /// Create a `DummyManager` that will deliver from a specified set of
