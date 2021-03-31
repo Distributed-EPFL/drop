@@ -9,6 +9,7 @@ use crate::crypto::key::exchange::PublicKey;
 use crate::net::{ConnectionWrite, SendError};
 
 use futures::future;
+use futures::stream::{FuturesUnordered, TryStreamExt};
 
 use snafu::{ensure, OptionExt, ResultExt, Snafu};
 
@@ -48,6 +49,24 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
         message: Arc<M>,
         pkey: &PublicKey,
     ) -> Result<(), SenderError>;
+
+    /// Send a set of messages to a remote peer
+    async fn send_many_to_one<'a, I>(
+        &self,
+        messages: I,
+        to: &PublicKey,
+    ) -> Result<(), SenderError>
+    where
+        I: IntoIterator<Item = Arc<M>> + Send,
+        I::IntoIter: Send,
+    {
+        messages
+            .into_iter()
+            .map(|message| self.send(message, to))
+            .collect::<FuturesUnordered<_>>()
+            .try_fold((), |_, _| future::ready(Ok(())))
+            .await
+    }
 
     /// Send the same message to many different peers.
     async fn send_many<'a, I: Iterator<Item = &'a PublicKey> + Send>(
