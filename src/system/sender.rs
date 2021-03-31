@@ -9,7 +9,7 @@ use crate::crypto::key::exchange::PublicKey;
 use crate::net::{ConnectionWrite, SendError};
 
 use futures::future;
-use futures::stream::{FuturesUnordered, TryStreamExt};
+use futures::stream::{FuturesUnordered, Stream, StreamExt, TryStreamExt};
 
 use snafu::{ensure, OptionExt, ResultExt, Snafu};
 
@@ -41,6 +41,10 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
     async fn add_connection(&self, write: ConnectionWrite);
 
     /// Get the keys of  peers known by this `Sender`
+    ///
+    /// # Returns
+    /// A `Vec` containing the keys of all peers to which there is an outbound `Connection`
+    /// at this time.
     async fn keys(&self) -> Vec<PublicKey>;
 
     /// Send a message to a given peer using this `Sender`
@@ -51,6 +55,9 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
     ) -> Result<(), SenderError>;
 
     /// Send a set of messages to a remote peer
+    ///
+    /// # Returns
+    /// An `Err` if any message fails to be sent, `Ok` otherwise
     async fn send_many_to_one<'a, I>(
         &self,
         messages: I,
@@ -68,7 +75,32 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
             .await
     }
 
+    /// Send a set of messages contained in an async `Stream` to a remote peer
+    ///
+    /// # Returns
+    /// An Err([`SenderError`]) if any single message fails to be sent, `Ok` otherwise
+    ///
+    /// [`SenderError`]: self::SenderError
+    /// [`Stream`]: futures::stream::Stream
+    async fn send_many_to_one_stream<'a, S>(
+        &self,
+        messages: S,
+        to: &PublicKey,
+    ) -> Result<(), SenderError>
+    where
+        S: Stream<Item = Arc<M>> + Send,
+    {
+        messages
+            .then(|message| self.send(message, to))
+            .try_fold((), |_, _| future::ready(Ok(())))
+            .await
+    }
+
     /// Send the same message to many different peers.
+    ///
+    /// # Returns
+    ///
+    /// An `Err` if any one message failed to be sent, `Ok` otherwise
     async fn send_many<'a, I: Iterator<Item = &'a PublicKey> + Send>(
         self: Arc<Self>,
         message: Arc<M>,
