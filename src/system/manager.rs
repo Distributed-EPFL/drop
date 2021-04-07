@@ -220,7 +220,7 @@ impl<M: Message + 'static> SystemManager<M> {
     pub async fn run<
         S: Sampler,
         P: Processor<M, I, O, NetworkSender<M>, Handle = H> + 'static,
-        O: Message,
+        O: Send,
         I: Message,
         H: Handle<I, O>,
     >(
