@@ -24,6 +24,12 @@ pub enum ExchangeError {
 /// A `PublicKey` used to compute a shared secret with a remote party
 pub struct PublicKey(SodiumPubKey);
 
+impl From<SodiumPubKey> for PublicKey {
+    fn from(key: SodiumPubKey) -> Self {
+        Self(key)
+    }
+}
+
 impl fmt::Display for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for b in self.0.as_ref() {
@@ -54,6 +60,12 @@ pub struct SecretKey(SodiumSecKey);
 impl AsRef<[u8]> for SecretKey {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
+    }
+}
+
+impl From<SodiumSecKey> for SecretKey {
+    fn from(key: SodiumSecKey) -> Self {
+        Self(key)
     }
 }
 

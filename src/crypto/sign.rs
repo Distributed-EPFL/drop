@@ -1,3 +1,4 @@
+use std::fmt;
 use std::hash::Hash;
 
 use super::BincodeError;
@@ -51,6 +52,21 @@ pub struct PublicKey(SodiumPublicKey);
 impl AsRef<[u8]> for PublicKey {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
+    }
+}
+
+impl fmt::Display for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for b in self.0.as_ref() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl From<SodiumPublicKey> for PublicKey {
+    fn from(key: SodiumPublicKey) -> Self {
+        Self(key)
     }
 }
 
