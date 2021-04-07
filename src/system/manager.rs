@@ -70,7 +70,11 @@ pub trait Handle<I, O>: Send + Sync {
     async fn broadcast(&self, message: &I) -> Result<(), Self::Error>;
 }
 
-/// A macro to create a `Handle` for some `Processor` and `Message` type
+/// A macro to create a `Handle` for some `Processor` and `Message` type.
+///
+/// This macro requires [`Mutex`] from tokio to be in scope
+///
+/// [`Mutex`]: tokio::sync::Mutex
 #[macro_export]
 macro_rules! implement_handle {
     ($name:ident, $error:ident, $msg:ident) => {
@@ -103,8 +107,11 @@ macro_rules! implement_handle {
 
         /// A `Handle` used to interact with a `Processor`
         pub struct $name<M: Message> {
-            incoming: Option<tokio::sync::oneshot::Receiver<M>>,
-            outgoing: Option<tokio::sync::oneshot::Sender<(M, Signature)>>,
+            incoming:
+                tokio::sync::Mutex<Option<tokio::sync::oneshot::Receiver<M>>>,
+            outgoing: tokio::sync::Mutex<
+                Option<tokio::sync::oneshot::Sender<(M, Signature)>>,
+            >,
             signer: Signer,
         }
 
@@ -114,10 +121,12 @@ macro_rules! implement_handle {
                 incoming: oneshot::Receiver<M>,
                 outgoing: Option<oneshot::Sender<(M, Signature)>>,
             ) -> Self {
+                use tokio::sync::Mutex;
+
                 Self {
                     signer: Signer::new(keypair.deref().clone()),
-                    incoming: Some(incoming),
-                    outgoing,
+                    incoming: Mutex::new(Some(incoming)),
+                    outgoing: Mutex::new(outgoing),
                 }
             }
         }
@@ -130,8 +139,10 @@ macro_rules! implement_handle {
             /// `$name`. Since this is a one-shot algorithm, a `$name` can only
             /// deliver one message.
             /// All subsequent calls to this method will return `None`
-            async fn deliver(&mut self) -> Result<M, Self::Error> {
+            async fn deliver(&self) -> Result<M, Self::Error> {
                 self.incoming
+                    .lock()
+                    .await
                     .take()
                     .context(AlreadyUsed)?
                     .await
@@ -145,8 +156,9 @@ macro_rules! implement_handle {
             /// ready for delivery. `Ok(Some(message))` if a message is ready.
             /// And finally `Err` if no message can be delivered using this
             /// handle
-            async fn try_deliver(&mut self) -> Result<Option<M>, Self::Error> {
-                let mut deliver = self.incoming.take().context(AlreadyUsed)?;
+            async fn try_deliver(&self) -> Result<Option<M>, Self::Error> {
+                let mut deliver =
+                    self.incoming.lock().await.take().context(AlreadyUsed)?;
 
                 match deliver.try_recv() {
                     Ok(message) => Ok(Some(message)),
@@ -162,11 +174,9 @@ macro_rules! implement_handle {
             /// This will return an error if the instance was created using
             /// `new_receiver` or if this is not the first time this method is
             /// called
-            async fn broadcast(
-                &mut self,
-                message: &M,
-            ) -> Result<(), Self::Error> {
-                let sender = self.outgoing.take().context(NotASender)?;
+            async fn broadcast(&self, message: &M) -> Result<(), Self::Error> {
+                let sender =
+                    self.outgoing.lock().await.take().context(NotASender)?;
                 let signature = self.signer.sign(message).context(Signing)?;
 
                 sender
