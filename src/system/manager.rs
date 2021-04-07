@@ -58,16 +58,16 @@ pub trait Handle<I, O>: Send + Sync {
     /// Deliver a message using this `Handle`. <br />
     /// This method returns `Ok` if some message can be delivered or an `Err`
     /// otherwise
-    async fn deliver(&mut self) -> Result<O, Self::Error>;
+    async fn deliver(&self) -> Result<O, Self::Error>;
 
     /// Poll this `Handle` for delivery, returning immediately with `Ok(None)`
     /// if no message is available for delivery or `Ok(Some)` if a message is
 
     /// otherwise
-    async fn try_deliver(&mut self) -> Result<Option<O>, Self::Error>;
+    async fn try_deliver(&self) -> Result<Option<O>, Self::Error>;
 
     /// Starts broadcasting a message using this `Handle`
-    async fn broadcast(&mut self, message: &I) -> Result<(), Self::Error>;
+    async fn broadcast(&self, message: &I) -> Result<(), Self::Error>;
 }
 
 /// A macro to create a `Handle` for some `Processor` and `Message` type
@@ -348,21 +348,25 @@ mod test {
 
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use tokio::sync::Mutex;
+
     #[async_trait]
-    impl<M: Message> Handle<M, (PublicKey, M)> for mpsc::Receiver<(PublicKey, M)> {
+    impl<M: Message> Handle<M, (PublicKey, M)>
+        for Mutex<mpsc::Receiver<(PublicKey, M)>>
+    {
         type Error = mpsc::error::RecvError;
 
-        async fn deliver(&mut self) -> Result<(PublicKey, M), Self::Error> {
-            Ok(self.recv().await.expect("no message"))
+        async fn deliver(&self) -> Result<(PublicKey, M), Self::Error> {
+            Ok(self.lock().await.recv().await.expect("no message"))
         }
 
         async fn try_deliver(
-            &mut self,
+            &self,
         ) -> Result<Option<(PublicKey, M)>, Self::Error> {
             unreachable!()
         }
 
-        async fn broadcast(&mut self, _: &M) -> Result<(), Self::Error> {
+        async fn broadcast(&self, _: &M) -> Result<(), Self::Error> {
             unreachable!()
         }
     }
@@ -381,7 +385,7 @@ mod test {
         impl Processor<usize, usize, (PublicKey, usize), NetworkSender<usize>>
             for Dummy
         {
-            type Handle = mpsc::Receiver<(PublicKey, usize)>;
+            type Handle = Mutex<mpsc::Receiver<(PublicKey, usize)>>;
 
             type Error = mpsc::error::RecvError;
 
@@ -411,7 +415,7 @@ mod test {
 
                 self.sender.replace(tx);
 
-                rx
+                Mutex::new(rx)
             }
         }
 
@@ -431,7 +435,7 @@ mod test {
 
         debug!("registering processor");
 
-        let mut handle = manager.run(processor, sampler).await;
+        let handle = manager.run(processor, sampler).await;
         let mut messages = Vec::with_capacity(COUNT);
 
         for _ in 0..COUNT {
