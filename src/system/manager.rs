@@ -71,6 +71,7 @@ pub trait Handle<I, O>: Send + Sync {
 }
 
 /// A macro to create a `Handle` for some `Processor` and `Message` type.
+/// The resulting `Handle` will only be usable once and is meant for oneshot primitives.
 ///
 /// This macro requires [`Mutex`] from tokio to be in scope
 ///
@@ -138,7 +139,7 @@ macro_rules! implement_handle {
             /// Deliver a `Message` using the algorithm associated with this
             /// `$name`. Since this is a one-shot algorithm, a `$name` can only
             /// deliver one message.
-            /// All subsequent calls to this method will return `None`
+            /// All subsequent calls to this method will return an `Err`
             async fn deliver(&self) -> Result<M, Self::Error> {
                 self.incoming
                     .lock()
@@ -163,7 +164,7 @@ macro_rules! implement_handle {
                 match deliver.try_recv() {
                     Ok(message) => Ok(Some(message)),
                     Err(oneshot::error::TryRecvError::Empty) => {
-                        self.incoming.replace(deliver);
+                        self.incoming.lock().await.replace(deliver);
                         Ok(None)
                     }
                     _ => NoMessage.fail(),
