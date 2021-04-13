@@ -150,7 +150,7 @@ where
     /// This manager uses `PoissonSampler` internally to sample the known peers.
     pub async fn run<I, P>(&mut self, mut processor: P) -> P::Handle
     where
-        I: Message,
+        I: Into<M>,
         P: Processor<M, I, O, CollectingSender<M>> + 'static,
     {
         let sampler = Arc::new(AllSampler::default());
