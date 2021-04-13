@@ -51,7 +51,7 @@ where
 /// has been scheduled to run on a `SystemManager`. This type will usually be
 /// obtained by calling SystemManager::run on a previously created `Processor`
 #[async_trait]
-pub trait Handle<I, O>: Send + Sync {
+pub trait Handle<I, O>: Send + Sync + Clone {
     /// Type of errors returned by this `Handle` type
     type Error: std::error::Error;
 
@@ -232,22 +232,31 @@ impl<M: Message + 'static> SystemManager<M> {
 
 #[cfg(test)]
 mod test {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     use super::super::sampler::AllSampler;
     use super::*;
     use crate::test::*;
 
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
     use tokio::sync::Mutex;
 
+    #[derive(Clone)]
+    struct TestHandle<M>
+    where
+        M: Message,
+    {
+        channel: Arc<Mutex<mpsc::Receiver<(PublicKey, M)>>>,
+    }
+
     #[async_trait]
-    impl<M: Message> Handle<M, (PublicKey, M)>
-        for Mutex<mpsc::Receiver<(PublicKey, M)>>
+    impl<M> Handle<M, (PublicKey, M)> for TestHandle<M>
+    where
+        M: Message,
     {
         type Error = mpsc::error::RecvError;
 
         async fn deliver(&self) -> Result<(PublicKey, M), Self::Error> {
-            Ok(self.lock().await.recv().await.expect("no message"))
+            Ok(self.channel.lock().await.recv().await.expect("no message"))
         }
 
         async fn try_deliver(
@@ -275,7 +284,7 @@ mod test {
         impl Processor<usize, usize, (PublicKey, usize), NetworkSender<usize>>
             for Dummy
         {
-            type Handle = Mutex<mpsc::Receiver<(PublicKey, usize)>>;
+            type Handle = TestHandle<usize>;
 
             type Error = mpsc::error::RecvError;
 
@@ -305,7 +314,9 @@ mod test {
 
                 self.sender.replace(tx);
 
-                Mutex::new(rx)
+                let channel = Arc::new(Mutex::new(rx));
+
+                TestHandle { channel }
             }
         }
 
