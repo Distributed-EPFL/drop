@@ -180,7 +180,7 @@ impl Seal {
         )
         .map_err(|_| InvalidMac {}.build())?;
 
-        Ok(deserialize(&self.buffer).context(SerializeError)?)
+        deserialize(&self.buffer).context(SerializeError)
     }
 
     /// Decrypts a serializable message from a slice of bytes. This method is

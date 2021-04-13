@@ -25,14 +25,14 @@ impl From<KxKey> for Key {
     }
 }
 
-impl Into<StreamKey> for Key {
-    fn into(self) -> StreamKey {
-        StreamKey(self.0)
+impl From<Key> for StreamKey {
+    fn from(v: Key) -> Self {
+        Self(v.0)
     }
 }
 
-impl Into<KxKey> for Key {
-    fn into(self) -> KxKey {
-        KxKey(self.0)
+impl From<Key> for KxKey {
+    fn from(key: Key) -> Self {
+        Self(key.0)
     }
 }

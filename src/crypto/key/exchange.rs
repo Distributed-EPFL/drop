@@ -61,9 +61,9 @@ pub struct Session {
     receive: Key,
 }
 
-impl Into<(Push, Pull)> for Session {
-    fn into(self) -> (Push, Pull) {
-        (Push::new(self.transmit), Pull::new(self.receive))
+impl From<Session> for (Push, Pull) {
+    fn from(session: Session) -> Self {
+        (Push::new(session.transmit), Pull::new(session.receive))
     }
 }
 
