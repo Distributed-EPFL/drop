@@ -40,11 +40,11 @@ pub enum ConnectError {
     Other { reason: String },
 }
 
-impl Into<ConnectError> for ErrorKind {
-    fn into(self) -> ConnectError {
+impl From<ErrorKind> for ConnectError {
+    fn from(kind: ErrorKind) -> Self {
         use snafu::IntoError;
 
-        Io {}.into_error(self.into())
+        Io {}.into_error(kind.into())
     }
 }
 

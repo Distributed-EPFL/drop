@@ -119,7 +119,7 @@ impl From<SecretKey> for KeyPair {
     fn from(secret: SecretKey) -> Self {
         let public = secret.public_key();
 
-        Self { secret, public }
+        Self { public, secret }
     }
 }
 
