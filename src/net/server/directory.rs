@@ -314,13 +314,13 @@ mod test {
     async fn serve_many() {
         init_logger();
         let server = next_test_ip4();
-        let mut connector = TcpConnector::new(Exchanger::random());
+        let connector = TcpConnector::new(Exchanger::random());
         let (exit_tx, handle) = setup_server(server).await;
 
         for i in 1..10usize {
             let (pkey, peer_addr) = new_peer();
             let mut connection =
-                add_peer(server, peer_addr, pkey, &mut connector).await;
+                add_peer(server, peer_addr, pkey, &connector).await;
             let req = Request::Wait(i);
 
             connection.send_plain(&req).await.expect("send failed");
@@ -447,12 +447,12 @@ mod test {
     async fn add_then_fetch() {
         let server = next_test_ip4();
         let (exit_tx, handle) = setup_server(server).await;
-        let mut connector = TcpConnector::new(Exchanger::random());
+        let connector = TcpConnector::new(Exchanger::random());
 
         let peer_addr = next_test_ip4();
         let peer_pkey = *Exchanger::random().keypair().public();
         let mut connection =
-            add_peer(server, peer_addr, peer_pkey, &mut connector).await;
+            add_peer(server, peer_addr, peer_pkey, &connector).await;
 
         connection
             .send_plain(&Request::Fetch(peer_pkey))
