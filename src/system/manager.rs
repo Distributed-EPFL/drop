@@ -20,7 +20,7 @@ use tracing::{debug, error, info, warn};
 pub trait Processor<M, I, O, S>: Send + Sync
 where
     M: Message + 'static,
-    I: Message,
+    I: Into<M>,
     O: Send,
     S: Sender<M>,
 {
@@ -111,7 +111,7 @@ impl<M: Message + 'static> SystemManager<M> {
         S: Sampler,
         P: Processor<M, I, O, NetworkSender<M>, Handle = H> + 'static,
         O: Send,
-        I: Message,
+        I: Into<M>,
         H: Handle<I, O>,
     >(
         self,
