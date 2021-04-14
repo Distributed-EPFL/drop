@@ -102,26 +102,26 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
     ///
     /// An `Err` if any one message failed to be sent, `Ok` otherwise
     async fn send_many<'a, I: Iterator<Item = &'a PublicKey> + Send>(
-        self: Arc<Self>,
+        &self,
         message: Arc<M>,
         keys: I,
     ) -> Result<(), SenderError> {
-        let result = future::join_all(keys.map(|x| {
-            let message = message.clone();
-            let nself = self.clone();
-            async move { nself.send(message, &x).await }
-        }))
-        .await;
+        let errors = keys
+            .map(|key| {
+                let message = message.clone();
+                self.send(message, &key)
+            })
+            .collect::<FuturesUnordered<_>>();
 
-        let errors = result
-            .into_iter()
-            .filter_map(|x| x.err())
-            .collect::<Vec<_>>();
+        let errors = errors
+            .filter_map(|x| async move { x.err() })
+            .collect::<Vec<_>>()
+            .await;
 
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(ManyErrors { errors }.build())
+            ManyErrors { errors }.fail()
         }
     }
 }
