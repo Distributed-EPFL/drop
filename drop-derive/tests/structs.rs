@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use classic_derive::message;
+use drop_derive::message;
 
 use serde::{Deserialize, Serialize};
 
