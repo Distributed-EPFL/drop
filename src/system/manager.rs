@@ -58,16 +58,16 @@ pub trait Handle<I, O>: Send + Sync + Clone {
     /// Deliver a message using this `Handle`. <br />
     /// This method returns `Ok` if some message can be delivered or an `Err`
     /// otherwise
-    async fn deliver(&self) -> Result<O, Self::Error>;
+    async fn deliver(&mut self) -> Result<O, Self::Error>;
 
     /// Poll this `Handle` for delivery, returning immediately with `Ok(None)`
     /// if no message is available for delivery or `Ok(Some)` if a message is
 
     /// otherwise
-    async fn try_deliver(&self) -> Result<Option<O>, Self::Error>;
+    async fn try_deliver(&mut self) -> Result<Option<O>, Self::Error>;
 
     /// Starts broadcasting a message using this `Handle`
-    async fn broadcast(&self, message: &I) -> Result<(), Self::Error>;
+    async fn broadcast(&mut self, message: &I) -> Result<(), Self::Error>;
 }
 
 /// Handles sending and receiving messages from all known peers.
@@ -255,17 +255,17 @@ mod test {
     {
         type Error = mpsc::error::RecvError;
 
-        async fn deliver(&self) -> Result<(PublicKey, M), Self::Error> {
+        async fn deliver(&mut self) -> Result<(PublicKey, M), Self::Error> {
             Ok(self.channel.lock().await.recv().await.expect("no message"))
         }
 
         async fn try_deliver(
-            &self,
+            &mut self,
         ) -> Result<Option<(PublicKey, M)>, Self::Error> {
             unreachable!()
         }
 
-        async fn broadcast(&self, _: &M) -> Result<(), Self::Error> {
+        async fn broadcast(&mut self, _: &M) -> Result<(), Self::Error> {
             unreachable!()
         }
     }
@@ -336,7 +336,7 @@ mod test {
 
         debug!("registering processor");
 
-        let handle = manager.run(processor, sampler).await;
+        let mut handle = manager.run(processor, sampler).await;
         let mut messages = Vec::with_capacity(COUNT);
 
         for _ in 0..COUNT {
