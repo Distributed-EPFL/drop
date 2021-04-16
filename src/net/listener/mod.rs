@@ -3,7 +3,7 @@ mod tcp;
 pub use tcp::Direct as Tcp;
 
 mod utp;
-/// Listeners that use uTP as a transport protocol
+/// Listeners that use µTP as a transport protocol
 pub use self::utp::Direct as Utp;
 
 mod directory;
