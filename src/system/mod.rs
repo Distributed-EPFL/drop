@@ -9,8 +9,7 @@ use crate::net::{
     ConnectError, Connection, Connector, Listener, ListenerError,
 };
 
-use futures::future;
-use futures::stream::{select_all, Stream};
+use futures::stream::{select_all, FuturesUnordered, Stream, StreamExt};
 
 use serde::{Deserialize, Serialize};
 
@@ -83,27 +82,29 @@ impl System {
     ) -> Self {
         let iter = initial.into_iter();
 
-        let connections = future::join_all(iter.map(|x| async {
-            (
-                x.1.instrument(debug_span!("system_connect", dest = %x.0))
-                    .await,
-                x.0,
-            )
-        }))
-        .await
-        .drain(..)
-        .filter_map(|(result, pkey)| match result {
-            Ok(connection) => {
-                info!("connected to {}", pkey);
-                Some((pkey, connection))
-            }
-            Err(e) => {
-                error!("failed to connect to {}: {}", pkey, e);
-                None
-            }
-        })
-        .map(|(pkey, connection)| (pkey, connection))
-        .collect::<HashMap<_, _>>();
+        let connections = iter
+            .map(|x| async {
+                (
+                    x.1.instrument(debug_span!("system_connect", dest = %x.0))
+                        .await,
+                    x.0,
+                )
+            })
+            .collect::<FuturesUnordered<_>>()
+            .filter_map(|(result, pkey)| async move {
+                match result {
+                    Ok(connection) => {
+                        info!("connected to {}", pkey);
+                        Some((pkey, connection))
+                    }
+                    Err(e) => {
+                        error!("failed to connect to {}: {}", pkey, e);
+                        None
+                    }
+                }
+            })
+            .collect::<HashMap<_, _>>()
+            .await;
 
         Self {
             connections,
@@ -314,12 +315,19 @@ mod tests {
 
         assert_eq!(errors.count(), 0, "error connecting to peers");
 
-        future::join_all(connections.iter_mut().map(|x| async move {
-            x.send(&0usize).await.expect("send failed");
-        }))
-        .await;
+        connections
+            .iter_mut()
+            .map(|x| x.send(&0usize))
+            .collect::<FuturesUnordered<_>>()
+            .for_each(|result| async { result.expect("send failed") })
+            .await;
 
-        future::join_all(receivers.into_iter().map(|(_, handle)| handle)).await;
+        let connections = receivers
+            .into_iter()
+            .map(|(_, handle)| handle)
+            .collect::<FuturesUnordered<_>>()
+            .collect::<Vec<_>>()
+            .await;
 
         assert_eq!(connections.len(), 11, "not all connections opened");
     }
