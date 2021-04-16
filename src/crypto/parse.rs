@@ -79,7 +79,7 @@ impl FromStr for exchange::PublicKey {
     fn from_str(hex: &str) -> Result<Self, Self::Err> {
         use sodiumoxide::crypto::kx::PublicKey;
 
-        ensure!(hex.len() == PUBLICKEYBYTES, UnexpectedSize);
+        ensure!(hex.len() == 2 * PUBLICKEYBYTES, UnexpectedSize);
 
         let bytes = hex.parse_hex()?;
         let sodium =
@@ -95,7 +95,7 @@ impl FromStr for sign::PublicKey {
     fn from_str(hex: &str) -> Result<Self, Self::Err> {
         use sodiumoxide::crypto::sign::{PublicKey, PUBLICKEYBYTES};
 
-        ensure!(hex.len() == PUBLICKEYBYTES, UnexpectedSize);
+        ensure!(hex.len() == 2 * PUBLICKEYBYTES, UnexpectedSize);
 
         let slice = hex.parse_hex()?;
 
