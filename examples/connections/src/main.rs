@@ -36,7 +36,7 @@ async fn main() {
         connection.send(&i).await.expect("send failed");
     }
 
-    // closing the connection so that the receiver won't hange forever
+    // closing the connection so that the receiver won't hang forever
     connection.close().await.expect("close failed");
 
     // wait for the receiver to process all messages
