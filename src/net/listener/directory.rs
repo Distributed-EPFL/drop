@@ -50,7 +50,7 @@ impl Directory {
     /// let listener = TcpListener::new(addr, exchanger.clone()).await?;
     /// let connector = TcpConnector::new(exchanger);
     /// let dir_pubkey = *KeyPair::random().public();
-    /// let dir_addr = "somewhere.com:80";
+    /// let dir_addr = "example.com:80";
     /// let mut listener = DirectoryListener::new(listener, connector, dir_addr)
     ///     .await?;
     /// # Ok(()) }
