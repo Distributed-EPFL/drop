@@ -20,18 +20,34 @@ pub use sodiumoxide::crypto::sign::{
 };
 
 #[derive(Debug, Snafu)]
+/// Error encountered when attempting to sign data using [`Signer`]
+///
+/// [`Signer`]: self::Signer
 pub enum SignError {
     #[snafu(display("failed to sign data: {}", source))]
-    SignSerialize { source: BincodeError },
+    /// The data could not be serialized for signing
+    SignSerialize {
+        /// Serializer error
+        source: BincodeError,
+    },
 }
 
 #[derive(Debug, Snafu)]
+/// Signature verification error
 pub enum VerifyError {
     #[snafu(display("failed to verify data: {}", source))]
-    VerifySerialize { source: BincodeError },
+    /// The data could not be serialized
+    VerifySerialize {
+        /// Serializer error
+        source: BincodeError,
+    },
 
     #[snafu(display("invalid signature"))]
-    Sodium { backtrace: Backtrace },
+    /// The signature was invalid
+    Sodium {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 }
 
 /// A public key used for verifying messages

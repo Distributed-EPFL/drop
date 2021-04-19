@@ -20,7 +20,12 @@ pub enum SampleError {
         expected
     ))]
     /// Amount of keys is too low to satisfy expected size
-    TooSmall { expected: usize, actual: usize },
+    TooSmall {
+        /// The requested sample size
+        expected: usize,
+        /// The actual size of set we were sampling from
+        actual: usize,
+    },
 }
 
 /// Trait used when sampling a set of known peers

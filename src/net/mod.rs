@@ -60,23 +60,38 @@ pub type SerializerError = Box<BincodeErrorKind>;
 pub enum SendError {
     #[snafu(display("could not encrypt data: {}", source))]
     /// Error encrypting data before sending
-    Encrypt { source: EncryptError },
+    Encrypt {
+        /// Underlying error cause
+        source: EncryptError,
+    },
 
     #[snafu(display("could not serialize data: {}", source))]
     /// Data could not be serialized for sending
-    SerializeSend { source: SerializerError },
+    SerializeSend {
+        /// Underlying error cause
+        source: SerializerError,
+    },
 
     #[snafu(display("i/o error: {}", source))]
     /// OS error encountered when sending
-    SendIo { source: IoError },
+    SendIo {
+        /// Underlying error cause
+        source: IoError,
+    },
 
     #[snafu(display("connection corrupted"))]
     /// Attempted to send data on a corrupted `Connection`
-    CorruptedSend { backtrace: Backtrace },
+    CorruptedSend {
+        /// Backtrace
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("unsecured connection"))]
     /// Attempted to send data on an unsecured `Connection`
-    UnsecuredSend { backtrace: Backtrace },
+    UnsecuredSend {
+        /// Underlying error cause
+        backtrace: Backtrace,
+    },
 }
 
 #[derive(Debug, Snafu)]
@@ -84,23 +99,38 @@ pub enum SendError {
 pub enum ReceiveError {
     #[snafu(display("could not decrypt data: {}", source))]
     /// Error decrypting received data
-    Decrypt { source: DecryptError },
+    Decrypt {
+        /// Underlying error cause
+        source: DecryptError,
+    },
 
     #[snafu(display("connection is corrupted"))]
     /// Attempted to read from a corrupted `Connection`
-    CorruptedReceive { backtrace: Backtrace },
+    CorruptedReceive {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("deserialization error: {}", source))]
     /// Error deserializing received data
-    DeserializeReceive { source: SerializerError },
+    DeserializeReceive {
+        /// Underlying error cause
+        source: SerializerError,
+    },
 
     #[snafu(display("unsecured connection"))]
     /// Attempting a secure receive on an unsecured `Connection`
-    UnsecuredReceive { backtrace: Backtrace },
+    UnsecuredReceive {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("i/o error: {}", source))]
     /// OS error encountered
-    ReceiveIo { source: IoError },
+    ReceiveIo {
+        /// Underlying error cause
+        source: IoError,
+    },
 }
 
 #[derive(Debug, Snafu)]
@@ -108,19 +138,31 @@ pub enum ReceiveError {
 pub enum SecureError {
     #[snafu(display("could not exchange keys: {}", source))]
     /// Keys could not be exchanged properly
-    Exchange { source: ExchangeError },
+    Exchange {
+        /// Underlying error cause
+        source: ExchangeError,
+    },
 
     #[snafu(display("i/o error: {}", source))]
     /// OS error occurred while handshaking
-    SecureIo { source: IoError },
+    SecureIo {
+        /// Underlying error cause
+        source: IoError,
+    },
 
     #[snafu(display("receive error: {}", source))]
     /// Error receiving data during handshake
-    SecureReceive { source: ReceiveError },
+    SecureReceive {
+        /// Underlying error cause
+        source: ReceiveError,
+    },
 
     #[snafu(display("send error :{}", source))]
     /// Error sending data during handshake
-    SecureSend { source: SendError },
+    SecureSend {
+        /// Underlying error cause
+        source: SendError,
+    },
 }
 
 /// Encrypted connection state

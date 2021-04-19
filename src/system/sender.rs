@@ -22,16 +22,24 @@ use tracing::warn;
 pub enum SenderError {
     #[snafu(display("peer {} is unknown", remote))]
     /// The destination `PublicKey` was not known by this `Sender`
-    NoSuchPeer { remote: PublicKey },
+    NoSuchPeer {
+        /// The peer we attempted to send to
+        remote: PublicKey,
+    },
     #[snafu(display("connection with {} is broken: {}", remote, source))]
     /// The `Connection` encountered an error while sending
     ConnectionError {
+        /// The peer we were trying to send to
         remote: PublicKey,
+        /// Actual cause of the error
         source: SendError,
     },
     #[snafu(display("{} send errors", errors.len()))]
     /// Many send errors were encountered
-    ManyErrors { errors: Vec<SenderError> },
+    ManyErrors {
+        /// All encountered errors when sending multiple messages
+        errors: Vec<SenderError>,
+    },
 }
 
 #[async_trait]
