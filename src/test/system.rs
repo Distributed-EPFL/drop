@@ -31,12 +31,14 @@ pub fn next_test_ip4() -> SocketAddr {
     (Ipv4Addr::new(127, 0, 0, 1), next_test_port()).into()
 }
 
+/// Generate a set of `count` address and port pairs for local testing
 pub fn test_addrs(count: usize) -> Vec<(Exchanger, SocketAddr)> {
     (0..count)
         .map(|_| (Exchanger::random(), next_test_ip4()))
         .collect()
 }
 
+/// Create a sent of receivers using a user provided callback
 pub async fn create_receivers<
     I: Iterator<Item = (Exchanger, SocketAddr)>,
     F: Future<Output = ()> + Send + Sync,
@@ -103,7 +105,7 @@ pub async fn create_system<
     )
 }
 
-#[allow(dead_code)]
+/// Generate a set of random public keys for local testing
 pub fn keyset(count: usize) -> impl Iterator<Item = PublicKey> + Clone {
     (0..count).map(|_| *KeyPair::random().public())
 }
@@ -190,6 +192,7 @@ where
         handle
     }
 
+    /// Get the internal `Sender` to check what messages were sent
     pub fn sender(&self) -> Arc<CollectingSender<M>> {
         self.sender.clone()
     }

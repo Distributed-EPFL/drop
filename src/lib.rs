@@ -1,6 +1,30 @@
+#![deny(missing_docs)]
+
+//! This is drop, a framework for distributed systems that aims to provide most of the low level plumbing
+//! required when building any kind of distributed system.
+//!
+//! Drop provides the most common cryptographic primitives such as message signature and verification, encrypted
+//! network streams, hashing and HMAC computation tools. All these are available in the [`crypto`] module.
+//!
+//! Drop also provides network utilities for secure communication and offers different methods for discovering and
+//! connecting to remote peers in the [`net`] module.
+//!
+//! Drop also provides a convenient way to implement distributed algorithms and managing connections to a lot
+//! of remote peers in the [`system`] module.
+//!
+//! Lastly drop provides a lot of testing utilites that makes it easier to test your application in the [`test`]
+//! module.
+//!
+//!
+//! [`crypto`]: self::crypto
+//! [`net`]: self::net
+//! [`system`]: self::system
+//! [`test`]: self::test
+
 /// Cryptographic primitives using sodiumoxide
 pub mod crypto;
 
+/// Syncset to efficiently synchronize two sets of values
 pub mod data;
 
 /// Async and synchronous network utilities

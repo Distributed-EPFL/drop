@@ -14,27 +14,53 @@ use sodiumoxide::crypto::secretstream::{
 };
 
 #[derive(Debug, Snafu)]
+/// Error encountered when decyphering data
 pub enum DecryptError {
     #[snafu(display("missing cryptographic header"))]
-    MissingHeader { backtrace: Backtrace },
+    /// The message did not contain a cryptographic header
+    MissingHeader {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("invalid cryptographic header"))]
-    InvalidHeader { backtrace: Backtrace },
+    /// The header contained in the data was invalid
+    InvalidHeader {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("failed to verify message authentication code"))]
-    InvalidMac { backtrace: Backtrace },
+    /// The message authentication code was invalid
+    InvalidMac {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("stream is broken, an error previously occurred"))]
-    BrokenStream { backtrace: Backtrace },
+    /// An error occured previously causing this stream to be corrupted
+    BrokenStream {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("serialization failure: {}", source))]
-    SerializeDecrypt { source: BincodeError },
+    /// Error while deserialize the data after decryption
+    SerializeDecrypt {
+        /// Deserialize error
+        source: BincodeError,
+    },
 }
 
 #[derive(Debug, Snafu)]
+/// Error encountered encrypting data
 pub enum EncryptError {
     #[snafu(display("failed to serialize: {}", source))]
-    SerializeEncrypt { source: BincodeError },
+    /// The data could not be serialized for encryption
+    SerializeEncrypt {
+        /// Underlying serializer error
+        source: BincodeError,
+    },
 }
 
 enum PushState {

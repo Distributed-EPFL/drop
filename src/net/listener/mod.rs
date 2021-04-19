@@ -23,14 +23,26 @@ use async_trait::async_trait;
 use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
+/// Error encountered by [`Listener`]s when accepting incoming [`Connection`]s
+///
+/// [`Listener`]: self::Listener
+/// [`Connection`]: super::Connection
 pub enum ListenerError {
     #[snafu(display("i/o  error: {}", source))]
     #[snafu(visibility(pub))]
-    Io { source: Error },
+    /// IO error while accepting connection
+    Io {
+        /// Underlying error cause
+        source: Error,
+    },
 
     #[snafu(display("could not secure connection: {}", source))]
     #[snafu(visibility(pub))]
-    Secure { source: SecureError },
+    /// Error during handshake
+    Secure {
+        /// Underlying error cause
+        source: SecureError,
+    },
 }
 
 /// A trait used to accept incoming `Connection`s from other peers

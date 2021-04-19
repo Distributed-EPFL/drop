@@ -12,10 +12,17 @@ use sodiumoxide::crypto::kx::{
     PublicKey as SodiumPubKey, SecretKey as SodiumSecKey,
 };
 
+/// Error encountered while computing shared secrets using [`Exchanger`]
+///
+/// [`Exchanger`]: self::Exchanger
 #[derive(Debug, Snafu)]
 pub enum ExchangeError {
+    /// Cryptographic operation failure
     #[snafu(display("sodium failure"))]
-    Sodium { backtrace: Backtrace },
+    Sodium {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 }
 
 #[derive(
@@ -70,7 +77,7 @@ impl From<SodiumSecKey> for SecretKey {
 }
 
 #[derive(Clone, Eq, PartialEq)]
-/// A `KeyPair` that can be used to exchange a secret symmetric key
+/// A `KeyPair` that can be used to exchange a secret symmetric key for use in an encrypted network stream
 pub struct KeyPair {
     public: PublicKey,
     secret: SecretKey,

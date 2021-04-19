@@ -39,7 +39,7 @@ pub struct PublicKey(SodiumPublicKey);
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
 pub struct SecretKey(SodiumSecretKey);
 
-/// An asymmetric key pair
+/// An asymmetric key pair used for use in one-time signed and authenticated messages
 #[derive(Clone, PartialEq, Eq)]
 pub struct KeyPair {
     public: PublicKey,
@@ -59,21 +59,44 @@ impl KeyPair {
 }
 
 #[derive(Snafu, Debug)]
+/// Error encountered by [`Seal`]
+///
+/// [`Seal`]: self::Seal
 pub enum SealError {
     #[snafu(display("failed to encrypt data: {}", source))]
-    SealEncryptError { source: EncryptError },
+    /// Error while encrypting the data
+    SealEncryptError {
+        /// Underlying error cause
+        source: EncryptError,
+    },
 
     #[snafu(display("failed to decrypt data: {}", source))]
-    SealDecryptError { source: DecryptError },
+    /// Error while decrypting data
+    SealDecryptError {
+        /// Underlying error cause
+        source: DecryptError,
+    },
 
     #[snafu(display("missing cryptographic header in box"))]
-    MissingHeader { backtrace: Backtrace },
+    /// The received message was missing a cryptographic header
+    MissingHeader {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("invalid mac in sealed box"))]
-    InvalidMac { backtrace: Backtrace },
+    /// The message authentication code was invalid
+    InvalidMac {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("serializer error: {}", source))]
-    SerializeError { source: Box<BincodeErrorKind> },
+    /// Error while serializing the data while sealing
+    SerializeError {
+        /// Underlying error cause
+        source: Box<BincodeErrorKind>,
+    },
 }
 
 /// An asymmetric encryption/decryption structure. <br />

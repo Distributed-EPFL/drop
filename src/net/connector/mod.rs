@@ -26,18 +26,32 @@ use tracing::{debug_span, info};
 use tracing_futures::Instrument;
 
 #[derive(Debug, Snafu)]
+/// Error encountered by [`Connector`] when attempting to establish a [`Connection`]
+///
+/// [`Connector`]: self::Connector
+/// [`Connection`]: super::Connection
 pub enum ConnectError {
     #[snafu(display("i/o error: {}", source))]
     #[snafu(visibility(pub))]
     /// OS error when connecting
-    Io { source: Error },
+    Io {
+        /// Underlying error cause
+        source: Error,
+    },
     #[snafu(display("could not secure connection: {}", source))]
     #[snafu(visibility(pub))]
     /// Error encountered when attempting to secure an outgoing `Connection`
-    Secure { source: SecureError },
+    Secure {
+        /// Underlying error cause
+        source: SecureError,
+    },
     #[snafu(display("underlying connector error: {}", reason))]
     #[snafu(visibility(pub))]
-    Other { reason: String },
+    /// Any other kind of error
+    Other {
+        /// Details about what failed
+        reason: String,
+    },
 }
 
 impl From<ErrorKind> for ConnectError {

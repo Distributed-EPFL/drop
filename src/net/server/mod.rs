@@ -11,12 +11,34 @@ use snafu::Snafu;
 #[snafu(visibility(pub))]
 /// Errors encountered by servers
 pub enum ServerError {
+    /// I/O error encountered by the server
     #[snafu(display("i/o error when {}: {}", when, source))]
-    ServerIo { when: String, source: Error },
+    ServerIo {
+        /// Details about the step that failed
+        when: String,
+        /// Underlying error cause
+        source: Error,
+    },
     #[snafu(display("error receiving data when {}: {}", when, source))]
-    Receive { when: String, source: ReceiveError },
+    /// Error receiving data from client
+    Receive {
+        /// Details about step that failed
+        when: String,
+        /// Underlying error cause
+        source: ReceiveError,
+    },
     #[snafu(display("error sending data while {}: {}", when, source))]
-    Send { when: String, source: SendError },
+    /// Error sending data to requesting client
+    Send {
+        /// Details about the step that failed
+        when: String,
+        /// Underlying error cause
+        source: SendError,
+    },
     #[snafu(display("error accepting connection: {}", source))]
-    Accept { source: ListenerError },
+    /// Error accepting an incoming connection
+    Accept {
+        /// Underlying error cause
+        source: ListenerError,
+    },
 }

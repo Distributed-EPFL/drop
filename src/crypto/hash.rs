@@ -14,12 +14,23 @@ use sodiumoxide::utils;
 pub const SIZE: usize = 32;
 
 #[derive(Debug, Snafu)]
+/// Errors enountered by [`Hasher`]
+///
+/// [`Hasher`]: self::Hasher
 pub enum HashError {
     #[snafu(display("failed to serialize data: {}", source))]
-    SerializeError { source: BincodeError },
+    /// Error while serializing data for hashing
+    SerializeError {
+        /// Underlying error cause
+        source: BincodeError,
+    },
 
     #[snafu(display("sodium error"))]
-    SodiumError { backtrace: Backtrace },
+    /// Cryptographic operation error
+    SodiumError {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 }
 
 /// Wrapper for sodium hasher

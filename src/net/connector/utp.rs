@@ -20,6 +20,9 @@ pub struct Direct {
 }
 
 impl Direct {
+    /// Create a new [`Direct`] muTP [`Connector`]
+    ///
+    /// [`Connector`]: super::Connector
     pub fn new(exchanger: Exchanger) -> Self {
         Self { exchanger }
     }

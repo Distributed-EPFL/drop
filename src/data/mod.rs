@@ -1,7 +1,5 @@
-// Modules
+#![allow(missing_docs)]
 
 pub mod syncset;
-
-// Structs
 
 pub use syncset::SyncSet;

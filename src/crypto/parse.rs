@@ -12,15 +12,28 @@ use sodiumoxide::crypto::generichash::DIGEST_MIN;
 use sodiumoxide::crypto::kx::{PUBLICKEYBYTES, SESSIONKEYBYTES};
 
 #[derive(Debug, Snafu)]
+/// Error encountered when parsing hexadecimal strings using the [`ParseHex`] trait
+///
+/// [`ParseHex`]: self::ParseHex
 pub enum ParseHexError {
     #[snafu(display("Unexpected argument size"))]
-    UnexpectedSize { backtrace: Backtrace },
+    /// The string size was not a multiple of 2
+    UnexpectedSize {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("malformed hexadecimal value"))]
-    MalformedHex { backtrace: Backtrace },
+    /// Invalid characters were present in the string
+    MalformedHex {
+        /// Error backtrace
+        backtrace: Backtrace,
+    },
 }
 
-trait ParseHex {
+/// A trait implemented by structs that can parsed into an array of bytes
+pub trait ParseHex {
+    /// Parse this into an array of bytes
     fn parse_hex(&self) -> Result<Vec<u8>, ParseHexError>;
 }
 

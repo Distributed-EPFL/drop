@@ -1,3 +1,4 @@
+/// Utilities to compute a shared secret to establish a secure network stream
 pub mod exchange;
 
 use std::convert::Into;
