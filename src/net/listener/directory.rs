@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use super::super::common::directory::{Request, Response};
-use super::super::connector::Connector;
+use super::super::connector::{ConnectError, Connector};
 use super::super::socket::Socket;
 use super::super::utils::resolve_addr;
 use super::super::{Connection, ReceiveError};
@@ -13,7 +13,7 @@ use crate::crypto::key::exchange::{Exchanger, PublicKey};
 
 use async_trait::async_trait;
 
-use snafu::ResultExt;
+use snafu::{ResultExt, Snafu};
 
 use tokio::net::ToSocketAddrs;
 use tokio::sync::oneshot::{channel, Receiver, Sender};
@@ -22,6 +22,15 @@ use tokio::time::{interval, Interval};
 
 use tracing::{error, info, trace_span};
 use tracing_futures::Instrument;
+
+#[derive(Debug, Snafu)]
+enum DirectoryError {
+    #[snafu(display("protocol error: {}", reason))]
+    Protocol { reason: String },
+
+    #[snafu(display("network error: {}", source))]
+    Network { source: ReceiveError },
+}
 
 /// A `Listener` that registers its local address with a given directory server.
 pub struct Directory {
@@ -166,12 +175,20 @@ async fn send_request(
     pkey: &PublicKey,
     directory: SocketAddr,
 ) {
+    const RETRY_DELAY: u64 = 5;
+
+    let retry_delay = Duration::from_secs(RETRY_DELAY);
+    let mut timer = interval(retry_delay);
+
     if let Err(e) = connection.send_plain(&req).await {
         error!("failed to send message: {}", e);
-        // if the connection can't be established we probably moved anyway
-        check_connection(connector, connection, &pkey, directory)
-            .await
-            .expect("failed to re-establish connection to directory");
+
+        while let Err(e) =
+            check_connection(connector, connection, &pkey, directory).await
+        {
+            error!("failed to re-establish connection to directory: {}", e);
+            timer.tick().await;
+        }
     }
 }
 
@@ -180,16 +197,10 @@ async fn check_connection(
     connection: &mut Connection,
     pkey: &PublicKey,
     dir_addr: SocketAddr,
-) -> Result<(), ()> {
+) -> Result<(), ConnectError> {
     error!("lost connection to directory, reconnecting");
 
-    *connection = match connector.connect(&pkey, &dir_addr).await {
-        Ok(connection) => connection,
-        Err(e) => {
-            error!("failed to reconnect to directory: {}", e);
-            return Err(());
-        }
-    };
+    *connection = connector.connect(&pkey, &dir_addr).await?;
 
     Ok(())
 }
@@ -198,9 +209,11 @@ async fn handle_response(
     resp: Result<Response, ReceiveError>,
     timer: &mut Interval,
     duration: &Duration,
-) -> Result<(), ()> {
+) -> Result<(), DirectoryError> {
+    let resp = resp.context(Network)?;
+
     match resp {
-        Ok(Response::Ok) => {
+        Response::Ok => {
             info!(
                 "renewed lease successfully, next renew in {} seconds",
                 duration.as_secs(),
@@ -208,14 +221,10 @@ async fn handle_response(
             timer.tick().await;
             Ok(())
         }
-        Ok(_) => {
-            error!("invalid response from directory: {:?}", resp);
-            Err(())
+        other => Protocol {
+            reason: format!("expected Response::Ok response got {}", other),
         }
-        Err(e) => {
-            error!("failed to renew registration: {}", e);
-            Err(())
-        }
+        .fail(),
     }
 }
 
