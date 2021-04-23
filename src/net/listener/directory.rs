@@ -26,6 +26,7 @@ use tracing_futures::Instrument;
 /// A `Listener` that registers its local address with a given directory server.
 pub struct Directory {
     listener: Box<dyn Listener<Candidate = SocketAddr>>,
+    directory_addr: SocketAddr,
     exit_tx: Sender<()>,
 }
 
@@ -65,15 +66,19 @@ impl Directory {
         C: Connector<Candidate = SocketAddr> + 'static,
         L: Listener<Candidate = SocketAddr> + 'static,
     {
-        let resolved = resolve_addr(directory).await.context(Io)?;
+        let directory_addr = resolve_addr(directory).await.context(Io)?;
         let (exit_tx, exit_rx) = channel();
         let listener = Box::new(listener);
         let connector = Box::new(connector);
 
-        let mut listener = Self { listener, exit_tx };
+        let mut listener = Self {
+            listener,
+            directory_addr,
+            exit_tx,
+        };
 
         listener
-            .register(connector, resolved, exit_rx)
+            .register(connector, directory_addr, exit_rx)
             .instrument(trace_span!("register"))
             .await?;
 
@@ -216,7 +221,7 @@ async fn handle_response(
 
 #[async_trait]
 impl Listener for Directory {
-    type Candidate = SocketAddr;
+    type Candidate = DirectoryCandidate;
 
     async fn establish(&mut self) -> Result<Box<dyn Socket>, ListenerError> {
         Ok(self.listener.establish().await?)
@@ -230,14 +235,44 @@ impl Listener for Directory {
         self.listener.exchanger()
     }
 
-    async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError> {
-        todo!()
+    async fn candidates(&self) -> Result<Vec<Self::Candidate>, ListenerError> {
+        Ok(vec![DirectoryCandidate::new(
+            self.directory_addr,
+            *self.exchanger().keypair().public(),
+        )])
     }
 }
 
 impl fmt::Display for Directory {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "directory listener at {}", self.local_addr().unwrap(),)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+/// Candidate for `DirectoryListener` that contains the address of the directory
+/// as well as the `PublicKey` to look for in the `DirectoryServer`
+pub struct DirectoryCandidate {
+    dir_addr: SocketAddr,
+    local_key: PublicKey,
+}
+
+impl DirectoryCandidate {
+    pub fn new(dir_addr: SocketAddr, local_key: PublicKey) -> Self {
+        Self {
+            dir_addr,
+            local_key,
+        }
+    }
+}
+
+impl fmt::Display for DirectoryCandidate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "directory at {} with key {}",
+            self.dir_addr, self.local_key
+        )
     }
 }
 

@@ -28,20 +28,33 @@ use snafu::{ResultExt, Snafu};
 /// [`Listener`]: self::Listener
 /// [`Connection`]: super::Connection
 pub enum ListenerError {
-    #[snafu(display("i/o  error: {}", source))]
     #[snafu(visibility(pub))]
+    #[snafu(display("i/o  error: {}", source))]
     /// IO error while accepting connection
     Io {
         /// Underlying error cause
         source: Error,
     },
 
-    #[snafu(display("could not secure connection: {}", source))]
     #[snafu(visibility(pub))]
+    #[snafu(display("no address availalble"))]
+    /// This listener doesn't have a known candidate
+    NoAddress,
+
+    #[snafu(visibility(pub))]
+    #[snafu(display("could not secure connection: {}", source))]
     /// Error during handshake
     Secure {
         /// Underlying error cause
         source: SecureError,
+    },
+
+    #[snafu(display("{}", reason))]
+    #[snafu(visibility(pub))]
+    /// Any other type of error
+    Other {
+        /// The actual cause of the error
+        reason: &'static str,
     },
 }
 
@@ -79,5 +92,5 @@ pub trait Listener: Send + Sync {
     fn exchanger(&self) -> &Exchanger;
 
     /// Get a slice of `Candidate`s on which this `Listener` can be reached
-    async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError>;
+    async fn candidates(&self) -> Result<Vec<Self::Candidate>, ListenerError>;
 }

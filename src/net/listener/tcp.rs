@@ -75,8 +75,8 @@ mod unix {
 impl Listener for Direct {
     type Candidate = SocketAddr;
 
-    async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError> {
-        todo!()
+    async fn candidates(&self) -> Result<Vec<Self::Candidate>, ListenerError> {
+        Ok(vec![self.listener.local_addr().context(Io)?])
     }
 
     fn local_addr(&self) -> Option<SocketAddr> {
