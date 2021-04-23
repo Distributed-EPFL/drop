@@ -181,7 +181,7 @@ impl System {
         let (ok, err): (Vec<_>, Vec<_>) = connector
             .connect_many(candidates)
             .await
-            .drain(..)
+            .into_iter()
             .zip(candidates.iter().map(|x| x.1))
             .map(|(result, pkey)| match result {
                 Ok(connection) => {

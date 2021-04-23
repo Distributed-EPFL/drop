@@ -298,7 +298,7 @@ mod test {
 
         let mut resolved = future::join_all(listeners)
             .await
-            .drain(..)
+            .into_iter()
             .map(|x| x.expect("bind failed"))
             .collect::<Vec<_>>();
 
@@ -341,7 +341,7 @@ mod test {
                 .map(|(addr, exch)| TcpListener::new(addr, exch.clone())),
         )
         .await
-        .drain(..)
+        .into_iter()
         .map(|x| x.expect("listen failed"))
         .collect::<Vec<_>>();
 
@@ -349,7 +349,7 @@ mod test {
             let mut connections =
                 future::join_all(listeners.iter_mut().map(|x| x.accept()))
                     .await
-                    .drain(..)
+                    .into_iter()
                     .collect::<Result<Vec<_>, _>>()
                     .expect("accept failed");
 
@@ -359,7 +359,7 @@ mod test {
                 connections.iter_mut().map(|x| x.receive::<u32>()),
             )
             .await
-            .drain(..)
+            .into_iter()
             .for_each(|x| assert_eq!(0u32, x.expect("recv failed")));
         });
 
@@ -372,7 +372,7 @@ mod test {
         let connections: Result<Vec<Connection>, ConnectError> = connector
             .connect_many(candidates.as_slice())
             .await
-            .drain(..)
+            .into_iter()
             .collect();
 
         future::join_all(connections.expect("connect failed").iter_mut().map(
@@ -382,7 +382,7 @@ mod test {
             },
         ))
         .await
-        .drain(..)
+        .into_iter()
         .collect::<Result<Vec<_>, _>>()
         .expect("send failed");
 
