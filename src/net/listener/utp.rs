@@ -9,6 +9,8 @@ use crate::net::socket::utp::BufferedUtpStream;
 
 use async_trait::async_trait;
 
+use snafu::OptionExt;
+
 use tokio::net::ToSocketAddrs;
 use tokio::task;
 
@@ -41,13 +43,13 @@ impl Direct {
 impl Listener for Direct {
     type Candidate = SocketAddr;
 
-    async fn candidates(&self) -> Result<&[Self::Candidate], ListenerError> {
-        todo!()
+    async fn candidates(&self) -> Result<Vec<Self::Candidate>, ListenerError> {
+        Ok(vec![self.local_addr().context(NoAddress)?])
     }
 
     /// Get the local address for this `Listener`. Be aware that `UtpDirect` is
     /// a one-use `Listener` and that after accepting a `Connection` this will
-    /// return an error.
+    /// return `None`
     fn local_addr(&self) -> Option<SocketAddr> {
         self.socket.as_ref().map(|x| x.local_addr())
     }
