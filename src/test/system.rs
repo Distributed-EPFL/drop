@@ -156,7 +156,7 @@ where
         P: Processor<M, I, O, CollectingSender<M>> + 'static,
     {
         let sampler = Arc::new(AllSampler::default());
-        let handle = processor.output(sampler, Arc::clone(&self.sender)).await;
+        let handle = processor.setup(sampler, Arc::clone(&self.sender)).await;
         let processor = Arc::new(processor);
         let sender = self.sender.clone();
         let total = self.incoming.len();
