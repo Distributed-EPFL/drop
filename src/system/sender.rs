@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
-use std::ops::Deref;
 use std::sync::Arc;
 
 use super::Message;
@@ -58,7 +57,7 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
     /// Send a message to a given peer using this `Sender`
     async fn send(
         &self,
-        message: Arc<M>,
+        message: M,
         pkey: &PublicKey,
     ) -> Result<(), SenderError>;
 
@@ -72,7 +71,7 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
         to: &PublicKey,
     ) -> Result<(), SenderError>
     where
-        I: IntoIterator<Item = Arc<M>> + Send,
+        I: IntoIterator<Item = M> + Send,
         I::IntoIter: Send,
     {
         messages
@@ -96,7 +95,7 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
         to: &PublicKey,
     ) -> Result<(), SenderError>
     where
-        S: Stream<Item = Arc<M>> + Send,
+        S: Stream<Item = M> + Send,
     {
         messages
             .then(|message| self.send(message, to))
@@ -111,7 +110,7 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
     /// An `Err` if any one message failed to be sent, `Ok` otherwise
     async fn send_many<'a, I: Iterator<Item = &'a PublicKey> + Send>(
         &self,
-        message: Arc<M>,
+        message: M,
         keys: I,
     ) -> Result<(), SenderError> {
         let errors = keys
@@ -159,7 +158,7 @@ impl<M: Message> NetworkSender<M> {
 impl<M: Message + 'static> Sender<M> for NetworkSender<M> {
     async fn send(
         &self,
-        message: Arc<M>,
+        message: M,
         pkey: &PublicKey,
     ) -> Result<(), SenderError> {
         self.connections
@@ -169,7 +168,7 @@ impl<M: Message + 'static> Sender<M> for NetworkSender<M> {
             .context(NoSuchPeer { remote: *pkey })?
             .lock()
             .await
-            .send(message.deref())
+            .send(&message)
             .await
             .context(ConnectionError { remote: *pkey })
     }
@@ -220,6 +219,11 @@ where
             _o: PhantomData,
         }
     }
+
+    /// Return the inner sender wrapped by this `ConvertSender`
+    pub fn into_inner(self) -> Arc<S> {
+        self.sender
+    }
 }
 
 #[async_trait]
@@ -231,12 +235,10 @@ where
 {
     async fn send(
         &self,
-        message: Arc<I>,
+        message: I,
         to: &PublicKey,
     ) -> Result<(), SenderError> {
-        let message = message.deref().clone().into();
-
-        self.sender.send(Arc::new(message), to).await
+        self.sender.send(message.into(), to).await
     }
 
     async fn keys(&self) -> Vec<PublicKey> {
@@ -250,7 +252,7 @@ where
 
 /// A `Sender` that only collects messages instead of sending them
 pub struct CollectingSender<M: Message> {
-    messages: Mutex<Vec<(PublicKey, Arc<M>)>>,
+    messages: Mutex<Vec<(PublicKey, M)>>,
     keys: Mutex<HashSet<PublicKey>>,
 }
 
@@ -265,7 +267,7 @@ impl<M: Message> CollectingSender<M> {
     }
 
     /// Retrieve the set of messages that was sent using this `CollectingSender`
-    pub async fn messages(&self) -> Vec<(PublicKey, Arc<M>)> {
+    pub async fn messages(&self) -> Vec<(PublicKey, M)> {
         self.messages.lock().await.iter().cloned().collect()
     }
 }
@@ -274,7 +276,7 @@ impl<M: Message> CollectingSender<M> {
 impl<M: Message + 'static> Sender<M> for CollectingSender<M> {
     async fn send(
         &self,
-        message: Arc<M>,
+        message: M,
         key: &PublicKey,
     ) -> Result<(), SenderError> {
         ensure!(
@@ -293,5 +295,56 @@ impl<M: Message + 'static> Sender<M> for CollectingSender<M> {
 
     async fn keys(&self) -> Vec<PublicKey> {
         self.keys.lock().await.clone().iter().copied().collect()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::system::message;
+    use crate::test::keyset;
+
+    use serde::{Deserialize, Serialize};
+
+    #[tokio::test]
+    async fn convert_sender() {
+        #[message]
+        #[derive(Copy)]
+        struct M1(u8);
+
+        #[message]
+        #[derive(Copy)]
+        struct M2(u16);
+
+        impl From<M1> for M2 {
+            fn from(v: M1) -> Self {
+                Self(v.0.into())
+            }
+        }
+
+        const COUNT: u16 = 10;
+
+        let expected = (0..COUNT).map(M2).collect::<Vec<_>>();
+
+        let peer = keyset(1).next().unwrap();
+        let sender = CollectingSender::<M2>::new(vec![peer]);
+
+        let sender = ConvertSender::new(Arc::new(sender));
+
+        sender
+            .send_many_to_one(expected.iter().cloned(), &peer)
+            .await
+            .expect("send failed");
+
+        let sender = sender.into_inner();
+
+        let messages = sender.messages().await.into_iter().map(Into::into);
+
+        assert_eq!(messages.len(), COUNT.into(), "wrong message count");
+
+        messages
+            .map(|x: (PublicKey, M2)| x.1)
+            .zip(expected.into_iter().map(Into::into))
+            .for_each(|(a, b)| assert_eq!(a, b, "bad message"));
     }
 }
