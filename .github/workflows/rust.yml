@@ -50,15 +50,15 @@ jobs:
           profile: minimal
           toolchain: stable
 
-      - name: cargo deny
-        shell: bash
-        run: |
-          cargo install cargo-deny && cargo deny check
+      - uses: Swatinem/rust-cache@v1
+        with:
+          key: "coverage"
 
       - uses: actions-rs/cargo@v1
         name: cargo test
         with:
           command: test
+          args: --all-features
 
       - name: install kcov
         uses: ryankurte/action-apt@v0.2.0
@@ -72,3 +72,29 @@ jobs:
 
       - name: upload coverage
         uses: codecov/codecov-action@v1
+
+  deny:
+    name: cargo deny
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        name: git checkout
+
+      - uses: actions-rs/toolchain@v1
+        name: install toolchain
+        with:
+          profile: minimal
+          toolchain: stable
+
+      - uses: actions-rs/cargo@v1
+        name: install cargo deny
+        with:
+          command: install
+          args: cargo-deny
+
+      - uses: actions-rs/cargo@v1
+        name: cargo deny
+        with:
+          command: deny
+          args: check
