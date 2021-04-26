@@ -17,6 +17,8 @@ use tracing::{debug, error, info, warn};
 
 #[async_trait]
 /// Trait used to process incoming messages from a `SystemManager`
+///
+/// [`SystemManager`]: self::SystemManager
 pub trait Processor<M, I, O, S>: Send + Sync
 where
     M: Message + 'static,
@@ -24,7 +26,9 @@ where
     O: Send,
     S: Sender<M>,
 {
-    /// The handle used to send and receive messages from the `Processor`
+    /// The [`Handle`] used to send and receive messages from the `Processor`
+    ///
+    /// [`Handle`]: self::Handle
     type Handle: Handle<I, O>;
 
     /// Type of errors returned by `Processor::process`
@@ -45,6 +49,17 @@ where
         sampler: Arc<SA>,
         sender: Arc<S>,
     ) -> Self::Handle;
+
+    /// Used by managers to signal a disconnection to the `Processor` allowing it to resample if needed
+    async fn disconnect<SA: Sampler>(
+        &self,
+        peer: PublicKey,
+        sender: Arc<S>,
+        sampler: Arc<SA>,
+    );
+
+    /// Called periodically by the manager to start garbage collection by the `Processor`
+    async fn garbage_collection(&self);
 }
 
 /// An asbtract `Handle` type that allows interacting with a `Processor` once it
@@ -317,6 +332,19 @@ mod test {
                 let channel = Arc::new(Mutex::new(rx));
 
                 TestHandle { channel }
+            }
+
+            async fn disconnect<SA: Sampler>(
+                &self,
+                _: PublicKey,
+                _: Arc<NetworkSender<usize>>,
+                _: Arc<SA>,
+            ) {
+                unreachable!()
+            }
+
+            async fn garbage_collection(&self) {
+                unreachable!()
             }
         }
 
