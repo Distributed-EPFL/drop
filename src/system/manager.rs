@@ -40,7 +40,7 @@ where
 
     /// Setup the `Processor` using the given sender map and returns a `Handle`
     /// for the user to use.
-    async fn output<SA: Sampler>(
+    async fn setup<SA: Sampler>(
         &mut self,
         sampler: Arc<SA>,
         sender: Arc<S>,
@@ -150,7 +150,7 @@ impl<M: Message + 'static> SystemManager<M> {
         let mut receiver =
             Self::new_receive(self.reads, ReceiverStream::new(read_rx));
 
-        let handle = processor.output(sampler, sender.clone()).await;
+        let handle = processor.setup(sampler, sender.clone()).await;
         let processor = Arc::new(processor);
 
         task::spawn(async move {
@@ -305,7 +305,7 @@ mod test {
                 Ok(())
             }
 
-            async fn output<SA: Sampler>(
+            async fn setup<SA: Sampler>(
                 &mut self,
                 _sampler: Arc<SA>,
                 _sender: Arc<NetworkSender<usize>>,
