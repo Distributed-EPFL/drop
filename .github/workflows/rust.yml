@@ -36,6 +36,8 @@ jobs:
         name: cargo test
         with:
           command: test
+          args: --all-features
+          
   coverage:
     name: coverage
     runs-on: ubuntu-20.04
