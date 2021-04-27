@@ -16,6 +16,8 @@ use postage::dispatch;
 use postage::sink::Sink;
 use postage::stream::Stream as _;
 
+use snafu::{OptionExt, ResultExt};
+
 use tokio::task::{self, JoinHandle};
 
 use tracing::{debug, error, info, warn};
@@ -206,6 +208,91 @@ impl<M: Message + 'static> SystemManager<M> {
         S: Sink<Item = (PublicKey, M)> + Send + Sync + Unpin + 'static,
     {
         NetworkAgent::new(connection, tx).spawn()
+    }
+}
+
+#[derive(Debug, snafu::Snafu)]
+/// Errors encountered by [`SystemHandle`]
+///
+/// [`SystemHandle`]: self::SystemHandle
+pub enum SystemError {
+    #[snafu(display("unauthenticated connection"))]
+    /// User tried to add an unauthenticated connection
+    Unauthenticated,
+}
+
+/// This is handle used to interact with a [`SystemManager`] and the [`Processor`]
+/// running on that [`SystemManager`]
+///
+/// [`Processor`]: self::Processor
+/// [`SystemManager`]: self::SystemManager
+pub struct SystemHandle<P, S, I, O, M>
+where
+    P: Processor<M, I, O, S>,
+    O: Send,
+    I: Send,
+    M: Message + From<I> + 'static,
+    S: Sender<M>,
+{
+    inner: P::Handle,
+    sender: Arc<S>,
+    processor: Arc<P>,
+    _i: PhantomData<I>,
+    _o: PhantomData<O>,
+}
+
+impl<P, S, I, O, M> SystemHandle<P, S, I, O, M>
+where
+    P: Processor<M, I, O, S>,
+    O: Send,
+    I: Send,
+    M: Message + From<I> + 'static,
+    S: Sender<M>,
+{
+    fn new<F1, F2>(
+        processor: Arc<P>,
+        inner: P::Handle,
+        sender: Arc<S>,
+    ) -> Self {
+        Self {
+            inner,
+            sender,
+            processor,
+            _i: PhantomData,
+            _o: PhantomData,
+        }
+    }
+
+    /// Get [`Handle`] for the [`Processor`] currently running
+    ///
+    /// [`Handle`]: self::Handle
+    /// [`Processor`]: self::Processor
+    pub fn processor_handle(&self) -> P::Handle {
+        self.inner.clone()
+    }
+
+    pub async fn force_gc(&self) {
+        self.processor.garbage_collection().await;
+    }
+
+    /// Add a new [`Connection`] to the running [`SystemManager`]
+    ///
+    /// [`Connection`]: crate::net::Connection
+    /// [`SystemManager`]: self::SystemManager
+    pub fn add_connection(
+        &self,
+        connection: Connection,
+    ) -> Result<(), SystemError> {
+        debug!(
+            "adding connection from user to {}",
+            connection.remote_key().context(Unauthenticated)?
+        );
+
+        Ok(())
+    }
+
+    fn process_loop(&mut self) {
+        loop {}
     }
 }
 
