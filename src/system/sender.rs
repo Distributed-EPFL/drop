@@ -47,6 +47,9 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
     /// Add a new `ConnectionWrite` to this `Sender`
     async fn add_connection(&self, write: ConnectionWrite);
 
+    /// Remove a connection by `PublicKey` from this `Sender`
+    async fn remove_connection(&self, key: &PublicKey);
+
     /// Get the keys of  peers known by this `Sender`
     ///
     /// # Returns
@@ -186,6 +189,10 @@ impl<M: Message + 'static> Sender<M> for NetworkSender<M> {
         }
     }
 
+    async fn remove_connection(&self, key: &PublicKey) {
+        self.connections.write().await.remove(key);
+    }
+
     async fn keys(&self) -> Vec<PublicKey> {
         self.connections.read().await.keys().copied().collect()
     }
@@ -248,6 +255,10 @@ where
     async fn add_connection(&self, write: ConnectionWrite) {
         self.sender.add_connection(write).await
     }
+
+    async fn remove_connection(&self, key: &PublicKey) {
+        self.sender.remove_connection(key).await;
+    }
 }
 
 /// A `Sender` that only collects messages instead of sending them
@@ -287,6 +298,10 @@ impl<M: Message + 'static> Sender<M> for CollectingSender<M> {
         self.messages.lock().await.push((*key, message));
 
         Ok(())
+    }
+
+    async fn remove_connection(&self, key: &PublicKey) {
+        self.keys.lock().await.remove(key);
     }
 
     async fn add_connection(&self, write: ConnectionWrite) {
