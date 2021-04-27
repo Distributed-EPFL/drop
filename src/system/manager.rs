@@ -1,3 +1,4 @@
+use std::iter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -6,11 +7,15 @@ use super::{Message, Sampler, Sender, System};
 
 use crate::async_trait;
 use crate::crypto::key::exchange::PublicKey;
-use crate::net::{Connection, ConnectionRead, ConnectionWrite};
+use crate::net::{Connection, ConnectionRead, ConnectionWrite, ReceiveError};
 
+use futures::stream::FuturesUnordered;
 use futures::{Stream, StreamExt};
 
-use tokio::sync::mpsc;
+use postage::dispatch;
+use postage::sink::Sink;
+use postage::stream::Stream as _;
+
 use tokio::task::{self, JoinHandle};
 
 use tracing::{debug, error, info, warn};
@@ -37,7 +42,7 @@ where
     /// Process an incoming message using this `Processor`
     async fn process(
         &self,
-        message: Arc<M>,
+        message: M,
         from: PublicKey,
         sender: Arc<S>,
     ) -> Result<(), Self::Error>;
@@ -141,8 +146,39 @@ impl<M: Message + 'static> SystemManager<M> {
         let sender = Arc::new(NetworkSender::new(self.writes));
         let sender_add = sender.clone();
         let mut incoming = self.incoming;
-        let (read_tx, read_rx) = mpsc::channel(8);
 
+        let (msg_tx, msg_rx) = dispatch::channel(128);
+
+        let dispatcher = msg_tx.clone();
+
+        let handles = self
+            .reads
+            .into_iter()
+            .zip(iter::repeat(msg_tx))
+            .map(|(read, tx)| Self::spawn_receive_agent(read, tx))
+            .collect::<FuturesUnordered<_>>();
+
+        let handle = processor.setup(sampler, sender.clone()).await;
+        let processor = Arc::new(processor);
+
+        let processing_handles = (0..32)
+            .zip(iter::repeat((processor, msg_rx, sender)))
+            .map(|(_, (processor, msg_rx, sender))| (processor, msg_rx, sender))
+            .map(|(processor, mut msg_rx, sender)| {
+                task::spawn(async move {
+                    while let Some((pkey, message)) = msg_rx.recv().await {
+                        debug!("received {:?} from {}", message, pkey);
+
+                        if let Err(e) = processor.process(message, pkey, sender.clone()).await {
+                            error!("failed to process message: {}", e);
+                        }
+                    }
+
+                    warn!("message processing ending after all network agents closed");
+                })
+            }).collect::<FuturesUnordered<_>>();
+
+        // spawn new connection handler
         task::spawn(async move {
             while let Some(connection) = incoming.next().await {
                 if let Some((read, write)) = connection.split() {
@@ -152,42 +188,7 @@ impl<M: Message + 'static> SystemManager<M> {
                     );
                     sender_add.add_connection(write).await;
 
-                    if let Err(e) = read_tx.send(read).await {
-                        error!("receive task isn't running anymore: {}", e);
-                        return;
-                    }
-                }
-            }
-        });
-
-        // FIXME: pending inclusion of `Stream` in libstd
-        use tokio_stream::wrappers::ReceiverStream;
-        let mut receiver =
-            Self::new_receive(self.reads, ReceiverStream::new(read_rx));
-
-        let handle = processor.setup(sampler, sender.clone()).await;
-        let processor = Arc::new(processor);
-
-        task::spawn(async move {
-            loop {
-                match receiver.recv().await {
-                    Some((pkey, message)) => {
-                        debug!("incoming message, dispatching...");
-                        let sender = sender.clone();
-                        let processor = processor.clone();
-
-                        task::spawn(async move {
-                            if let Err(e) =
-                                processor.process(message, pkey, sender).await
-                            {
-                                error!("processing error :{}", e);
-                            }
-                        });
-                    }
-                    None => {
-                        warn!("no more incoming messages, dispatcher exiting");
-                        break;
-                    }
+                    Self::spawn_receive_agent(read, dispatcher.clone());
                 }
             }
         });
@@ -197,51 +198,60 @@ impl<M: Message + 'static> SystemManager<M> {
         handle
     }
 
-    fn new_receive<I, S>(
-        reads: I,
-        mut read_rx: S,
-    ) -> mpsc::Receiver<(PublicKey, Arc<M>)>
+    fn spawn_receive_agent<S>(
+        connection: ConnectionRead,
+        tx: S,
+    ) -> JoinHandle<Result<(), ReceiveError>>
     where
-        I: IntoIterator<Item = ConnectionRead>,
-        S: Stream<Item = ConnectionRead> + Unpin + Send + 'static,
+        S: Sink<Item = (PublicKey, M)> + Send + Sync + Unpin + 'static,
     {
-        let (tx, rx) = mpsc::channel(32);
+        NetworkAgent::new(connection, tx).spawn()
+    }
+}
 
-        reads.into_iter().for_each(|connection| {
-            Self::receive_task(connection, tx.clone());
-        });
+struct NetworkAgent<M, S>
+where
+    S: Sink<Item = (PublicKey, M)>,
+{
+    sender: S,
+    read: ConnectionRead,
+    pkey: PublicKey,
+}
 
-        task::spawn(async move {
-            while let Some(connection) = read_rx.next().await {
-                Self::receive_task(connection, tx.clone());
-            }
-        });
+impl<M, S> NetworkAgent<M, S>
+where
+    M: Message + 'static,
+    S: Sink<Item = (PublicKey, M)> + Send + Sync + Unpin + 'static,
+{
+    fn new(read: ConnectionRead, sender: S) -> Self {
+        let pkey = *read.remote_pkey();
 
-        rx
+        Self { sender, read, pkey }
     }
 
-    fn receive_task(
-        mut connection: ConnectionRead,
-        tx: mpsc::Sender<(PublicKey, Arc<M>)>,
-    ) -> JoinHandle<()> {
-        task::spawn(async move {
-            let remote = *connection.remote_pkey();
+    fn spawn(mut self) -> JoinHandle<PublicKey> {
+        let pkey = self.pkey;
 
-            loop {
-                match connection.receive().await {
-                    Ok(msg) => {
-                        if tx.send((remote, Arc::new(msg))).await.is_err() {
-                            info!("manager is not running anymore exiting");
-                            return;
-                        }
-                    }
-                    Err(e) => {
-                        error!("receive error: {}", e);
-                        return;
+        task::spawn(
+            async move { self.receive_loop().await }
+                .instrument(debug_span!("network_agent", peer=%pkey)),
+        )
+    }
+
+    async fn receive_loop(&mut self) -> PublicKey {
+        loop {
+            match self.read.receive::<M>().await {
+                Err(e) => {
+                    error!("connection with failed: {}", e);
+                    return self.pkey;
+                }
+                Ok(message) => {
+                    if self.sender.send((self.pkey, message)).await.is_err() {
+                        warn!("network agent shutting down");
                     }
                 }
             }
-        })
+        }
     }
 }
 
@@ -253,7 +263,7 @@ mod test {
     use super::*;
     use crate::test::*;
 
-    use tokio::sync::Mutex;
+    use tokio::sync::{mpsc, Mutex};
 
     #[derive(Clone)]
     struct TestHandle<M>
@@ -305,7 +315,7 @@ mod test {
 
             async fn process(
                 &self,
-                message: Arc<usize>,
+                message: usize,
                 key: PublicKey,
                 _sender: Arc<NetworkSender<usize>>,
             ) -> Result<(), Self::Error> {
@@ -313,7 +323,7 @@ mod test {
                     .as_ref()
                     .expect("not setup")
                     .clone()
-                    .send((key, *message))
+                    .send((key, message))
                     .await
                     .expect("channel failure");
 

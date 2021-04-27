@@ -18,6 +18,7 @@ tracing = { version = "0.1", optional = true }
 tracing-futures = { version = "0.2", optional = true }
 tracing-subscriber = { version = "0.1", optional = true }
 peroxide = { version = "0.27", optional = true }
+postage = "0.4"
 
 # pending inclusion of stream in std
 tokio-stream = "0.1"
