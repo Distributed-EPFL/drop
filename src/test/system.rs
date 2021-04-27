@@ -170,7 +170,6 @@ where
             .map(|(idx, (key, msg))| {
                 let p = processor.clone();
                 let sender = sender.clone();
-                let msg = Arc::new(msg);
 
                 async move {
                     trace!(
