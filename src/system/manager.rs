@@ -153,13 +153,20 @@ impl<M: Message + 'static> SystemManager<M> {
         let mut incoming = self.incoming;
 
         let (msg_tx, msg_rx) = dispatch::channel(128);
-        let (error_tx, _) = dispatch::channel(32);
+        let (error_tx, error_rx) = dispatch::channel(32);
         let (mut connection_tx, connection_rx) = mpsc::channel(16);
 
         let perr_tx = error_tx.clone();
 
         let handles = Self::spawn_network_agents(self.reads, msg_tx.clone())
             .collect::<FuturesUnordered<_>>();
+
+        Self::spawn_disconnect_watcher::<P, _, _, _, _>(
+            handles,
+            msg_tx,
+            error_tx.clone(),
+            connection_rx,
+        );
 
         let handle = processor.setup(sampler, sender.clone()).await;
         let processor = Arc::new(processor);
@@ -201,16 +208,9 @@ impl<M: Message + 'static> SystemManager<M> {
             }
         });
 
-        Self::spawn_disconnect_watcher::<P, _, _, _, _>(
-            handles,
-            msg_tx,
-            error_tx.clone(),
-            connection_rx,
-        );
-
         info!("done setting up! system now running");
 
-        SystemHandle::new(processor, handle, error_tx)
+        SystemHandle::new(processor, handle, error_rx)
     }
 
     fn spawn_network_agents<I, S>(
@@ -317,7 +317,7 @@ where
 {
     inner: P::Handle,
     processor: Arc<P>,
-    error_dispatch: dispatch::Sender<SystemError<P::Error>>,
+    error_rx: Option<dispatch::Receiver<SystemError<P::Error>>>,
     _i: PhantomData<I>,
     _o: PhantomData<O>,
 }
@@ -334,12 +334,12 @@ where
     fn new(
         processor: Arc<P>,
         inner: P::Handle,
-        error_dispatch: dispatch::Sender<SystemError<P::Error>>,
+        error_rx: dispatch::Receiver<SystemError<P::Error>>,
     ) -> Self {
         Self {
             inner,
             processor,
-            error_dispatch,
+            error_rx: Some(error_rx),
             _i: PhantomData,
             _o: PhantomData,
         }
@@ -363,14 +363,13 @@ where
     /// Get a `Stream` that will yield all errors encountered in the running [`SystemManager`]
     ///
     /// # Note
-    /// Each error is only delivered once so if you create multiple error `Stream`s each will get some errors
-    /// but no stream will produce every single error
+    /// The `Stream` of errors can only be taken once, further calls will only return `None`
     ///
     /// [`SystemManager`]: self:SystemManager
     pub fn errors(
-        &self,
-    ) -> impl postage::stream::Stream<Item = SystemError<P::Error>> {
-        self.error_dispatch.subscribe()
+        &mut self,
+    ) -> Option<impl futures::Stream<Item = SystemError<P::Error>>> {
+        self.error_rx.take()
     }
 
     /// Add a new [`Connection`] to the running [`SystemManager`]
@@ -446,6 +445,64 @@ mod test {
 
     use tokio::sync::{mpsc, Mutex};
 
+    #[derive(Default)]
+    struct Dummy {
+        sender: Option<mpsc::Sender<(PublicKey, usize)>>,
+    }
+
+    #[async_trait]
+    impl Processor<usize, usize, (PublicKey, usize), NetworkSender<usize>>
+        for Dummy
+    {
+        type Handle = TestHandle<usize>;
+
+        type Error = mpsc::error::RecvError;
+
+        async fn process(
+            &self,
+            message: usize,
+            key: PublicKey,
+            _sender: Arc<NetworkSender<usize>>,
+        ) -> Result<(), Self::Error> {
+            self.sender
+                .as_ref()
+                .expect("not setup")
+                .clone()
+                .send((key, message))
+                .await
+                .expect("channel failure");
+
+            Ok(())
+        }
+
+        async fn setup<SA: Sampler>(
+            &mut self,
+            _sampler: Arc<SA>,
+            _sender: Arc<NetworkSender<usize>>,
+        ) -> Self::Handle {
+            let (tx, rx) = mpsc::channel(128);
+
+            self.sender.replace(tx);
+
+            let channel = Arc::new(Mutex::new(rx));
+
+            TestHandle { channel }
+        }
+
+        async fn disconnect<SA: Sampler>(
+            &self,
+            _: PublicKey,
+            _: Arc<NetworkSender<usize>>,
+            _: Arc<SA>,
+        ) {
+            unreachable!()
+        }
+
+        async fn garbage_collection(&self) {
+            unreachable!()
+        }
+    }
+
     #[derive(Clone)]
     struct TestHandle<M>
     where
@@ -480,64 +537,6 @@ mod test {
     async fn receive_from_manager() {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         const COUNT: usize = 50;
-
-        #[derive(Default)]
-        struct Dummy {
-            sender: Option<mpsc::Sender<(PublicKey, usize)>>,
-        }
-
-        #[async_trait]
-        impl Processor<usize, usize, (PublicKey, usize), NetworkSender<usize>>
-            for Dummy
-        {
-            type Handle = TestHandle<usize>;
-
-            type Error = mpsc::error::RecvError;
-
-            async fn process(
-                &self,
-                message: usize,
-                key: PublicKey,
-                _sender: Arc<NetworkSender<usize>>,
-            ) -> Result<(), Self::Error> {
-                self.sender
-                    .as_ref()
-                    .expect("not setup")
-                    .clone()
-                    .send((key, message))
-                    .await
-                    .expect("channel failure");
-
-                Ok(())
-            }
-
-            async fn setup<SA: Sampler>(
-                &mut self,
-                _sampler: Arc<SA>,
-                _sender: Arc<NetworkSender<usize>>,
-            ) -> Self::Handle {
-                let (tx, rx) = mpsc::channel(128);
-
-                self.sender.replace(tx);
-
-                let channel = Arc::new(Mutex::new(rx));
-
-                TestHandle { channel }
-            }
-
-            async fn disconnect<SA: Sampler>(
-                &self,
-                _: PublicKey,
-                _: Arc<NetworkSender<usize>>,
-                _: Arc<SA>,
-            ) {
-                unreachable!()
-            }
-
-            async fn garbage_collection(&self) {
-                unreachable!()
-            }
-        }
 
         let (pkeys, handles, system) =
             create_system(COUNT, |mut connection| async move {
@@ -582,6 +581,41 @@ mod test {
             (0..COUNT).collect::<Vec<_>>(),
             "incorrect message sequence"
         );
+
+        handles.await.expect("system failure");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn disconnect_notice() {
+        static COUNT: usize = 50;
+
+        use std::collections::HashSet;
+
+        crate::test::init_logger();
+
+        let (pkeys, handles, system) = create_system(COUNT, |_| async {}).await;
+
+        let manager = SystemManager::<usize>::new(system);
+        let processor = Dummy::default();
+
+        let mut system_handle =
+            manager.run(processor, AllSampler::default()).await;
+
+        let source = system_handle.errors().unwrap();
+
+        let actual = source
+            .map(|x| match x {
+                SystemError::Disconnected { pkey } => pkey,
+                e => panic!("bad error type: {}", e),
+            })
+            .collect::<HashSet<_>>()
+            .await;
+
+        assert_eq!(actual.len(), COUNT, "wrong number of disconnect notice");
+
+        let expected = pkeys.into_iter().map(|x| x.0).collect::<HashSet<_>>();
+
+        assert_eq!(actual, expected, "missing some disconnect notices");
 
         handles.await.expect("system failure");
     }
