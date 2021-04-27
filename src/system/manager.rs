@@ -148,7 +148,7 @@ impl<M: Message + 'static> SystemManager<M> {
         let mut incoming = self.incoming;
 
         let (msg_tx, msg_rx) = dispatch::channel(128);
-        let (error_tx, error_rx) = dispatch::channel(32);
+        let (error_tx, _) = dispatch::channel(32);
         let (mut connection_tx, connection_rx) = mpsc::channel(16);
 
         let perr_tx = error_tx.clone();
