@@ -7,20 +7,22 @@ use super::{Message, Sampler, Sender, System};
 
 use crate::async_trait;
 use crate::crypto::key::exchange::PublicKey;
-use crate::net::{Connection, ConnectionRead, ConnectionWrite, ReceiveError};
+use crate::net::{Connection, ConnectionRead, ConnectionWrite};
 
-use futures::stream::FuturesUnordered;
-use futures::{Stream, StreamExt};
+use futures::stream::{FuturesUnordered, StreamExt};
+use futures::FutureExt as _;
 
 use postage::dispatch;
+use postage::mpsc;
 use postage::sink::Sink;
-use postage::stream::Stream as _;
+use postage::stream::Stream;
 
-use snafu::{OptionExt, ResultExt};
+use snafu::OptionExt;
 
 use tokio::task::{self, JoinHandle};
 
-use tracing::{debug, error, info, warn};
+use tracing::{debug, debug_span, error, info, warn};
+use tracing_futures::Instrument;
 
 #[async_trait]
 /// Trait used to process incoming messages from a `SystemManager`
@@ -39,7 +41,7 @@ where
     type Handle: Handle<I, O>;
 
     /// Type of errors returned by `Processor::process`
-    type Error: std::error::Error;
+    type Error: std::error::Error + Send + Sync;
 
     /// Process an incoming message using this `Processor`
     async fn process(
@@ -99,7 +101,7 @@ pub struct SystemManager<M: Message + 'static> {
     reads: Vec<ConnectionRead>,
     writes: Vec<ConnectionWrite>,
     /// `Stream` of incoming `Connection`s
-    incoming: Box<dyn Stream<Item = Connection> + Send + Unpin>,
+    incoming: Box<dyn futures::Stream<Item = Connection> + Send + Unpin>,
 }
 
 impl<M: Message + 'static> SystemManager<M> {
@@ -129,20 +131,16 @@ impl<M: Message + 'static> SystemManager<M> {
     /// or deterministic version of the algorithm will be run. <br />
     /// This returns a `Handle` that allows interaction while the system is
     /// running
-    pub async fn run<
+    pub async fn run<S, P, O, I, H>(self, mut processor: P, sampler: S) -> H
+    where
         S: Sampler,
         P: Processor<M, I, O, NetworkSender<M>, Handle = H> + 'static,
+        P::Error: 'static,
         O: Send,
         I: Into<M>,
         H: Handle<I, O>,
-    >(
-        self,
-        mut processor: P,
-        sampler: S,
-    ) -> H {
+    {
         info!("beginning system setup");
-
-        debug!("setting up dispatcher...");
 
         let sampler = Arc::new(sampler);
         let sender = Arc::new(NetworkSender::new(self.writes));
@@ -150,35 +148,39 @@ impl<M: Message + 'static> SystemManager<M> {
         let mut incoming = self.incoming;
 
         let (msg_tx, msg_rx) = dispatch::channel(128);
+        let (error_tx, error_rx) = dispatch::channel(32);
+        let (mut connection_tx, connection_rx) = mpsc::channel(16);
 
-        let dispatcher = msg_tx.clone();
+        let perr_tx = error_tx.clone();
 
-        let handles = self
-            .reads
-            .into_iter()
-            .zip(iter::repeat(msg_tx))
-            .map(|(read, tx)| Self::spawn_receive_agent(read, tx))
+        let handles = Self::spawn_network_agents(self.reads, msg_tx.clone())
             .collect::<FuturesUnordered<_>>();
 
         let handle = processor.setup(sampler, sender.clone()).await;
         let processor = Arc::new(processor);
 
-        let processing_handles = (0..32)
-            .zip(iter::repeat((processor, msg_rx, sender)))
-            .map(|(_, (processor, msg_rx, sender))| (processor, msg_rx, sender))
-            .map(|(processor, mut msg_rx, sender)| {
+        debug!("setting up processing tasks...");
+
+        (0..32)
+            .zip(iter::repeat((processor, msg_rx, sender, perr_tx)))
+            .map(|(_, (processor, msg_rx, sender, err_tx))| (processor, msg_rx, sender, err_tx))
+            .map(|(processor, mut msg_rx, sender, mut err_tx)| {
                 task::spawn(async move {
                     while let Some((pkey, message)) = msg_rx.recv().await {
-                        debug!("received {:?} from {}", message, pkey);
+                        debug!("starting processing for {:?} from {}", message, pkey);
 
                         if let Err(e) = processor.process(message, pkey, sender.clone()).await {
                             error!("failed to process message: {}", e);
+
+                            let error = SystemError::ProcessorError { source: e };
+
+                            let _ = err_tx.send(error).await;
                         }
                     }
 
                     warn!("message processing ending after all network agents closed");
                 })
-            }).collect::<FuturesUnordered<_>>();
+            }).for_each(drop); // we want to process the whole iterator but not keep the handles
 
         // spawn new connection handler
         task::spawn(async move {
@@ -190,20 +192,82 @@ impl<M: Message + 'static> SystemManager<M> {
                     );
                     sender_add.add_connection(write).await;
 
-                    Self::spawn_receive_agent(read, dispatcher.clone());
+                    let _ = connection_tx.send(read).await;
                 }
             }
         });
 
-        debug!("done setting up dispatcher! system now running");
+        Self::spawn_disconnect_watcher::<P, _, _, _, _>(
+            handles,
+            msg_tx,
+            error_tx,
+            connection_rx,
+        );
+
+        info!("done setting up! system now running");
 
         handle
+    }
+
+    fn spawn_network_agents<I, S>(
+        reads: I,
+        sink: S,
+    ) -> impl Iterator<Item = JoinHandle<PublicKey>>
+    where
+        I: IntoIterator<Item = ConnectionRead>,
+        S: Sink<Item = (PublicKey, M)> + Send + Clone + Sync + Unpin + 'static,
+    {
+        debug!("spawning networking agents...");
+
+        reads
+            .into_iter()
+            .zip(iter::repeat(sink))
+            .map(|(read, tx)| Self::spawn_receive_agent(read, tx))
+    }
+
+    fn spawn_disconnect_watcher<P, E, D, R, ER>(
+        mut receivers: FuturesUnordered<JoinHandle<PublicKey>>,
+        msg_dispatch: D,
+        mut error_tx: E,
+        mut connection_rx: R,
+    ) where
+        ER: std::error::Error + Send + Sync + 'static,
+        E: Sink<Item = SystemError<ER>> + Send + Unpin + 'static,
+        D: Sink<Item = (PublicKey, M)> + Clone + Sync + Send + Unpin + 'static,
+        R: Stream<Item = ConnectionRead> + Send + Unpin + 'static,
+    {
+        debug!("spawning disconnect watcher...");
+
+        task::spawn(async move {
+            while !receivers.is_empty() {
+                futures::select! {
+                    // new connection to be added to list of receivers
+                    read = connection_rx.recv().fuse() => {
+
+                        if let Some(read) = read {
+                            debug!("new incoming connection");
+
+                            receivers.push(NetworkAgent::new(read, msg_dispatch.clone()).spawn());
+                        }
+                    }
+                    // disconnection notice
+                    pkey = receivers.next() => {
+                        let pkey = pkey.unwrap().unwrap();
+
+
+                        if error_tx.send(Disconnected { pkey }.build()).await.is_err() {
+                            error!("error handle dropped too early some errors were lost");
+                        }
+                    }
+                }
+            }
+        });
     }
 
     fn spawn_receive_agent<S>(
         connection: ConnectionRead,
         tx: S,
-    ) -> JoinHandle<Result<(), ReceiveError>>
+    ) -> JoinHandle<PublicKey>
     where
         S: Sink<Item = (PublicKey, M)> + Send + Sync + Unpin + 'static,
     {
@@ -215,10 +279,22 @@ impl<M: Message + 'static> SystemManager<M> {
 /// Errors encountered by [`SystemHandle`]
 ///
 /// [`SystemHandle`]: self::SystemHandle
-pub enum SystemError {
+pub enum SystemError<E: std::error::Error + Send + Sync + 'static> {
     #[snafu(display("unauthenticated connection"))]
     /// User tried to add an unauthenticated connection
     Unauthenticated,
+    #[snafu(display("remote peer {} disconnected", pkey))]
+    /// A connection error caused a remote peer to be disconnected
+    Disconnected {
+        /// Peer's PublicKey
+        pkey: PublicKey,
+    },
+    #[snafu(display("processor error: {}", source))]
+    /// Processor encountered an error
+    ProcessorError {
+        /// Error source
+        source: E,
+    },
 }
 
 /// This is handle used to interact with a [`SystemManager`] and the [`Processor`]
@@ -229,6 +305,7 @@ pub enum SystemError {
 pub struct SystemHandle<P, S, I, O, M>
 where
     P: Processor<M, I, O, S>,
+    P::Error: Send + Sync + 'static,
     O: Send,
     I: Send,
     M: Message + From<I> + 'static,
@@ -237,13 +314,15 @@ where
     inner: P::Handle,
     sender: Arc<S>,
     processor: Arc<P>,
+    error_dispatch: dispatch::Sender<SystemError<P::Error>>,
     _i: PhantomData<I>,
     _o: PhantomData<O>,
 }
 
 impl<P, S, I, O, M> SystemHandle<P, S, I, O, M>
 where
-    P: Processor<M, I, O, S>,
+    P: Processor<M, I, O, S> + Send,
+    P::Error: Send + Sync + 'static,
     O: Send,
     I: Send,
     M: Message + From<I> + 'static,
@@ -254,10 +333,13 @@ where
         inner: P::Handle,
         sender: Arc<S>,
     ) -> Self {
+        let (error_dispatch, _) = dispatch::channel(8);
+
         Self {
             inner,
             sender,
             processor,
+            error_dispatch,
             _i: PhantomData,
             _o: PhantomData,
         }
@@ -271,8 +353,24 @@ where
         self.inner.clone()
     }
 
+    /// Force garbage collection of the [`Processor`]
+    ///
+    /// [`Processor`]: self::Processor
     pub async fn force_gc(&self) {
         self.processor.garbage_collection().await;
+    }
+
+    /// Get a `Stream` that will yield all errors encountered in the running [`SystemManager`]
+    ///
+    /// # Note
+    /// Each error is only delivered once so if you create multiple error `Stream`s each will get some errors
+    /// but no stream will produce every single error
+    ///
+    /// [`SystemManager`]: self:SystemManager
+    pub fn errors(
+        &self,
+    ) -> impl postage::stream::Stream<Item = SystemError<P::Error>> {
+        self.error_dispatch.subscribe()
     }
 
     /// Add a new [`Connection`] to the running [`SystemManager`]
@@ -282,17 +380,13 @@ where
     pub fn add_connection(
         &self,
         connection: Connection,
-    ) -> Result<(), SystemError> {
+    ) -> Result<(), SystemError<P::Error>> {
         debug!(
             "adding connection from user to {}",
             connection.remote_key().context(Unauthenticated)?
         );
 
         Ok(())
-    }
-
-    fn process_loop(&mut self) {
-        loop {}
     }
 }
 
@@ -382,7 +476,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn receive_from_manager() {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         const COUNT: usize = 50;
@@ -449,7 +543,10 @@ mod test {
             create_system(COUNT, |mut connection| async move {
                 let value = COUNTER.fetch_add(1, Ordering::AcqRel);
 
+                debug!("sending {:?}", value);
                 connection.send(&value).await.expect("recv failed");
+
+                debug!("done sending");
             })
             .await;
 
