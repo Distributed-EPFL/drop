@@ -131,13 +131,18 @@ impl<M: Message + 'static> SystemManager<M> {
     /// or deterministic version of the algorithm will be run. <br />
     /// This returns a `Handle` that allows interaction while the system is
     /// running
-    pub async fn run<S, P, O, I, H>(self, mut processor: P, sampler: S) -> H
+    pub async fn run<S, P, O, I, H>(
+        self,
+        mut processor: P,
+        sampler: S,
+    ) -> SystemHandle<P, NetworkSender<M>, I, O, M>
     where
         S: Sampler,
         P: Processor<M, I, O, NetworkSender<M>, Handle = H> + 'static,
         P::Error: 'static,
         O: Send,
-        I: Into<M>,
+        I: Send,
+        M: From<I>,
         H: Handle<I, O>,
     {
         info!("beginning system setup");
@@ -162,9 +167,8 @@ impl<M: Message + 'static> SystemManager<M> {
         debug!("setting up processing tasks...");
 
         (0..32)
-            .zip(iter::repeat((processor, msg_rx, sender, perr_tx)))
-            .map(|(_, (processor, msg_rx, sender, err_tx))| (processor, msg_rx, sender, err_tx))
-            .map(|(processor, mut msg_rx, sender, mut err_tx)| {
+            .zip(iter::repeat((processor.clone(), msg_rx, sender, perr_tx)))
+            .map(|(idx, (processor, mut msg_rx, sender, mut err_tx))| {
                 task::spawn(async move {
                     while let Some((pkey, message)) = msg_rx.recv().await {
                         debug!("starting processing for {:?} from {}", message, pkey);
@@ -179,7 +183,7 @@ impl<M: Message + 'static> SystemManager<M> {
                     }
 
                     warn!("message processing ending after all network agents closed");
-                })
+                }.instrument(debug_span!("process_task", idx=%idx)))
             }).for_each(drop); // we want to process the whole iterator but not keep the handles
 
         // spawn new connection handler
@@ -200,13 +204,13 @@ impl<M: Message + 'static> SystemManager<M> {
         Self::spawn_disconnect_watcher::<P, _, _, _, _>(
             handles,
             msg_tx,
-            error_tx,
+            error_tx.clone(),
             connection_rx,
         );
 
         info!("done setting up! system now running");
 
-        handle
+        SystemHandle::new(processor, handle, error_tx)
     }
 
     fn spawn_network_agents<I, S>(
@@ -302,17 +306,16 @@ pub enum SystemError<E: std::error::Error + Send + Sync + 'static> {
 ///
 /// [`Processor`]: self::Processor
 /// [`SystemManager`]: self::SystemManager
+#[derive(Clone)]
 pub struct SystemHandle<P, S, I, O, M>
 where
     P: Processor<M, I, O, S>,
     P::Error: Send + Sync + 'static,
     O: Send,
-    I: Send,
     M: Message + From<I> + 'static,
     S: Sender<M>,
 {
     inner: P::Handle,
-    sender: Arc<S>,
     processor: Arc<P>,
     error_dispatch: dispatch::Sender<SystemError<P::Error>>,
     _i: PhantomData<I>,
@@ -323,21 +326,18 @@ impl<P, S, I, O, M> SystemHandle<P, S, I, O, M>
 where
     P: Processor<M, I, O, S> + Send,
     P::Error: Send + Sync + 'static,
-    O: Send,
     I: Send,
+    O: Send,
     M: Message + From<I> + 'static,
     S: Sender<M>,
 {
-    fn new<F1, F2>(
+    fn new(
         processor: Arc<P>,
         inner: P::Handle,
-        sender: Arc<S>,
+        error_dispatch: dispatch::Sender<SystemError<P::Error>>,
     ) -> Self {
-        let (error_dispatch, _) = dispatch::channel(8);
-
         Self {
             inner,
-            sender,
             processor,
             error_dispatch,
             _i: PhantomData,
@@ -558,7 +558,9 @@ mod test {
 
         debug!("registering processor");
 
-        let mut handle = manager.run(processor, sampler).await;
+        let system_handle = manager.run(processor, sampler).await;
+        let mut handle = system_handle.processor_handle();
+
         let mut messages = Vec::with_capacity(COUNT);
 
         for _ in 0..COUNT {
