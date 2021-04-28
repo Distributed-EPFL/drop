@@ -382,7 +382,7 @@ where
     /// # Note
     /// The `Stream` of errors can only be taken once, further calls will only return `None`
     ///
-    /// [`SystemManager`]: self:SystemManager
+    /// [`SystemManager`]: self::SystemManager
     pub fn errors(
         &mut self,
     ) -> Option<impl futures::Stream<Item = SystemError<P::Error>>> {

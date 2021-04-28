@@ -207,7 +207,7 @@ impl<M: Message + 'static> Sender<M> for NetworkSender<M> {
     }
 
     async fn remove_connection(&self, key: &PublicKey) {
-        self.connections.write().await.remove(key);
+        self.agents.write().await.remove(key);
     }
 
     async fn keys(&self) -> Vec<PublicKey> {
@@ -375,8 +375,14 @@ impl<M: Message + 'static> Sender<M> for CollectingSender<M> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    use std::net::{Ipv4Addr, SocketAddr};
+
     use crate::system::message;
     use crate::test::keyset;
+
+    use crate::crypto::key::exchange::Exchanger;
+    use crate::net::{Connector, Listener, TcpConnector, TcpListener};
 
     use serde::{Deserialize, Serialize};
 
@@ -420,5 +426,43 @@ mod test {
             .map(|x: (PublicKey, M2)| x.1)
             .zip(expected.into_iter().map(Into::into))
             .for_each(|(a, b)| assert_eq!(a, b, "bad message"));
+    }
+
+    #[tokio::test]
+    async fn network_sender() {
+        const MESSAGE: usize = 12;
+
+        let addr: SocketAddr = (Ipv4Addr::LOCALHOST, 12000).into();
+        let exchanger = Exchanger::random();
+        let public = *exchanger.keypair().public();
+        let mut listener = TcpListener::new(addr, exchanger)
+            .await
+            .expect("listen failed");
+
+        let handle = task::spawn(async move {
+            let message = listener
+                .accept()
+                .await
+                .expect("accept failed")
+                .receive::<usize>()
+                .await
+                .expect("recv failed");
+
+            assert_eq!(message, MESSAGE, "wrong message received");
+        });
+
+        let connector = TcpConnector::new(Exchanger::random());
+
+        let connection = connector
+            .connect(&public, &addr)
+            .await
+            .expect("connect failed");
+
+        let write = connection.split().unwrap().1;
+        let sender = NetworkSender::new(std::iter::once(write));
+
+        sender.send(MESSAGE, &public).await.expect("send failed");
+
+        handle.await.expect("listener failed");
     }
 }
