@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
+
 use std::sync::Arc;
 
 use super::Message;
@@ -12,9 +13,11 @@ use futures::stream::{FuturesUnordered, Stream, StreamExt, TryStreamExt};
 
 use snafu::{ensure, OptionExt, ResultExt, Snafu};
 
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
+use tokio::task;
 
-use tracing::warn;
+use tracing::{debug_span, warn};
+use tracing_futures::Instrument;
 
 #[derive(Debug, Snafu)]
 /// Error returned by `Sender` when attempting to send `Message`s
@@ -138,22 +141,32 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
 
 /// A handle to send messages to other known processes
 pub struct NetworkSender<M: Message> {
-    connections: RwLock<HashMap<PublicKey, Mutex<ConnectionWrite>>>,
-    _m: PhantomData<M>,
+    agents: RwLock<HashMap<PublicKey, SenderChannel<M>>>,
 }
 
-impl<M: Message> NetworkSender<M> {
+impl<M: Message> NetworkSender<M>
+where
+    M: Message + 'static,
+{
     /// Create a new `Sender` from a `Vec` of `ConnectionWrite`
     pub fn new<I: IntoIterator<Item = ConnectionWrite>>(writes: I) -> Self {
-        let connections = writes
+        let agents = writes
             .into_iter()
-            .map(|x| (*x.remote_pkey(), Mutex::new(x)))
+            .map(|x| (*x.remote_pkey(), Self::spawn_agent(x)))
             .collect::<HashMap<_, _>>();
 
         Self {
-            connections: RwLock::new(connections),
-            _m: PhantomData,
+            agents: RwLock::new(agents),
         }
+    }
+
+    fn spawn_agent(write: ConnectionWrite) -> SenderChannel<M> {
+        let (tx, rx) = mpsc::channel(32);
+        let agent = SenderAgent::new(write, rx);
+
+        agent.spawn();
+
+        tx
     }
 }
 
@@ -164,28 +177,32 @@ impl<M: Message + 'static> Sender<M> for NetworkSender<M> {
         message: M,
         pkey: &PublicKey,
     ) -> Result<(), SenderError> {
-        self.connections
-            .read()
-            .await
-            .get(pkey)
-            .context(NoSuchPeer { remote: *pkey })?
-            .lock()
-            .await
-            .send(&message)
-            .await
-            .context(ConnectionError { remote: *pkey })
+        {
+            let guard = self.agents.read().await;
+            let agent =
+                guard.get(pkey).context(NoSuchPeer { remote: *pkey })?;
+            let (tx, rx) = oneshot::channel();
+
+            agent
+                .send((message, tx))
+                .await
+                .ok()
+                .context(NoSuchPeer { remote: *pkey })?;
+            rx
+        }
+        .await
+        .ok()
+        .context(NoSuchPeer { remote: *pkey })?
+        .context(ConnectionError { remote: *pkey })
     }
 
     /// Add a new `ConnectionWrite` to this `Sender`
     async fn add_connection(&self, write: ConnectionWrite) {
-        if let Some(conn) = self
-            .connections
-            .write()
-            .await
-            .insert(*write.remote_pkey(), Mutex::new(write))
-        {
-            let pkey = *conn.lock().await.remote_pkey();
-            warn!("replaced connection to {}, messages may be dropped", pkey);
+        let key = *write.remote_pkey();
+        let agent = Self::spawn_agent(write);
+
+        if self.agents.write().await.insert(key, agent).is_some() {
+            warn!("replaced existing outgoing connection to {}, messages may be lost", key);
         }
     }
 
@@ -194,7 +211,49 @@ impl<M: Message + 'static> Sender<M> for NetworkSender<M> {
     }
 
     async fn keys(&self) -> Vec<PublicKey> {
-        self.connections.read().await.keys().copied().collect()
+        self.agents.read().await.keys().copied().collect()
+    }
+}
+
+type SenderChannel<M> =
+    mpsc::Sender<(M, oneshot::Sender<Result<(), SendError>>)>;
+
+type AgentChannel<M> =
+    mpsc::Receiver<(M, oneshot::Sender<Result<(), SendError>>)>;
+
+struct SenderAgent<M: Message> {
+    connection: ConnectionWrite,
+    commands: AgentChannel<M>,
+}
+
+impl<M> SenderAgent<M>
+where
+    M: Message + 'static,
+{
+    fn new(connection: ConnectionWrite, commands: AgentChannel<M>) -> Self {
+        Self {
+            connection,
+            commands,
+        }
+    }
+
+    fn spawn(self) {
+        let key = *self.connection.remote_pkey();
+
+        task::spawn(
+            async move {
+                self.process_loop().await;
+            }
+            .instrument(debug_span!("sender_agent", remote=%key)),
+        );
+    }
+
+    async fn process_loop(mut self) {
+        while let Some((message, resp)) = self.commands.recv().await {
+            let _ = resp.send(self.connection.send(&message).await);
+        }
+
+        warn!("sender agent exiting");
     }
 }
 
