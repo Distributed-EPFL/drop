@@ -9,7 +9,7 @@ use crate::async_trait;
 use crate::crypto::key::exchange::PublicKey;
 use crate::net::{Connection, ConnectionRead, ConnectionWrite};
 
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::stream::{self, FuturesUnordered, StreamExt};
 use futures::FutureExt as _;
 
 use postage::dispatch;
@@ -150,8 +150,11 @@ impl<M: Message + 'static> SystemManager<M> {
         let sampler = Arc::new(sampler);
         let sender = Arc::new(NetworkSender::new(self.writes));
         let sender_add = sender.clone();
-        let mut incoming = self.incoming;
 
+        let (user_connection_tx, user_connection_rx) = mpsc::channel(1);
+        let connection_input =
+            vec![self.incoming, Box::new(user_connection_rx)];
+        let mut incoming = stream::select_all(connection_input);
         let (msg_tx, msg_rx) = dispatch::channel(128);
         let (error_tx, error_rx) = dispatch::channel(32);
         let (mut connection_tx, connection_rx) = mpsc::channel(16);
@@ -210,7 +213,7 @@ impl<M: Message + 'static> SystemManager<M> {
 
         info!("done setting up! system now running");
 
-        SystemHandle::new(processor, handle, error_rx)
+        SystemHandle::new(processor, handle, user_connection_tx, error_rx)
     }
 
     fn spawn_network_agents<I, S>(
@@ -299,6 +302,10 @@ pub enum SystemError<E: std::error::Error + Send + Sync + 'static> {
         /// Error source
         source: E,
     },
+    #[snafu(display("connection channel is closed"))]
+    /// Connection channel was closed and the connection could not be added.
+    /// Adding further connections will not work either
+    Channel,
 }
 
 /// This is handle used to interact with a [`SystemManager`] and the [`Processor`]
@@ -317,6 +324,7 @@ where
 {
     inner: P::Handle,
     processor: Arc<P>,
+    connections: mpsc::Sender<Connection>,
     error_rx: Option<dispatch::Receiver<SystemError<P::Error>>>,
     _i: PhantomData<I>,
     _o: PhantomData<O>,
@@ -334,11 +342,13 @@ where
     fn new(
         processor: Arc<P>,
         inner: P::Handle,
+        connections: mpsc::Sender<Connection>,
         error_rx: dispatch::Receiver<SystemError<P::Error>>,
     ) -> Self {
         Self {
             inner,
             processor,
+            connections,
             error_rx: Some(error_rx),
             _i: PhantomData,
             _o: PhantomData,
@@ -376,14 +386,20 @@ where
     ///
     /// [`Connection`]: crate::net::Connection
     /// [`SystemManager`]: self::SystemManager
-    pub fn add_connection(
+    pub async fn add_connection(
         &self,
         connection: Connection,
     ) -> Result<(), SystemError<P::Error>> {
-        debug!(
-            "adding connection from user to {}",
-            connection.remote_key().context(Unauthenticated)?
-        );
+        let key = connection.remote_key().context(Unauthenticated)?;
+
+        debug!("adding connection from user to {}", key);
+
+        self.connections
+            .clone()
+            .send(connection)
+            .await
+            .ok()
+            .context(Channel)?;
 
         Ok(())
     }
