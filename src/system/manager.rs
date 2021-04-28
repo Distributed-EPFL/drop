@@ -131,10 +131,17 @@ impl<M: Message + 'static> SystemManager<M> {
     /// or deterministic version of the algorithm will be run. <br />
     /// This returns a `Handle` that allows interaction while the system is
     /// running
+    ///
+    /// # Arguments
+    ///
+    /// - `processor`: The [`Processor`] that will be used to process incoming messages
+    /// - `sampler`: A [`Sampler`] that probabilistic algorithms will use to sample the set of peers
+    /// - `parallelism`: The maximum amount of messages that will be processed in parallel
     pub async fn run<S, P, O, I, H>(
         self,
         mut processor: P,
         sampler: S,
+        parallelism: usize,
     ) -> SystemHandle<P, NetworkSender<M>, I, O, M>
     where
         S: Sampler,
@@ -176,7 +183,7 @@ impl<M: Message + 'static> SystemManager<M> {
 
         debug!("setting up processing tasks...");
 
-        (0..32)
+        (0..parallelism)
             .zip(iter::repeat((processor.clone(), msg_rx, sender, perr_tx)))
             .map(|(idx, (processor, mut msg_rx, sender, mut err_tx))| {
                 task::spawn(async move {
@@ -549,7 +556,7 @@ mod test {
         }
     }
 
-    #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test]
     async fn receive_from_manager() {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         const COUNT: usize = 50;
@@ -573,7 +580,7 @@ mod test {
 
         debug!("registering processor");
 
-        let system_handle = manager.run(processor, sampler).await;
+        let system_handle = manager.run(processor, sampler, 1).await;
         let mut handle = system_handle.processor_handle();
 
         let mut messages = Vec::with_capacity(COUNT);
@@ -601,7 +608,7 @@ mod test {
         handles.await.expect("system failure");
     }
 
-    #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test]
     async fn disconnect_notice() {
         static COUNT: usize = 50;
 
@@ -615,7 +622,7 @@ mod test {
         let processor = Dummy::default();
 
         let mut system_handle =
-            manager.run(processor, AllSampler::default()).await;
+            manager.run(processor, AllSampler::default(), 1).await;
 
         let source = system_handle.errors().unwrap();
 
