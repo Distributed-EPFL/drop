@@ -54,8 +54,8 @@ where
                 .collect();
 
         while let Some(result) = futures.next().await {
-            if let Ok(socket) = result {
-                return Ok(socket);
+            if result.is_ok() {
+                return result;
             }
         }
 
