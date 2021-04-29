@@ -38,6 +38,12 @@ jobs:
           command: test
           args: --all-features
           
+      - uses: actions-rs/cargo@v1
+        name: build examples
+        with:
+          command: build
+          args: --examples
+          
   coverage:
     name: coverage
     runs-on: ubuntu-20.04
