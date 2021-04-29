@@ -2,6 +2,10 @@
 mod directory;
 pub use directory::Directory;
 
+/// Connector that can use anything that resolves to a `SocketAddr`
+mod resolve;
+pub use resolve::Resolve;
+
 /// Tcp related connectors
 mod tcp;
 pub use tcp::Direct as Tcp;
