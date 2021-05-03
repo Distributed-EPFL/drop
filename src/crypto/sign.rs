@@ -104,7 +104,7 @@ impl AsRef<[u8]> for SecretKey {
 }
 
 /// A key pair that can be used for both signing and verifying messages
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct KeyPair {
     public: PublicKey,
     secret: SecretKey,
