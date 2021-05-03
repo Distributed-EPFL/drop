@@ -76,7 +76,7 @@ impl From<SodiumSecKey> for SecretKey {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 /// A `KeyPair` that can be used to exchange a secret symmetric key for use in an encrypted network stream
 pub struct KeyPair {
     public: PublicKey,
