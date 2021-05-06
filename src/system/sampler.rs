@@ -171,6 +171,22 @@ mod test {
     }
 
     #[tokio::test]
+    async fn exclusions() {
+        let mut keys = keyset(10);
+        let exclusions = keys.by_ref().take(5).collect::<Vec<_>>();
+        let keys = keys.collect::<Vec<_>>();
+
+        let sampler = AllSampler::default();
+
+        let sample = sampler
+            .sample_excluding(keys.iter().copied(), &exclusions, keys.len())
+            .await
+            .expect("sampling failed");
+
+        assert_eq!(sample.len(), keys.len());
+    }
+
+    #[tokio::test]
     async fn poisson() {
         sampling_test!(
             PoissonSampler,
