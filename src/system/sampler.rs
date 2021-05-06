@@ -44,6 +44,22 @@ pub trait Sampler: Send + Sync {
         self.sample_unchecked(keys, expected, actual).await
     }
 
+    /// Sample from a set with a given list of exclusions
+    async fn sample_excluding<I>(
+        &self,
+        keys: I,
+        excluding: &[PublicKey],
+        expected: usize,
+    ) -> Result<HashSet<PublicKey>, SampleError>
+    where
+        I: IntoIterator<Item = PublicKey> + Send,
+        I::IntoIter: Send,
+    {
+        let sample = keys.into_iter().filter(|x| !excluding.contains(&x));
+
+        self.sample(sample, expected).await
+    }
+
     /// Takes a sample from an `Iterator` already knowing its bounds.
     /// This is the only method that should be implemented in custom `Sampler`s
     async fn sample_unchecked<I: Iterator<Item = PublicKey> + Send>(
