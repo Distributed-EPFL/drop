@@ -29,6 +29,9 @@ pub enum SampleError {
 }
 
 /// Trait used when sampling a set of known peers
+/// # FIXME
+/// allocation for the output sample is required pending stabilisation of impl trait in type alias
+/// https://github.com/rust-lang/rust/issues/63063
 #[async_trait]
 pub trait Sampler: Send + Sync {
     /// Take a sample of keys from the provided `Sender`
