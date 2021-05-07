@@ -103,6 +103,21 @@ impl AsRef<[u8]> for SecretKey {
     }
 }
 
+impl fmt::Display for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for b in self.0.as_ref() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl From<SodiumSecretKey> for SecretKey {
+    fn from(key: SodiumSecretKey) -> Self {
+        Self(key)
+    }
+}
+
 /// A key pair that can be used for both signing and verifying messages
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct KeyPair {
