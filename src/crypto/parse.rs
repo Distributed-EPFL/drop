@@ -9,7 +9,7 @@ use super::sign;
 use snafu::{ensure, Backtrace, OptionExt, Snafu};
 
 use sodiumoxide::crypto::generichash::DIGEST_MIN;
-use sodiumoxide::crypto::kx::{PUBLICKEYBYTES, SESSIONKEYBYTES};
+use sodiumoxide::crypto::kx::SESSIONKEYBYTES;
 
 #[derive(Debug, Snafu)]
 /// Error encountered when parsing hexadecimal strings using the [`ParseHex`] trait
@@ -90,13 +90,29 @@ impl FromStr for exchange::PublicKey {
     type Err = ParseHexError;
 
     fn from_str(hex: &str) -> Result<Self, Self::Err> {
-        use sodiumoxide::crypto::kx::PublicKey;
+        use sodiumoxide::crypto::kx::{PublicKey, PUBLICKEYBYTES};
 
         ensure!(hex.len() == 2 * PUBLICKEYBYTES, UnexpectedSize);
 
         let bytes = hex.parse_hex()?;
         let sodium =
             PublicKey::from_slice(bytes.as_slice()).context(UnexpectedSize)?;
+
+        Ok(Self::from(sodium))
+    }
+}
+
+impl FromStr for exchange::SecretKey {
+    type Err = ParseHexError;
+
+    fn from_str(hex: &str) -> Result<Self, Self::Err> {
+        use sodiumoxide::crypto::kx::{SecretKey, SECRETKEYBYTES};
+
+        ensure!(hex.len() == 2 * SECRETKEYBYTES, UnexpectedSize);
+
+        let bytes = hex.parse_hex()?;
+        let sodium =
+            SecretKey::from_slice(bytes.as_slice()).context(UnexpectedSize)?;
 
         Ok(Self::from(sodium))
     }
@@ -116,6 +132,22 @@ impl FromStr for sign::PublicKey {
             .context(UnexpectedSize)?;
 
         Ok(key.into())
+    }
+}
+
+impl FromStr for sign::SecretKey {
+    type Err = ParseHexError;
+
+    fn from_str(hex: &str) -> Result<Self, Self::Err> {
+        use sodiumoxide::crypto::sign::{SecretKey, SECRETKEYBYTES};
+
+        ensure!(hex.len() == 2 * SECRETKEYBYTES, UnexpectedSize);
+
+        let bytes = hex.parse_hex()?;
+        let sodium =
+            SecretKey::from_slice(bytes.as_slice()).context(UnexpectedSize)?;
+
+        Ok(Self::from(sodium))
     }
 }
 
