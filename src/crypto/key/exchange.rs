@@ -93,6 +93,12 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
+    /// Creates a new `KeyPair` with a public key linked to the secret key
+    pub fn new(secret: SecretKey, public: PublicKey) -> Self {
+        // TODO check that keys are linked somehow
+        Self { public, secret }
+    }
+
     /// Generate a new random `KeyPair`
     pub fn random() -> Self {
         let (public, secret) = gen_keypair();
