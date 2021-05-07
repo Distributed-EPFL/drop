@@ -46,6 +46,15 @@ impl fmt::Display for PublicKey {
     }
 }
 
+impl fmt::Display for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for b in self.0.as_ref() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
 impl fmt::Debug for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "PublicKey {{ ")?;
