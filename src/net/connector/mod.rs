@@ -143,3 +143,68 @@ pub trait Connector: Send + Sync {
         future::join_all(futures).await
     }
 }
+
+/// An extension trait for [`Connector`]s
+///
+/// [`Connector`]: self::Connector
+/// [`BackoffConnector`]: self::BackoffConnector
+/// [`Resolve`]: super::Resolve
+pub trait ConnectorExt: Connector + Sized {
+    /// Wrap the [`Connector`] into a [`BackoffConnector`]
+    fn retry(self) -> BackoffConnector<Self> {
+        BackoffConnector::new(self)
+    }
+
+    /// Wrap the [`Connector`] into a [`Resolve`]
+    fn resolve(self) -> Resolve<Self, Self::Candidate> {
+        Resolve::new(self)
+    }
+}
+
+impl<C> ConnectorExt for C where C: Connector {}
+
+/// Retry a [`Connector`] using exponential backoff
+///
+/// [`Connector`]: self::Connector
+pub struct BackoffConnector<C>
+where
+    C: Connector,
+{
+    connector: C,
+}
+
+impl<C> BackoffConnector<C>
+where
+    C: Connector,
+{
+    fn new(connector: C) -> Self {
+        Self { connector }
+    }
+}
+
+#[async_trait]
+impl<C> Connector for BackoffConnector<C>
+where
+    C: Connector,
+{
+    type Candidate = C::Candidate;
+
+    fn exchanger(&self) -> &Exchanger {
+        self.connector.exchanger()
+    }
+
+    async fn establish(
+        &self,
+        pkey: &PublicKey,
+        candidate: &Self::Candidate,
+    ) -> Result<Box<dyn Socket>, ConnectError> {
+        backoff::future::retry(
+            backoff::ExponentialBackoff::default(),
+            || async {
+                let stream = self.connector.establish(pkey, candidate).await?;
+                Ok(stream)
+            },
+        )
+        .await
+    }
+}

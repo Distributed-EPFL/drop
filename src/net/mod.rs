@@ -6,6 +6,7 @@ pub use common::directory::Info as DirectoryInfo;
 pub mod connector;
 pub use connector::ConnectError;
 pub use connector::Connector;
+pub use connector::ConnectorExt;
 pub use connector::Directory as DirectoryConnector;
 pub use connector::Resolve as ResolveConnector;
 pub use connector::Tcp as TcpConnector;
