@@ -13,11 +13,11 @@ use tokio::net::TcpStream;
 use tracing::info;
 
 /// A `Connector` that uses direct TCP connections to a remote peer
-pub struct Direct {
+pub struct TcpConnector {
     exchanger: Exchanger,
 }
 
-impl Direct {
+impl TcpConnector {
     /// Create a new `TcpDirect` `Connector` using the given
     /// `Exchanger` to compute shared secrets
     ///
@@ -30,7 +30,7 @@ impl Direct {
 }
 
 #[async_trait]
-impl Connector for Direct {
+impl Connector for TcpConnector {
     /// This `Connector` uses a pair of `IpAddr` and port as destination
     type Candidate = SocketAddr;
 
@@ -72,7 +72,7 @@ mod test {
     const NR_CONN: usize = 10;
 
     pub async fn setup_tcp() -> (Connection, Connection) {
-        generate_connection!(TcpListener, Direct);
+        generate_connection!(TcpListener, TcpConnector);
     }
 
     #[tokio::test]
@@ -199,7 +199,7 @@ mod test {
     #[tokio::test]
     async fn tcp_non_existent() {
         let exchanger = Exchanger::random();
-        let connector = Direct::new(exchanger.clone());
+        let connector = TcpConnector::new(exchanger.clone());
         let addr = next_test_ip4();
 
         connector
@@ -214,7 +214,7 @@ mod test {
         let mut listener = TcpListener::new(srv, Exchanger::random())
             .await
             .expect("bind failed");
-        let connector = Direct::new(Exchanger::random());
+        let connector = TcpConnector::new(Exchanger::random());
 
         let handle = task::spawn(async move {
             let mut bad_conn = listener.accept().await.expect("accept failed");
@@ -258,7 +258,7 @@ mod test {
         let mut listener = TcpListener::new(srv, exchanger)
             .await
             .expect("listen failed");
-        let connector = Direct::new(Exchanger::random());
+        let connector = TcpConnector::new(Exchanger::random());
 
         let handle = task::spawn(async move {
             listener.accept().await.expect_err("accept suceeded");

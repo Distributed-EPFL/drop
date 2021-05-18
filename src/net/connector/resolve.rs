@@ -14,12 +14,12 @@ use tokio::net::{self, ToSocketAddrs};
 ///
 /// [`Connector`]: super::Connector
 /// [`SocketAddr`]: std::net::SocketAddr
-pub struct Resolve<C, CA> {
+pub struct ResolveConnector<C, CA> {
     connector: C,
     _c: PhantomData<CA>,
 }
 
-impl<C, CA> Resolve<C, CA> {
+impl<C, CA> ResolveConnector<C, CA> {
     /// Create a new `Resolve` [`Connector`] using the given underlying [`Connector`]
     ///
     /// [`Connector`]: super::Connector
@@ -32,7 +32,7 @@ impl<C, CA> Resolve<C, CA> {
 }
 
 #[async_trait]
-impl<C, CA> Connector for Resolve<C, CA>
+impl<C, CA> Connector for ResolveConnector<C, CA>
 where
     C: Connector<Candidate = SocketAddr>,
     CA: ToSocketAddrs + Send + Sync + fmt::Display,
@@ -85,7 +85,7 @@ mod test {
             .await
             .expect("listen failed");
 
-        let connector = Resolve::new(TcpConnector::new(Exchanger::random()));
+        let connector = ResolveConnector::new(TcpConnector::new(Exchanger::random()));
 
         let handle = task::spawn(async move {
             listener.accept().await.expect("accept failed");

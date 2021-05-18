@@ -20,12 +20,12 @@ use tracing_futures::Instrument;
 use ::utp::UtpSocket;
 
 /// A `Listener` that uses the micro transport protocol (μTp)
-pub struct Direct {
+pub struct UtpListener {
     socket: Option<UtpSocket>,
     exchanger: Exchanger,
 }
 
-impl Direct {
+impl UtpListener {
     /// Create a new `UtpListener` that will be able to accept one `Connection`
     /// on the given local address.
     pub async fn new<A: ToSocketAddrs>(
@@ -40,7 +40,7 @@ impl Direct {
 }
 
 #[async_trait]
-impl Listener for Direct {
+impl Listener for UtpListener {
     type Candidate = SocketAddr;
 
     async fn candidates(&self) -> Result<Vec<Self::Candidate>, ListenerError> {
@@ -80,7 +80,7 @@ impl Listener for Direct {
     }
 }
 
-impl fmt::Display for Direct {
+impl fmt::Display for UtpListener {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.socket {
             None => write!(f, "exhausted utp listener"),

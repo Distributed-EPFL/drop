@@ -1,14 +1,14 @@
 mod tcp;
 /// Listeners that use TCP as a transport protocol
-pub use tcp::Direct as Tcp;
+pub use tcp::TcpListener;
 
 mod utp;
 /// Listeners that use µTP as a transport protocol
-pub use self::utp::Direct as Utp;
+pub use self::utp::UtpListener;
 
 mod directory;
 /// Directory listener
-pub use directory::Directory;
+pub use directory::DirectoryListener;
 
 use std::fmt;
 use std::io::Error;

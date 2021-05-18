@@ -3,30 +3,18 @@ pub(crate) mod common;
 pub use common::directory::Info as DirectoryInfo;
 
 /// Utilities to connect to other peers in a secure fashion
-pub mod connector;
-pub use connector::ConnectError;
-pub use connector::Connector;
-pub use connector::ConnectorExt;
-pub use connector::Directory as DirectoryConnector;
-pub use connector::Resolve as ResolveConnector;
-pub use connector::Tcp as TcpConnector;
-pub use connector::Utp as UtpConnector;
+mod connector;
+pub use connector::*;
 
 /// Utilities to accept incoming connections from peers
-pub mod listener;
-pub use listener::Directory as DirectoryListener;
-pub use listener::Listener;
-pub use listener::ListenerError;
-pub use listener::Tcp as TcpListener;
-pub use listener::Utp as UtpListener;
+mod listener;
+pub use listener::*;
 
 /// Socket implementation for various types
 mod socket;
 
 /// Pre-made servers that accomplish common tasks
 pub mod server;
-pub use server::DirectoryServer;
-pub use server::ServerError;
 
 pub(self) mod utils;
 

@@ -54,14 +54,14 @@ type ChannelPair = (Sender<Response>, Sender<Request>);
 /// A `Connector` that makes use of a centralized directory in order
 /// to discover peers by their `PublicKey`. This `Connector` uses `PublicKey`s
 /// as `Candidate` and finds out the actual address from the directory server.
-pub struct Directory {
+pub struct DirectoryConnector {
     /// `Connector` that will be used to open `Connection`s to peers
     connector: Arc<dyn Connector<Candidate = SocketAddr>>,
     /// Channels for requests to handlers
     handlers: Mutex<HashMap<Info, ChannelPair>>,
 }
 
-impl Directory {
+impl DirectoryConnector {
     /// Create a new `DirectoryConnector` that will use the given `Connector` to
     /// establish connections to both the directory server and then to peers.
     ///
@@ -167,7 +167,7 @@ impl Directory {
 }
 
 #[async_trait]
-impl Connector for Directory {
+impl Connector for DirectoryConnector {
     type Candidate = Info;
 
     fn exchanger(&self) -> &Exchanger {
@@ -368,7 +368,7 @@ mod test {
 
         const NR_PEER: usize = 10;
         let connector = TcpConnector::new(Exchanger::random());
-        let mut directory = Directory::new(connector);
+        let mut directory = DirectoryConnector::new(connector);
         let server = next_test_ip4();
         let exchanger = Exchanger::random();
         let directory_exchanger = exchanger.clone();

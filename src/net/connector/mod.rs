@@ -1,18 +1,18 @@
 /// Connector that uses a central directory server to find peers
 mod directory;
-pub use directory::Directory;
+pub use directory::DirectoryConnector;
 
 /// Connector that can use anything that resolves to a `SocketAddr`
 mod resolve;
-pub use resolve::Resolve;
+pub use resolve::ResolveConnector;
 
 /// Tcp related connectors
 mod tcp;
-pub use tcp::Direct as Tcp;
+pub use tcp::TcpConnector;
 
 /// uTP connector
 mod utp;
-pub use self::utp::Direct as Utp;
+pub use self::utp::UtpConnector;
 
 use std::fmt;
 use std::io::{Error, ErrorKind};
@@ -155,9 +155,9 @@ pub trait ConnectorExt: Connector + Sized {
         BackoffConnector::new(self)
     }
 
-    /// Wrap the [`Connector`] into a [`Resolve`]
-    fn resolve(self) -> Resolve<Self, Self::Candidate> {
-        Resolve::new(self)
+    /// Wrap the [`Connector`] into a [`ResolveConnector`]
+    fn resolve(self) -> ResolveConnector<Self, Self::Candidate> {
+        ResolveConnector::new(self)
     }
 }
 
