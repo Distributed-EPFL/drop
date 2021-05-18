@@ -393,7 +393,7 @@ mod test {
         struct M1(u8);
 
         #[message]
-        #[derive(Copy)]
+        #[derive(Copy, Eq, PartialEq)]
         struct M2(u16);
 
         impl From<M1> for M2 {
