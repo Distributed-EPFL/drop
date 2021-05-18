@@ -35,6 +35,13 @@ pub use sender::{Sender, SenderError};
 pub mod sampler;
 pub use sampler::{SampleError, Sampler};
 
+/// Easy import path to use the system functionnality from drop
+pub mod prelude {
+    pub use super::manager::*;
+    pub use super::sampler::*;
+    pub use super::sender::*;
+}
+
 /// A trait bound for types that can be used as messages
 pub trait Message:
     for<'de> Deserialize<'de>
