@@ -20,6 +20,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug_span, error, info, warn};
 use tracing_futures::Instrument;
 
+/// A convenient macro to derive all required traits for your message types
 pub use drop_derive::message;
 
 /// System manager and related traits
