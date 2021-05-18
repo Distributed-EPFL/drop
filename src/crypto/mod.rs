@@ -2,6 +2,7 @@ mod convert;
 mod format;
 /// Hashing and HMAC utilities
 pub mod hash;
+
 /// Cryptographic primitives for secure network exchange
 pub mod key;
 mod parse;

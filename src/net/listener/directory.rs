@@ -33,13 +33,13 @@ enum DirectoryError {
 }
 
 /// A `Listener` that registers its local address with a given directory server.
-pub struct Directory {
+pub struct DirectoryListener {
     listener: Box<dyn Listener<Candidate = SocketAddr>>,
     directory_addr: SocketAddr,
     exit_tx: Sender<()>,
 }
 
-impl Directory {
+impl DirectoryListener {
     /// Create a new `DirectoryListener` that will listen for incoming
     /// connection on the given address.
     ///
@@ -229,7 +229,7 @@ async fn handle_response(
 }
 
 #[async_trait]
-impl Listener for Directory {
+impl Listener for DirectoryListener {
     type Candidate = DirectoryCandidate;
 
     async fn establish(&mut self) -> Result<Box<dyn Socket>, ListenerError> {
@@ -252,7 +252,7 @@ impl Listener for Directory {
     }
 }
 
-impl fmt::Display for Directory {
+impl fmt::Display for DirectoryListener {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "directory listener at {}", self.local_addr().unwrap(),)
     }
@@ -340,7 +340,7 @@ mod test {
         });
 
         let connector = TcpConnector::new(server_exchanger);
-        let mut listener = Directory::new(dir_listener, connector, dir_server)
+        let mut listener = DirectoryListener::new(dir_listener, connector, dir_server)
             .await
             .expect("dir_bind failed");
 

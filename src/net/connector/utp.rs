@@ -13,13 +13,15 @@ use tracing_futures::Instrument;
 
 use ::utp::UtpSocket;
 
-/// A `Connector` using the micro transport protocol
-pub struct Direct {
+/// A [`Connector`] using the micro transport protocol
+///
+/// [`Connector`]: super::Connector
+pub struct UtpConnector {
     exchanger: Exchanger,
 }
 
-impl Direct {
-    /// Create a new [`Direct`] muTP [`Connector`]
+impl UtpConnector {
+    /// Create a new [`Connector`] using uTp
     ///
     /// [`Connector`]: super::Connector
     pub fn new(exchanger: Exchanger) -> Self {
@@ -28,7 +30,7 @@ impl Direct {
 }
 
 #[async_trait]
-impl Connector for Direct {
+impl Connector for UtpConnector {
     type Candidate = SocketAddr;
 
     async fn establish(
