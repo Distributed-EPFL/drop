@@ -7,7 +7,7 @@ use drop_derive::message;
 use serde::{Deserialize, Serialize};
 
 #[message]
-#[derive(Copy)]
+#[derive(Copy, Eq, PartialEq)]
 pub enum Request {
     /// Add this peer to the directory
     Add(Info),
@@ -18,6 +18,7 @@ pub enum Request {
 }
 
 #[message]
+#[derive(Eq, PartialEq)]
 /// A response used by the directory protocol
 pub enum Response {
     /// Add request was a success
@@ -44,7 +45,7 @@ impl fmt::Display for Response {
 }
 
 #[message]
-#[derive(Copy)]
+#[derive(Copy, Hash, Eq, PartialEq)]
 /// Information needed to connect to a remote peer.
 pub struct Info {
     pkey: PublicKey,

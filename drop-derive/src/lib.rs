@@ -10,7 +10,7 @@ pub fn message(
     let def: TokenStream = input.into();
 
     let expanded = quote! {
-        #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+        #[derive(Clone, Debug, Serialize, Deserialize)]
         #def
     };
 

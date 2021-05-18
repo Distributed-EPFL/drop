@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::future::Future;
-use std::hash::Hash;
 use std::net::Ipv4Addr;
 
 use crate::crypto::key::exchange::PublicKey;
@@ -44,15 +43,7 @@ pub mod prelude {
 
 /// A trait bound for types that can be used as messages
 pub trait Message:
-    for<'de> Deserialize<'de>
-    + Serialize
-    + fmt::Debug
-    + Send
-    + Sync
-    + Clone
-    + Hash
-    + PartialEq
-    + Eq
+    for<'de> Deserialize<'de> + Serialize + fmt::Debug + Send + Sync + Clone
 {
 }
 
@@ -63,9 +54,6 @@ impl<T> Message for T where
         + Send
         + Sync
         + Clone
-        + Hash
-        + PartialEq
-        + Eq
 {
 }
 
