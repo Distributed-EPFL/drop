@@ -7,9 +7,7 @@ use std::sync::Arc;
 use super::*;
 use crate::crypto::key::exchange::{Exchanger, KeyPair, PublicKey};
 use crate::net::*;
-use crate::system::sampler::AllSampler;
-use crate::system::sender::CollectingSender;
-use crate::system::{Message, Processor, System};
+use crate::system::{AllSampler, CollectingSender, Message, Processor, System};
 
 use futures::future;
 use futures::stream::StreamExt;
