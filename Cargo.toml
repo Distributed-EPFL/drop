@@ -14,7 +14,7 @@ keywords = [ "distributed", "async", "crypto" ]
 README="README.md"
 
 [dependencies]
-drop-derive = { path = "drop-derive" }
+drop-derive = { version = "0.1.0" }
 sodiumoxide = "0.2"
 snafu = "~0.6"
 serde = { version = "~1.0", features = [ "derive", "rc" ] }
