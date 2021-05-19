@@ -1,8 +1,16 @@
 [package]
 name = "drop"
 version = "0.1.0"
-authors = [ "Ogier Bouvier <ogier.bouvier@epfl.ch", "Matteo Monti <matteo.monti@epfl.ch>" ]
+authors = [ "Ogier Bouvier <ogier@bouvier.family", "Matteo Monti <matteo.monti@epfl.ch>" ]
 edition = "2018"
+homepage = "https://github.com/Distributed-EPFL/drop"
+repository = "https://github.com/Distributed-EPFL/drop"
+documentation = "https://docs.rs/drop/0.1.0/drop"
+description="""
+An asynchronous framework for the development of distributed systems
+"""
+categories = [ "asynchronous", "network", "distributed-systems", "cryptography" ]
+keywords = [ "distributed", "async", "crypto" ]
 
 [dependencies]
 drop-derive = { path = "drop-derive" }
