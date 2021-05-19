@@ -1,5 +1,6 @@
 # drop
 [![CI](https://github.com/Distributed-EPFL/drop/actions/workflows/rust.yml/badge.svg)](https://github.com/Distributed-EPFL/drop/actions/workflows/rust.yml)
+![Crates.io](https://img.shields.io/crates/v/drop)
 [![codecov](https://codecov.io/gh/Distributed-EPFL/drop/branch/master/graph/badge.svg)](https://codecov.io/gh/Distributed-EPFL/drop)
 
 A Rust framework for the development of distributed systems
@@ -17,14 +18,17 @@ The framework is split in different modules focusing on different tasks:
 
 # Usage
 
-Pending publication of drop on crates.io you can use it with a git source in your `Cargo.toml`
+To use drop in your library of application add this to your Cargo.toml
 
 ``` toml
-drop = { git = "https://github.com/Distributed-EPFL/drop" }
+[dependencies]
+drop = "0.1"
 ```
 
-Each modules is gated behind a cargo feature with the crypto feature enabled by default
+Each modules is gated behind a cargo feature with the crypto module enabled by default
 
 # Documentation
 
-You can generate the documentation locally using cargo doc
+The documentation is available [here](https://docs.rs/drop/0.1.0/drop) 
+
+Some examples are also available in the examples directory
