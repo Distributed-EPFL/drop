@@ -11,6 +11,7 @@ An asynchronous framework for the development of distributed systems
 """
 categories = [ "asynchronous", "network", "distributed-systems", "cryptography" ]
 keywords = [ "distributed", "async", "crypto" ]
+README="README.md"
 
 [dependencies]
 drop-derive = { path = "drop-derive" }
