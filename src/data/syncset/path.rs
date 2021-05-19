@@ -242,8 +242,8 @@ mod tests {
 
     #[test]
     fn to_bit() {
-        assert_eq!(Direction::Right.to_bit(), true);
-        assert_eq!(Direction::Left.to_bit(), false);
+        assert!(Direction::Right.to_bit());
+        assert!(!Direction::Left.to_bit());
     }
 
     // Helper functions tests
