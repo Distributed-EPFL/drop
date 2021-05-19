@@ -24,16 +24,16 @@ use tracing_futures::Instrument;
 pub use drop_derive::message;
 
 /// System manager and related traits
-pub mod manager;
-pub use manager::Processor;
+mod manager;
+pub use manager::*;
 
 /// Wrappers around collections of `Connection` for easier use
-pub mod sender;
-pub use sender::{Sender, SenderError};
+mod sender;
+pub use sender::*;
 
 /// Sampling utilities
-pub mod sampler;
-pub use sampler::{SampleError, Sampler};
+mod sampler;
+pub use sampler::*;
 
 /// Easy import path to use the system functionnality from drop
 pub mod prelude {
