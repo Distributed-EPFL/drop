@@ -21,7 +21,7 @@ serde = { version = "~1.0", features = [ "derive", "rc" ] }
 bincode = "~1.3"
 backoff = { version = "0.3", features = ["tokio"] }
 tokio = { version = "1", features = [ "net", "sync", "rt", "io-util", "time" ], optional = true }
-tokio-utp = { version = "0.8.0-alpha1", git = "https://github.com/Distributed-EPFL/tokio-utp", optional = true }
+async-utp = { version = "0.8.0-alpha1", git = "https://github.com/Distributed-EPFL/tokio-utp", optional = true }
 futures = { version = "0.3", optional = true }
 async-trait = { version = "0.1", optional = true }
 tracing = { version = "0.1", optional = true }
@@ -49,4 +49,4 @@ net = [ "tokio", "futures", "async-trait", "tracing", "tracing-futures" ]
 system = [ "peroxide", "net" ]
 
 # These features are not quite stable yet and should be enabled with care
-unstable = [ "net", "tokio-utp" ]
+unstable = [ "net", "async-utp" ]
