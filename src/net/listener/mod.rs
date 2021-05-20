@@ -2,8 +2,10 @@ mod tcp;
 /// Listeners that use TCP as a transport protocol
 pub use tcp::TcpListener;
 
+#[cfg(feature = "unstable")]
 mod utp;
 /// Listeners that use µTP as a transport protocol
+#[cfg(feature = "unstable")]
 pub use self::utp::UtpListener;
 
 mod directory;

@@ -1,6 +1,7 @@
 /// Tcp `Socket` implementation
 pub mod tcp;
 /// uTp `Socket` implementation
+#[cfg(feature = "unstable")]
 pub mod utp;
 
 use std::io::Result;

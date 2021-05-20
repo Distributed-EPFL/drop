@@ -11,7 +11,9 @@ mod tcp;
 pub use tcp::TcpConnector;
 
 /// uTP connector
+#[cfg(feature = "unstable")]
 mod utp;
+#[cfg(feature = "unstable")]
 pub use self::utp::UtpConnector;
 
 use std::fmt;
