@@ -6,6 +6,7 @@ edition = "2018"
 homepage = "https://github.com/Distributed-EPFL/drop"
 repository = "https://github.com/Distributed-EPFL/drop"
 documentation = "https://docs.rs/drop/0.1.0/drop"
+license = "AGPL-3.0-or-later"
 description="""
 An asynchronous framework for the development of distributed systems
 """
