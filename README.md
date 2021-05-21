@@ -29,6 +29,6 @@ Each modules is gated behind a cargo feature with the crypto module enabled by d
 
 # Documentation
 
-The documentation is available [here](https://docs.rs/drop/0.1.0/drop) 
+The documentation is available [here](https://docs.rs/drop/) 
 
 Some examples are also available in the examples directory
