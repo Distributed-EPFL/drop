@@ -16,6 +16,9 @@ pub mod sign;
 /// Secure network stream utilities
 pub mod stream;
 
+/// Aggregated signatures (BLS)
+pub mod bls;
+
 pub use hash::Digest;
 pub use key::Key;
 
