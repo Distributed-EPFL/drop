@@ -1,4 +1,8 @@
+//! This module provides utilities for aggregated cryptographic signatures using the BLS algorithm
+//!
+
 use std::fmt;
+use std::iter::FromIterator;
 use std::str::FromStr;
 
 use super::BincodeError;
@@ -6,11 +10,9 @@ use super::BincodeError;
 use bincode::serialize_into;
 
 use bls_signatures::{
-    Error, PrivateKey as BlsPrivateKey, Serialize as _,
-    Signature as BlsSignature,
+    Error, PrivateKey as BlsPrivateKey, PublicKey as BlsPublicKey,
+    Serialize as _, Signature as BlsSignature,
 };
-
-pub use bls_signatures::PublicKey;
 
 use serde::{de, Deserialize, Deserializer, Serialize};
 
@@ -18,10 +20,12 @@ use snafu::{OptionExt, ResultExt, Snafu};
 
 use rand::rngs::OsRng;
 
+
 #[derive(Debug, Snafu)]
-/// Type of error encountered when dealing with bls [`Signature`]
+/// Type of error encountered when dealing with bls [`Signature`] and [`PrivateKey`]
 ///
 /// [`Signature`]: self::Signature
+/// [`PrivateKey`]: self::PrivateKey
 pub enum BlsError {
     #[snafu(display("bls library error: {}", source))]
     /// Error encountered by the bls signature library
@@ -68,6 +72,17 @@ impl PrivateKey {
     }
 
     /// Sign a message using this `PrivateKey`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use drop::crypto::bls::PrivateKey;
+    ///
+    /// let key = PrivateKey::random();
+    /// let signature = key.sign(&0usize).expect("sign failed");
+    ///
+    /// assert!(signature.verify(&[0usize], &key.public().into()).unwrap());
+    /// ```
     pub fn sign<T>(&self, message: &T) -> Result<Signature, BlsError>
     where
         T: Serialize,
@@ -83,13 +98,109 @@ impl PrivateKey {
     ///
     /// [`PublicKey`]: self::PublicKey
     pub fn public(&self) -> PublicKey {
-        self.0.public_key()
+        self.0.public_key().into()
     }
 }
 
 impl From<BlsPrivateKey> for PrivateKey {
     fn from(key: BlsPrivateKey) -> Self {
         Self(key)
+    }
+}
+
+/// A BLS `PublicKey`
+pub struct PublicKey(BlsPublicKey);
+
+impl<'de> Deserialize<'de> for PublicKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::Visitor;
+
+        struct ByteVisitor;
+
+        impl<'de> Visitor<'de> for ByteVisitor {
+            type Value = BlsPublicKey;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("byte representation of a bls public key")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                BlsPublicKey::from_bytes(v).map_err(E::custom)
+            }
+        }
+
+        Ok(Self(deserializer.deserialize_bytes(ByteVisitor)?))
+    }
+}
+
+impl Serialize for PublicKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_bytes(self.0.as_bytes().as_slice())
+    }
+}
+
+impl From<BlsPublicKey> for PublicKey {
+    fn from(k: BlsPublicKey) -> Self {
+        Self(k)
+    }
+}
+
+impl From<&BlsPublicKey> for PublicKey {
+    fn from(k: &BlsPublicKey) -> Self {
+        Self(*k)
+    }
+}
+
+/// A set of [`PublicKey`]s for easier management when verifying aggregated [`Signature`]s
+///
+/// [`PublicKey`]: self::PublicKey
+/// [`Signature`]: self::Signature
+pub struct PublicKeySet(Vec<BlsPublicKey>);
+
+impl PublicKeySet {
+    /// Get an `Iterator` of all `PublicKey`s in this set
+    pub fn iter(&self) -> impl Iterator<Item = PublicKey> + '_ {
+        self.0.iter().map(Into::into)
+    }
+
+    /// Get the element at position idx in the set
+    pub fn get(&self, idx: usize) -> Option<PublicKey> {
+        self.0.get(idx).map(Into::into)
+    }
+
+    /// Add a `PublicKey` to this set
+    pub fn insert(&mut self, key: PublicKey) {
+        debug_assert!(!self.0.contains(&key.0), "key already in the set");
+
+        self.0.push(key.0);
+    }
+
+    fn as_slice(&self) -> &[BlsPublicKey] {
+        self.0.as_slice()
+    }
+}
+
+impl From<PublicKey> for PublicKeySet {
+    fn from(k: PublicKey) -> Self {
+        Self(vec![k.0])
+    }
+}
+
+impl FromIterator<PublicKey> for PublicKeySet {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = PublicKey>,
+    {
+        Self(iter.into_iter().map(|x| x.0).collect())
     }
 }
 
@@ -143,6 +254,14 @@ pub struct Signature(BlsSignature);
 
 impl Signature {
     /// Aggregate this `Signature` with another one
+    ///
+    /// # Example
+    /// ```
+    /// # use drop::crypto::bls::Signature;
+    /// # fn doc(sig1: Signature, sig2: Signature) {
+    /// let aggregated = sig1.aggregate(&sig2).expect("failed to aggregate");
+    /// # }
+    /// ```
     pub fn aggregate(&self, other: &Self) -> Result<Signature, BlsError> {
         bls_signatures::aggregate(&[self.0, other.0])
             .context(Bls)
@@ -166,10 +285,29 @@ impl Signature {
     }
 
     /// Attempt to verify that this signature is valid for the selected messages and public keys
+    ///
+    /// # Note
+    ///
+    /// This function will return `Ok(false)` if two of the messages are identical
+    ///
+    /// # Example
+    /// ```
+    /// # use drop::crypto::bls::{PrivateKey, Signature, PublicKeySet};
+    /// let private = (0..10).map(|_| PrivateKey::random()).collect::<Vec<_>>();
+    /// let public = private.iter().map(PrivateKey::public).collect::<PublicKeySet>();
+    /// let messages = (0..10).collect::<Vec<_>>();
+    ///
+    /// let signatures = messages.iter().zip(private.iter())
+    ///     .map(|(m, k)| k.sign(m).expect("sign failed"))
+    ///     .collect::<Vec<_>>();
+    /// let aggregated = Signature::aggregate_iter(signatures).expect("aggregate failed");
+    ///
+    /// assert!(aggregated.verify(messages.as_slice(), &public).unwrap());
+    /// ```
     pub fn verify<T>(
         &self,
         messages: &[T],
-        pkeys: &[PublicKey],
+        pkeys: &PublicKeySet,
     ) -> Result<bool, BlsError>
     where
         T: Serialize,
@@ -187,7 +325,7 @@ impl Signature {
             })
             .try_collect::<Vec<_>>()?;
 
-        Ok(bls_signatures::verify(&self.0, &hashes, pkeys))
+        Ok(bls_signatures::verify(&self.0, &hashes, pkeys.as_slice()))
     }
 }
 
@@ -238,7 +376,7 @@ mod test {
         let (msg, signature, key) = sign(1).next().unwrap();
 
         assert!(signature
-            .verify(&[msg], &[key.public()])
+            .verify(&[msg], &key.public().into())
             .expect("verify failed"));
     }
 
@@ -252,7 +390,10 @@ mod test {
         )
         .expect("aggregation failed");
 
-        let public = keys.iter().map(PrivateKey::public).collect::<Vec<_>>();
+        let public = keys
+            .iter()
+            .map(PrivateKey::public)
+            .collect::<PublicKeySet>();
 
         signature.verify(&msg, &public).expect("verify failed");
     }
