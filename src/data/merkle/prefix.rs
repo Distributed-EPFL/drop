@@ -8,7 +8,7 @@ pub(super) enum Direction {
     Right
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub(super) struct Path([u8; SIZE]);
 
 #[derive(Clone)]
@@ -139,7 +139,24 @@ mod tests {
     }
 
     #[test]
-    fn develop() {
+    fn ordering() {
+        assert!(&path_from_directions(&vec![Direction::Right]) < &path_from_directions(&vec![Direction::Left]));
+        assert!(&path_from_directions(&vec![Direction::Right]) < &path_from_directions(&vec![Direction::Right, Direction::Left]));
+        assert!(&path_from_directions(&vec![Direction::Left, Direction::Right, Direction::Left]) < &path_from_directions(&vec![Direction::Left, Direction::Left, Direction::Left, Direction::Left, Direction::Left]));
+
+        let lesser = vec![Direction::Right, Direction::Right, Direction::Right, Direction::Left, 
+                          Direction::Right, Direction::Right, Direction::Right, Direction::Left, 
+                          Direction::Left, Direction::Left, Direction::Right, Direction::Left,
+                          Direction::Left, Direction::Right, Direction::Left, Direction::Right];
+
+        let mut greater = lesser.clone();
+        greater.push(Direction::Left);
+
+        assert!(&path_from_directions(&lesser) < &path_from_directions(&greater));
+    }
+
+    #[test]
+    fn prefix() {
         let reference = vec![Direction::Right, Direction::Right, Direction::Right, Direction::Left, 
                              Direction::Right, Direction::Right, Direction::Right, Direction::Left, 
                              Direction::Left, Direction::Left, Direction::Right, Direction::Left,
