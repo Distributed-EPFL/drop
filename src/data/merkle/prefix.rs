@@ -70,15 +70,16 @@ impl Prefix {
     }
 
     pub fn left(&self) -> Self {
-        let mut path = self.path.clone();
-        path.set(self.depth, Direction::Left);
-
-        Prefix{path, depth: self.depth + 1}
+        self.child(Direction::Left)
     }
 
     pub fn right(&self) -> Self {
+        self.child(Direction::Right)
+    }
+
+    fn child(&self, direction: Direction) -> Self {
         let mut path = self.path.clone();
-        path.set(self.depth, Direction::Right);
+        path.set(self.depth, direction);
 
         Prefix{path, depth: self.depth + 1}
     }
