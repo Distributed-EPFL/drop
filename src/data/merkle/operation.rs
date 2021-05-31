@@ -3,8 +3,6 @@ use crate::crypto::hash::HashError;
 
 use serde::Serialize;
 
-use std::vec::Vec;
-
 use super::prefix::{Path, Prefix};
 
 #[derive(Debug, Eq, PartialEq)]

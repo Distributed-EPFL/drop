@@ -1,6 +1,9 @@
 use crate::crypto::Digest;
 
-pub(super) enum Node<Key, Value> {
+use serde::Serialize;
+
+#[derive(Serialize)]
+pub(super) enum Node<Key: Serialize, Value: Serialize> {
     Empty,
     Internal(Digest, Digest),
     Leaf(Key, Value)
