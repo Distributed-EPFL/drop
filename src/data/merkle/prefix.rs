@@ -8,10 +8,10 @@ pub(super) enum Direction {
     Right
 }
 
-#[derive(Clone, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub(super) struct Path([u8; SIZE]);
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Eq)]
 pub(super) struct Prefix {
     path: Path,
     depth: u8
@@ -33,6 +33,12 @@ impl Index<u8> for Prefix {
 
     fn index(&self, index: u8) -> &Self::Output {
         &self.path[index]
+    }
+}
+
+impl PartialEq for Prefix {
+    fn eq(&self, rho: &Self) -> bool {
+        self.depth == rho.depth && deepeq(&self.path, &rho.path, self.depth)
     }
 }
 
@@ -85,21 +91,25 @@ impl Prefix {
     }
 
     pub fn contains(&self, path: &Path) -> bool {
-        let (full, overflow) = split(self.depth);
-        
-        if self.path.0[0..full] != path.0[0..full] {
-            return false;
-        }
-
-        if overflow > 0 {
-            let shift = 8 - overflow;
-            (self.path.0[full] >> shift) == (path.0[full] >> shift)
-        } else { true }
+        deepeq(&self.path, path, self.depth)
     }
 }
 
 fn split(index: u8) -> (usize, u8) {
     ((index / 8) as usize, index % 8)
+}
+
+fn deepeq(lho: &Path, rho: &Path, depth: u8) -> bool {
+    let (full, overflow) = split(depth);
+        
+    if lho.0[0..full] != rho.0[0..full] {
+        return false;
+    }
+
+    if overflow > 0 {
+        let shift = 8 - overflow;
+        (lho.0[full] >> shift) == (rho.0[full] >> shift)
+    } else { true }
 }
 
 #[cfg(test)]
@@ -181,5 +191,13 @@ mod tests {
         assert!(Prefix::new(path.clone(), reference.len() as u8).contains(&path));
         assert!(Prefix::new(path.clone(), reference.len() as u8).right().contains(&path));
         assert!(!Prefix::new(path.clone(), reference.len() as u8).left().contains(&path));
+
+        assert_eq!(Prefix::root(), Prefix::root());
+        assert_eq!(Prefix::root().left(), Prefix::root().left());
+        assert_ne!(Prefix::root().left(), Prefix::root().right());
+        assert_ne!(Prefix::root(), Prefix::root().left());
+        assert_eq!(Prefix::root().right().right().right().left().right().right().right(), Prefix::root().right().right().right().left().right().right().right());
+        assert_ne!(Prefix::root().right().right().right().left().right().right().right(), Prefix::root().right().right().right().left().right().right().left());
+        assert_ne!(Prefix::root().right().right().right().left().right().right().right(), Prefix::root().right().right().right().left().right().right());
     }
 }
