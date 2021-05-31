@@ -4,7 +4,7 @@ use crate::crypto::hash;
 use serde::Serialize;
 
 use super::database::MerkleDatabase;
-use super::node::Node;
+use super::entry::Node;
 
 pub struct MerkleTable<Key: Serialize, Value: Serialize> {
     database: MerkleDatabase<Key, Value>,

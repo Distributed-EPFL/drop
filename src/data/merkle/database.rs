@@ -5,13 +5,8 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use super::node::Node;
+use super::entry::Entry;
 use super::table::MerkleTable;
-
-pub(super) struct Entry<Key: Serialize, Value: Serialize> {
-    pub node: Node<Key, Value>,
-    pub references: usize
-}
 
 pub(super) struct Store<Key: Serialize, Value: Serialize> {
     pub entries: HashMap<Digest, Entry<Key, Value>>
