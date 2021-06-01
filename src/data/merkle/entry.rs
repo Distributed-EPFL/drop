@@ -2,11 +2,13 @@ use crate::crypto::Digest;
 
 use serde::Serialize;
 
+use std::rc::Rc;
+
 #[derive(Serialize)]
 pub(super) enum Node<Key: Serialize, Value: Serialize> {
     Empty,
     Internal(Digest, Digest),
-    Leaf(Key, Value)
+    Leaf(Key, Rc<Value>)
 }
 
 pub(super) struct Entry<Key: Serialize, Value: Serialize> {
