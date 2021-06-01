@@ -3,11 +3,13 @@ use crate::crypto::hash::HashError;
 
 use serde::Serialize;
 
+use std::rc::Rc;
+
 use super::prefix::{Path, Prefix};
 
 #[derive(Debug, Eq, PartialEq)]
 pub(super) enum Action<Value> {
-    Set(Value),
+    Set(Rc<Value>),
     Remove
 }
 
@@ -34,7 +36,7 @@ impl<Key, Value> Operation<Key, Value>
 where Key: Serialize
 {
     fn set(key: Key, value: Value) -> Result<Self, HashError> {
-        Ok(Operation{path: Path::new(hash(&key)?), key, action: Action::Set(value)})
+        Ok(Operation{path: Path::new(hash(&key)?), key, action: Action::Set(Rc::new(value))})
     }
 
     fn remove(key: Key) -> Result<Self, HashError> {
@@ -103,7 +105,7 @@ mod tests {
         let set = Operation::set(0u32, 8u32).unwrap();
         assert!(prefix.contains(&set.path));
         assert_eq!(set.key, 0u32);
-        assert_eq!(set.action, Action::Set(8u32));
+        assert_eq!(set.action, Action::Set(Rc::new(8u32)));
 
         let remove = Operation::remove(0u32).unwrap();
         assert_eq!(remove.path, set.path);
