@@ -65,6 +65,12 @@ pub enum VerifyError {
 )]
 pub struct PublicKey(SodiumPublicKey);
 
+impl From<[u8; PUBLIC_LENGTH]> for PublicKey {
+    fn from(value: [u8; PUBLIC_LENGTH]) -> Self {
+        Self(SodiumPublicKey(value))
+    }
+}
+
 impl AsRef<[u8]> for PublicKey {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
