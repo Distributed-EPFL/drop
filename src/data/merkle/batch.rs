@@ -5,46 +5,57 @@ use serde::Serialize;
 
 use std::rc::Rc;
 
+use super::entry::Wrap;
 use super::prefix::{Path, Prefix};
 
 #[derive(Debug, Eq, PartialEq)]
-pub(super) enum Action<Value> {
-    Set(Rc<Value>),
+pub(super) enum Action<Value: Serialize> {
+    Set(Wrap<Value>),
     Remove
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub(super) struct Operation<Key, Value> {
+pub(super) struct Operation<Key: Serialize, Value: Serialize> {
     pub path: Path,
-    pub key: Key,
+    pub key: Wrap<Key>,
     pub action: Action<Value>
 }
 
-pub(super) struct Batch<'a, Key, Value> {
+pub(super) struct Batch<'a, Key: Serialize, Value: Serialize> {
     prefix: Prefix,
     operations: &'a [Operation<Key, Value>]
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub(super) enum Task<'a, Key, Value> {
+pub(super) enum Task<'a, Key: Serialize, Value: Serialize> {
     Pass,
     Do(&'a Operation<Key, Value>),
     Split
 }
 
 impl<Key, Value> Operation<Key, Value> 
-where Key: Serialize
+where 
+    Key: Serialize,
+    Value: Serialize
 {
     fn set(key: Key, value: Value) -> Result<Self, HashError> {
-        Ok(Operation{path: Path::new(hash(&key)?), key, action: Action::Set(Rc::new(value))})
+        let key = Wrap::new(key)?;
+        let value = Wrap::new(value)?;
+        
+        Ok(Operation{path: Path::new(key.digest().clone()), key, action: Action::Set(value)})
     }
 
     fn remove(key: Key) -> Result<Self, HashError> {
-        Ok(Operation{path: Path::new(hash(&key)?), key, action: Action::Remove})
+        let key = Wrap::new(key)?;
+        Ok(Operation{path: Path::new(key.digest().clone()), key, action: Action::Remove})
     }
 }
 
-impl<'a, Key, Value> Batch<'a, Key, Value> {
+impl<'a, Key, Value> Batch<'a, Key, Value> 
+where
+    Key: Serialize,
+    Value: Serialize
+{
     pub fn new(operations: &'a mut [Operation<Key, Value>]) -> Self {
         operations.sort_unstable_by(|lho, rho| lho.path.cmp(&rho.path));
         Batch{prefix: Prefix::root(), operations}
@@ -104,8 +115,8 @@ mod tests {
         
         let set = Operation::set(0u32, 8u32).unwrap();
         assert!(prefix.contains(&set.path));
-        assert_eq!(set.key, 0u32);
-        assert_eq!(set.action, Action::Set(Rc::new(8u32)));
+        assert_eq!(set.key, Wrap::new(0u32).unwrap());
+        assert_eq!(set.action, Action::Set(Wrap::new(8u32).unwrap()));
 
         let remove = Operation::remove(0u32).unwrap();
         assert_eq!(remove.path, set.path);
