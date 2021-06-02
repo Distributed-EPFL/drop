@@ -6,13 +6,13 @@ use serde::Serialize;
 
 use std::rc::Rc;
 
-#[derive(Clone, Debug, Eq, Serialize)]
+#[derive(Debug, Eq, Serialize)]
 pub(super) struct Wrap<Inner: Serialize> {
     digest: Digest,
     #[serde(skip)] inner: Rc<Inner>
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub(super) enum Node<Key: Serialize, Value: Serialize> {
     Empty,
     Internal(Digest, Digest),
@@ -22,6 +22,14 @@ pub(super) enum Node<Key: Serialize, Value: Serialize> {
 pub(super) struct Entry<Key: Serialize, Value: Serialize> {
     pub node: Node<Key, Value>,
     pub references: usize
+}
+
+impl<Inner> Clone for Wrap<Inner>
+where Inner: Serialize
+{
+    fn clone(&self) -> Self {
+        Wrap{digest: self.digest.clone(), inner: self.inner.clone()}
+    }
 }
 
 impl<Inner> PartialEq for Wrap<Inner>
