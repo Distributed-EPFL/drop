@@ -20,6 +20,7 @@ sodiumoxide = "0.2"
 ed25519-dalek = { version = "1", features = [ "serde" ] }
 blake3 = "0.3"
 bls-signatures = { version = "0.9", features = [ "blst-portable" ] }
+blst = "0.3"
 rand = { version = "0.7", features = [ "getrandom" ] }
 snafu = "~0.6"
 serde = { version = "~1.0", features = [ "derive", "rc" ] }
