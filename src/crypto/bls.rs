@@ -5,9 +5,9 @@
 //!
 //! ```
 //! # use drop::crypto::bls::{PublicKey, AggregateSignature, AggregatePublicKey};
-//! # fn doc(public_keys_iter: impl Iterator<Item = PublicKey>, signature: AggregateSignature, messages: &[u8]) {
+//! # fn doc(public_keys_iter: impl Iterator<Item = PublicKey>, signature: AggregateSignature, message: u8) {
 //! let key_set = public_keys_iter.collect::<AggregatePublicKey>();
-//! signature.verify(messages, &key_set).unwrap();
+//! signature.verify(&message, &key_set).unwrap();
 //! # }
 //! ```
 //!
@@ -15,8 +15,8 @@
 //!
 //! ```
 //! # use drop::crypto::bls::{Signature, AggregatePublicKey, AggregateSignature};
-//! # fn doc(signature: AggregateSignature, pkeys: AggregatePublicKey, messages: &[usize]) {
-//! signature.verify(messages, &pkeys).unwrap();
+//! # fn doc(signature: AggregateSignature, pkeys: AggregatePublicKey, message: usize) {
+//! signature.verify(&message, &pkeys).unwrap();
 //! # }
 //! ```
 //!
@@ -412,10 +412,6 @@ impl AggregateSignature {
     ///
     /// # Note
     ///
-    /// This function will fail if two of the messages are identical
-    ///
-    /// # Note 2
-    ///
     /// `PublicKey`s in the `AggregatePublicKey` are required to be in the same order as the messages
     /// they were used to sign or the verification will fail
     ///
@@ -431,9 +427,9 @@ impl AggregateSignature {
     ///     .collect::<Vec<_>>();
     /// let aggregated = Signature::aggregate_iter(signatures).expect("aggregate failed");
     ///
-    /// aggregated.verify(messages.as_slice(), &public).unwrap();
+    /// aggregated.verify_many(messages.as_slice(), &public).unwrap();
     /// ```
-    pub fn verify<T>(
+    pub fn verify_many<T>(
         &self,
         messages: &[T],
         keys: &AggregatePublicKey,
@@ -467,6 +463,52 @@ impl AggregateSignature {
             .into_result(())
             .context(Bls)
     }
+
+    /// Attempt to verify that this signature is valid for the selected message and aggregated public keys
+    ///
+    /// # Note
+    ///
+    /// `PublicKey`s in the `AggregatePublicKey` are required to be in the same order as the messages
+    /// they were used to sign or the verification will fail
+    ///
+    /// # Example
+    /// ```
+    /// # use drop::crypto::bls::{PrivateKey, Signature, AggregatePublicKey};
+    /// let private = (0..10).map(|_| PrivateKey::random().unwrap()).collect::<Vec<_>>();
+    /// let public = private.iter().map(PrivateKey::public).collect::<AggregatePublicKey>();
+    /// let message = 0usize;
+    ///
+    /// let signatures = private.iter()
+    ///     .map(|k| k.sign(&message).expect("sign failed"))
+    ///     .collect::<Vec<_>>();
+    /// let aggregated = Signature::aggregate_iter(signatures).expect("aggregate failed");
+    ///
+    /// aggregated.verify(&message, &public).unwrap();
+    /// ```
+    pub fn verify<T>(
+        &self,
+        message: &T,
+        keys: &AggregatePublicKey,
+    ) -> Result<(), BlsError>
+    where
+        T: Serialize,
+    {
+        let mut buffer = Vec::new();
+        serialize_into(&mut buffer, message).expect("serialize failed");
+
+        let keys_refs = keys.as_slice().iter().collect::<Vec<_>>();
+
+        self.0
+            .to_signature()
+            .fast_aggregate_verify(
+                true,
+                buffer.as_slice(),
+                BLST_DST,
+                keys_refs.as_slice(),
+            )
+            .into_result(())
+            .context(Bls)
+    }
 }
 
 impl From<BlsAggrSig> for AggregateSignature {
@@ -494,6 +536,17 @@ mod test {
             .map(|(m, k)| (m, k.sign(&m).expect("sign failed"), k))
     }
 
+    fn sign_same<T: Serialize>(
+        message: T,
+        size: usize,
+    ) -> impl Iterator<Item = (PublicKey, Signature)> {
+        (0..size).map(move |_| {
+            let key = PrivateKey::random().unwrap();
+
+            (key.public(), key.sign(&message).unwrap())
+        })
+    }
+
     #[test]
     fn sign_aggregate_and_verify() {
         let all = sign(10).collect::<Vec<_>>();
@@ -510,7 +563,37 @@ mod test {
             acc
         });
 
-        aggregate.verify(&messages, &public).expect("verify failed");
+        aggregate.verify_many(&messages, &public).expect("verify failed");
+    }
+
+    #[test]
+    fn sign_aggregate_and_verify_single() {
+        const MSG: usize = 0;
+        let keys = (0..10)
+            .map(|_| PrivateKey::random().unwrap())
+            .collect::<Vec<_>>();
+
+        let sigs = keys.iter().map(|k| k.sign(&MSG).unwrap());
+
+        let aggr = Signature::aggregate_iter(sigs).unwrap();
+        let aggr_key = keys
+            .into_iter()
+            .map(|k| k.public())
+            .collect::<AggregatePublicKey>();
+
+        aggr.verify_many(&[MSG; 10], &aggr_key).expect("failed");
+    }
+
+    #[test]
+    fn sign_single_and_aggregate() {
+        const MSG: usize = 0;
+
+        let (keys, sigs): (Vec<_>, Vec<_>) = sign_same(MSG, 10).unzip();
+
+        let aggr_sig = Signature::aggregate_iter(sigs.into_iter()).unwrap();
+        let aggr_key = keys.into_iter().collect::<AggregatePublicKey>();
+
+        aggr_sig.verify(&MSG, &aggr_key).expect("verify failed");
     }
 
     #[test]
