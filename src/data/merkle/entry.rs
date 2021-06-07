@@ -32,6 +32,14 @@ where Inner: Serialize
     }
 }
 
+impl<Inner> PartialEq for Wrap<Inner>
+where Inner: Serialize
+{
+    fn eq(&self, rho: &Wrap<Inner>) -> bool {
+        self.digest == rho.digest
+    }
+}
+
 impl<Key, Value> Clone for Node<Key, Value> 
 where
     Key: Serialize,
@@ -43,14 +51,6 @@ where
             Node::Internal(left, right) => Node::Internal(left.clone(), right.clone()),
             Node::Leaf(key, value) => Node::Leaf(key.clone(), value.clone())
         }
-    }
-}
-
-impl<Inner> PartialEq for Wrap<Inner>
-where Inner: Serialize
-{
-    fn eq(&self, rho: &Wrap<Inner>) -> bool {
-        self.digest == rho.digest
     }
 }
 
