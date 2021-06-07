@@ -12,7 +12,7 @@ pub(super) struct Wrap<Inner: Serialize> {
     #[serde(skip)] inner: Rc<Inner>
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Serialize)]
 pub(super) enum Node<Key: Serialize, Value: Serialize> {
     Empty,
     Internal(Digest, Digest),
@@ -29,6 +29,20 @@ where Inner: Serialize
 {
     fn clone(&self) -> Self {
         Wrap{digest: self.digest.clone(), inner: self.inner.clone()}
+    }
+}
+
+impl<Key, Value> Clone for Node<Key, Value> 
+where
+    Key: Serialize,
+    Value: Serialize
+{
+    fn clone(&self) -> Self {
+        match self {
+            Node::Empty => Node::Empty,
+            Node::Internal(left, right) => Node::Internal(left.clone(), right.clone()),
+            Node::Leaf(key, value) => Node::Leaf(key.clone(), value.clone())
+        }
     }
 }
 
