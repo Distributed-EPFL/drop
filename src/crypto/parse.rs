@@ -4,9 +4,9 @@ use std::str::FromStr;
 use super::hash::Digest;
 use super::key::exchange;
 use super::key::Key;
-use super::sign;
+use super::sign::{self, PUBLICKEYBYTES, SECRETKEYBYTES};
 
-use snafu::{ensure, Backtrace, OptionExt, Snafu};
+use snafu::{ensure, Backtrace, OptionExt, ResultExt, Snafu};
 
 use sodiumoxide::crypto::generichash::DIGEST_MIN;
 use sodiumoxide::crypto::kx::SESSIONKEYBYTES;
@@ -28,6 +28,11 @@ pub enum ParseHexError {
     MalformedHex {
         /// Error backtrace
         backtrace: Backtrace,
+    },
+    /// Ed25519 error
+    Dalek {
+        /// Error source
+        source: ed25519_dalek::SignatureError,
     },
 }
 
@@ -122,30 +127,29 @@ impl FromStr for sign::PublicKey {
     type Err = ParseHexError;
 
     fn from_str(hex: &str) -> Result<Self, Self::Err> {
-        use sodiumoxide::crypto::sign::{PublicKey, PUBLICKEYBYTES};
+        use ed25519_dalek::PublicKey;
 
         ensure!(hex.len() == 2 * PUBLICKEYBYTES, UnexpectedSize);
 
         let slice = hex.parse_hex()?;
 
-        let key = PublicKey::from_slice(&slice[..PUBLICKEYBYTES])
-            .context(UnexpectedSize)?;
+        let key =
+            PublicKey::from_bytes(&slice[..PUBLICKEYBYTES]).context(Dalek)?;
 
         Ok(key.into())
     }
 }
 
-impl FromStr for sign::SecretKey {
+impl FromStr for sign::PrivateKey {
     type Err = ParseHexError;
 
     fn from_str(hex: &str) -> Result<Self, Self::Err> {
-        use sodiumoxide::crypto::sign::{SecretKey, SECRETKEYBYTES};
+        use ed25519_dalek::SecretKey;
 
         ensure!(hex.len() == 2 * SECRETKEYBYTES, UnexpectedSize);
 
         let bytes = hex.parse_hex()?;
-        let sodium =
-            SecretKey::from_slice(bytes.as_slice()).context(UnexpectedSize)?;
+        let sodium = SecretKey::from_bytes(bytes.as_slice()).context(Dalek)?;
 
         Ok(Self::from(sodium))
     }

@@ -1,28 +1,32 @@
 use std::fmt;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 
 use super::BincodeError;
 
 use bincode::serialize_into;
 
-use serde::{Deserialize, Serialize};
-
-use snafu::{ensure, Backtrace, ResultExt, Snafu};
-
-use sodiumoxide::crypto::sign::{
-    gen_keypair, sign_detached, verify_detached, PublicKey as SodiumPublicKey,
-    SecretKey as SodiumSecretKey,
+use ed25519_dalek::{
+    Keypair, PublicKey as DalekPublicKey, SecretKey as DalekPrivateKey,
+    Signature as DalekSignature, Signer as _, Verifier as _,
 };
 
-pub use sodiumoxide::crypto::sign::{
-    Signature, PUBLICKEYBYTES as PUBLIC_LENGTH,
-    SECRETKEYBYTES as SECRET_LENGTH, SIGNATUREBYTES as SIGNATURE_LENGTH,
+pub use ed25519_dalek::{
+    KEYPAIR_LENGTH as KEYPAIRBYTES, PUBLIC_KEY_LENGTH as PUBLICKEYBYTES,
+    SECRET_KEY_LENGTH as SECRETKEYBYTES,
 };
+
+use rand::rngs::OsRng;
+
+use serde::{Serialize, Deserialize};
+
+use snafu::{ResultExt, Snafu};
 
 #[derive(Debug, Snafu)]
-/// Error encountered when attempting to sign data using [`Signer`]
+/// Error encountered when attempting to sign data using [`PrivateKey`]
+/// or [`KeyPair`]
 ///
-/// [`Signer`]: self::Signer
+/// [`PrivateKey`]: self::PrivateKey
+/// [`KeyPair`]: self::KeyPair
 pub enum SignError {
     #[snafu(display("failed to sign data: {}", source))]
     /// The data could not be serialized for signing
@@ -33,7 +37,7 @@ pub enum SignError {
 }
 
 #[derive(Debug, Snafu)]
-/// Signature verification error
+/// Signature verification errorc
 pub enum VerifyError {
     #[snafu(display("failed to verify data: {}", source))]
     /// The data could not be serialized
@@ -44,30 +48,37 @@ pub enum VerifyError {
 
     #[snafu(display("invalid signature"))]
     /// The signature was invalid
-    Sodium {
+    Dalek {
         /// Error backtrace
-        backtrace: Backtrace,
+        source: ed25519_dalek::SignatureError,
     },
 }
 
 /// A public key used for verifying messages
-#[derive(
-    Copy,
-    Clone,
-    Deserialize,
-    Eq,
-    Hash,
-    PartialEq,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Debug,
-)]
-pub struct PublicKey(SodiumPublicKey);
+#[derive(Copy, Clone, Eq, Debug, Serialize, Deserialize)]
+pub struct PublicKey(DalekPublicKey);
+
+impl PublicKey {
+    /// Get this `PublicKey` as a slice of bytes
+    pub fn to_bytes(self) -> [u8; PUBLICKEYBYTES] {
+        self.0.to_bytes()
+    }
+
+    /// Get a reference to the slice of byte of this `PublicKey`
+    pub fn as_bytes(&self) -> &[u8; PUBLICKEYBYTES] {
+        self.0.as_bytes()
+    }
+}
 
 impl AsRef<[u8]> for PublicKey {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
+    }
+}
+
+impl PartialEq for PublicKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_bytes() == other.to_bytes()
     }
 }
 
@@ -80,30 +91,61 @@ impl fmt::Display for PublicKey {
     }
 }
 
-impl From<SodiumPublicKey> for PublicKey {
-    fn from(key: SodiumPublicKey) -> Self {
+impl Hash for PublicKey {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write(&self.0.to_bytes())
+    }
+}
+
+impl From<DalekPublicKey> for PublicKey {
+    fn from(key: DalekPublicKey) -> Self {
         Self(key)
     }
 }
 
 /// A secret key used for signing messages
-#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
-pub struct SecretKey(SodiumSecretKey);
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PrivateKey(DalekPrivateKey);
 
-impl SecretKey {
-    /// Compute the `PublicKey` associated with this `SecretKey`
-    pub fn public_key(&self) -> PublicKey {
-        PublicKey(self.0.public_key())
+impl PrivateKey {
+    /// Create a new `PrivateKey` containing the given bytes if they represent a valid
+    /// key
+    pub fn new(bytes: [u8; SECRETKEYBYTES]) -> Result<Self, VerifyError> {
+        Ok(Self(DalekPrivateKey::from_bytes(&bytes).context(Dalek)?))
+    }
+
+    /// Get the content of this `SecretKey` as a slice of bytes
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0.to_bytes()
+    }
+
+    /// Get the reference to the slice of byte of this `PrivateKey`
+    pub fn as_bytes(&self) -> &[u8; SECRETKEYBYTES] {
+        self.0.as_bytes()
     }
 }
 
-impl AsRef<[u8]> for SecretKey {
+impl Eq for PrivateKey {}
+
+impl PartialEq for PrivateKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_bytes() == other.0.to_bytes()
+    }
+}
+
+impl Clone for PrivateKey {
+    fn clone(&self) -> Self {
+        Self(DalekPrivateKey::from_bytes(&self.0.to_bytes()).unwrap())
+    }
+}
+
+impl AsRef<[u8]> for PrivateKey {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
     }
 }
 
-impl fmt::Display for SecretKey {
+impl fmt::Display for PrivateKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for b in self.0.as_ref() {
             write!(f, "{:02x}", b)?;
@@ -112,105 +154,100 @@ impl fmt::Display for SecretKey {
     }
 }
 
-impl From<SodiumSecretKey> for SecretKey {
-    fn from(key: SodiumSecretKey) -> Self {
+impl From<DalekPrivateKey> for PrivateKey {
+    fn from(key: DalekPrivateKey) -> Self {
         Self(key)
     }
 }
 
 /// A key pair that can be used for both signing and verifying messages
-#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct KeyPair {
-    public: PublicKey,
-    secret: SecretKey,
-}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct KeyPair(Keypair);
 
 impl KeyPair {
     /// Create a `KeyPair` using both a random secret and public key
     pub fn random() -> Self {
-        let (public, secret) = gen_keypair();
-        let public = PublicKey(public);
-        let secret = SecretKey(secret);
-
-        Self { public, secret }
+        Self(Keypair::generate(&mut OsRng))
     }
 
     /// Get the `PublicKey` in this `KeyPair`
-    pub fn public(&self) -> &PublicKey {
-        &self.public
+    pub fn public(&self) -> PublicKey {
+        self.0.public.into()
     }
 
     /// Get the `SecretKey` in this `KeyPair`
-    pub fn secret(&self) -> &SecretKey {
-        &self.secret
-    }
-}
-
-impl From<SecretKey> for KeyPair {
-    fn from(secret: SecretKey) -> Self {
-        let public = secret.public_key();
-
-        Self { public, secret }
-    }
-}
-
-/// A `Signer` is used to sign data and verify signatures
-pub struct Signer {
-    keypair: KeyPair,
-    buffer: Vec<u8>,
-}
-
-impl Signer {
-    /// Create a new `Signer` that will use the given `KeyPair`
-    pub fn new(keypair: KeyPair) -> Self {
-        Self {
-            keypair,
-            buffer: Vec::new(),
-        }
+    pub fn private(&self) -> PrivateKey {
+        PrivateKey::new(self.0.secret.to_bytes()).unwrap()
     }
 
-    /// Create a new `Signer` with a randomly generated `KeyPair`
-    pub fn random() -> Self {
-        Self {
-            keypair: KeyPair::random(),
-            buffer: Vec::new(),
-        }
+    /// Get this `KeyPair` as a slice of bytes
+    pub fn to_bytes(&self) -> [u8; KEYPAIRBYTES] {
+        self.0.to_bytes()
     }
 
-    /// Get a reference to the `PublicKey` used by this `Signer`
-    pub fn public(&self) -> &PublicKey {
-        &self.keypair.public
-    }
-
-    /// Get a reference to the `SecretKey` used by this `Signer`
-    pub fn secret(&self) -> &SecretKey {
-        &self.keypair.secret
-    }
-
-    /// Sign some serializable data using the `SecretKey` in this `Signer`
+    /// Sign a message using this `SecretKey`
     pub fn sign<T: Serialize>(
-        &mut self,
+        &self,
         message: &T,
     ) -> Result<Signature, SignError> {
-        self.buffer.clear();
-        serialize_into(&mut self.buffer, message).context(SignSerialize)?;
+        let mut buffer = Vec::new();
 
-        Ok(sign_detached(&self.buffer, &self.secret().0))
+        serialize_into(&mut buffer, message).context(SignSerialize)?;
+
+        Ok(self.0.sign(&buffer).into())
     }
+}
 
-    /// Verify that the provided `Signature` is valid for the given message
+impl Clone for KeyPair {
+    fn clone(&self) -> Self {
+        Self(Keypair::from_bytes(&self.0.to_bytes()).unwrap())
+    }
+}
+
+impl PartialEq for KeyPair {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_bytes() == other.0.to_bytes()
+    }
+}
+
+impl Eq for KeyPair {}
+
+/// A signature that can be used to verify the authenticity of a message
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Signature(DalekSignature);
+
+impl Signature {
+    /// Verify that this `Signature` is valid for the given message
     pub fn verify<T: Serialize>(
-        &mut self,
-        signature: &Signature,
-        public: &PublicKey,
+        &self,
         message: &T,
+        pkey: &PublicKey,
     ) -> Result<(), VerifyError> {
-        self.buffer.clear();
-        serialize_into(&mut self.buffer, message).context(VerifySerialize)?;
+        let mut buffer = Vec::new();
 
-        ensure!(verify_detached(signature, &self.buffer, &public.0), Sodium);
+        serialize_into(&mut buffer, message).context(VerifySerialize)?;
 
-        Ok(())
+        pkey.0.verify(&buffer, &self.0).context(Dalek)
+    }
+}
+
+impl Clone for Signature {
+    fn clone(&self) -> Self {
+        Self(DalekSignature::new(self.0.to_bytes()))
+    }
+}
+
+impl Eq for Signature {}
+
+impl PartialEq for Signature {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_bytes() == other.0.to_bytes()
+    }
+}
+
+impl From<DalekSignature> for Signature {
+    fn from(signature: DalekSignature) -> Self {
+        Self(signature)
     }
 }
 
@@ -222,12 +259,11 @@ mod tests {
         ($value:expr) => {
             let value = $value;
             let keypair = KeyPair::random();
-            let pubkey = keypair.public.clone();
-            let mut signer = Signer::new(keypair);
-            let signature = signer.sign(&value).expect("failed to sign data");
+            let pubkey = keypair.public();
+            let signature = keypair.sign(&value).expect("failed to sign data");
 
-            signer
-                .verify(&signature, &pubkey, &value)
+            signature
+                .verify(&value, &pubkey)
                 .expect("failed to verify correct signature");
         };
     }
@@ -270,29 +306,43 @@ mod tests {
     }
 
     #[test]
-    fn bad_signature() {
+    fn bad_data() {
         let keypair = KeyPair::random();
-        let mut signer = Signer::new(keypair.clone());
+        let signature = keypair.sign(&0u64).expect("failed to sign data");
 
-        let mut signature = signer.sign(&0u64).expect("failed to sign data");
-
-        if let Some(x) = signature.0.last_mut() {
-            *x = x.wrapping_add(1);
-        }
-
-        signer
-            .verify(&signature, &keypair.public, &0u64)
-            .expect_err("verified bad signature");
+        signature
+            .verify(&1u64, &keypair.public())
+            .expect_err("verified signature for wrong data");
     }
 
     #[test]
-    fn bad_data() {
-        let keypair = KeyPair::random();
-        let mut signer = Signer::new(keypair.clone());
-        let signature = signer.sign(&0u64).expect("failed to sign data");
+    fn serialize() {
+        macro_rules! ser_de {
+            ($($value:expr, $tp:ty), *) => ($(
 
-        signer
-            .verify(&signature, &keypair.public, &1u64)
-            .expect_err("verified signature for wrong data");
+
+                let mut buffer = Vec::new();
+                let value = ($value);
+
+                serialize_into(&mut buffer, &value).expect("serialize failed");
+
+                let output: $tp = bincode::deserialize_from(Cursor::new(buffer)).expect("deserialize failed");
+
+                assert_eq!(output, value, "different value");
+           )*)
+        }
+
+        use std::io::Cursor;
+
+        let keypair = KeyPair::random();
+
+        ser_de!(
+            KeyPair::random(),
+            KeyPair,
+            keypair.public(),
+            PublicKey,
+            keypair.private(),
+            PrivateKey
+        );
     }
 }
