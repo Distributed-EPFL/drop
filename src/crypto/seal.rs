@@ -21,7 +21,7 @@ pub const NONCE_LENGTH: usize = NONCEBYTES;
 pub const PUBLIC_LENGTH: usize = PUBLICKEYBYTES;
 
 /// Length of asymmetric secret keys used by `Seal`
-pub const SECRET_LENGTH: usize = SECRETKEYBYTES;
+pub const PRIVATE_LENGTH: usize = SECRETKEYBYTES;
 
 /// Size of the authentication tag used
 pub const TAG_LENGTH: usize = MACBYTES;
@@ -37,13 +37,13 @@ pub struct PublicKey(SodiumPublicKey);
 /// A secret key used to exchange message using asymmetric encryption
 /// through a `Seal`
 #[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
-pub struct SecretKey(SodiumSecretKey);
+pub struct PrivateKey(SodiumSecretKey);
 
 /// An asymmetric key pair used for use in one-time signed and authenticated messages
 #[derive(Clone, PartialEq, Eq)]
 pub struct KeyPair {
     public: PublicKey,
-    secret: SecretKey,
+    secret: PrivateKey,
 }
 
 impl KeyPair {
@@ -53,7 +53,7 @@ impl KeyPair {
 
         Self {
             public: PublicKey(public),
-            secret: SecretKey(secret),
+            secret: PrivateKey(secret),
         }
     }
 }
@@ -128,8 +128,8 @@ impl Seal {
         &self.keypair.public
     }
 
-    /// Get a reference to the `SecretKey` in use within this `Seal`
-    pub fn secret(&self) -> &SecretKey {
+    /// Get a reference to the `PrivateKey` in use within this `Seal`
+    pub fn secret(&self) -> &PrivateKey {
         &self.keypair.secret
     }
 
@@ -263,7 +263,7 @@ mod tests {
         assert_eq!(TAG_LENGTH, 16, "sodium tag length has changed");
         assert_eq!(NONCE_LENGTH, 24, "sodium nonce length has changed");
         assert_eq!(PUBLIC_LENGTH, 32, "sodium key length has changed");
-        assert_eq!(SECRET_LENGTH, 32, "sodium key length has changed");
+        assert_eq!(PRIVATE_LENGTH, 32, "sodium key length has changed");
     }
 
     #[test]

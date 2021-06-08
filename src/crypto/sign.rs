@@ -12,12 +12,12 @@ use ed25519_dalek::{
 
 pub use ed25519_dalek::{
     KEYPAIR_LENGTH as KEYPAIRBYTES, PUBLIC_KEY_LENGTH as PUBLICKEYBYTES,
-    SECRET_KEY_LENGTH as SECRETKEYBYTES,
+    SECRET_KEY_LENGTH as PRIVATEKEYBYTES,
 };
 
 use rand::rngs::OsRng;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use snafu::{ResultExt, Snafu};
 
@@ -37,7 +37,7 @@ pub enum SignError {
 }
 
 #[derive(Debug, Snafu)]
-/// Signature verification errorc
+/// Signature verification error
 pub enum VerifyError {
     #[snafu(display("failed to verify data: {}", source))]
     /// The data could not be serialized
@@ -46,7 +46,7 @@ pub enum VerifyError {
         source: BincodeError,
     },
 
-    #[snafu(display("invalid signature"))]
+    #[snafu(display("signature verification error: {}", source))]
     /// The signature was invalid
     Dalek {
         /// Error backtrace
@@ -54,7 +54,7 @@ pub enum VerifyError {
     },
 }
 
-/// A public key used for verifying messages
+/// A `PublicKey` used for verifying messages
 #[derive(Copy, Clone, Eq, Debug, Serialize, Deserialize)]
 pub struct PublicKey(DalekPublicKey);
 
@@ -110,17 +110,17 @@ pub struct PrivateKey(DalekPrivateKey);
 impl PrivateKey {
     /// Create a new `PrivateKey` containing the given bytes if they represent a valid
     /// key
-    pub fn new(bytes: [u8; SECRETKEYBYTES]) -> Result<Self, VerifyError> {
+    pub fn new(bytes: [u8; PRIVATEKEYBYTES]) -> Result<Self, VerifyError> {
         Ok(Self(DalekPrivateKey::from_bytes(&bytes).context(Dalek)?))
     }
 
-    /// Get the content of this `SecretKey` as a slice of bytes
-    pub fn to_bytes(&self) -> [u8; 32] {
+    /// Get the content of this `PrivateKey` as a slice of bytes
+    pub fn to_bytes(&self) -> [u8; PRIVATEKEYBYTES] {
         self.0.to_bytes()
     }
 
     /// Get the reference to the slice of byte of this `PrivateKey`
-    pub fn as_bytes(&self) -> &[u8; SECRETKEYBYTES] {
+    pub fn as_bytes(&self) -> &[u8; PRIVATEKEYBYTES] {
         self.0.as_bytes()
     }
 }
@@ -175,7 +175,7 @@ impl KeyPair {
         self.0.public.into()
     }
 
-    /// Get the `SecretKey` in this `KeyPair`
+    /// Get the `PrivateKey` in this `KeyPair`
     pub fn private(&self) -> PrivateKey {
         PrivateKey::new(self.0.secret.to_bytes()).unwrap()
     }
@@ -185,7 +185,7 @@ impl KeyPair {
         self.0.to_bytes()
     }
 
-    /// Sign a message using this `SecretKey`
+    /// Sign a message using this `KeyPair`
     pub fn sign<T: Serialize>(
         &self,
         message: &T,
@@ -319,8 +319,6 @@ mod tests {
     fn serialize() {
         macro_rules! ser_de {
             ($($value:expr, $tp:ty), *) => ($(
-
-
                 let mut buffer = Vec::new();
                 let value = ($value);
 
