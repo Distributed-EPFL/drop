@@ -22,6 +22,18 @@ impl Key {
     }
 }
 
+impl AsRef<[u8; SIZE]> for Key {
+    fn as_ref(&self) -> &[u8; SIZE] {
+        &self.0
+    }
+}
+
+impl From<[u8; SIZE]> for Key {
+    fn from(s: [u8; SIZE]) -> Self {
+        Self(s)
+    }
+}
+
 impl Drop for Key {
     fn drop(&mut self) {
         utils::memzero(&mut self.0);
