@@ -28,7 +28,7 @@ impl<Inner> Clone for Wrap<Inner>
 where Inner: Serialize
 {
     fn clone(&self) -> Self {
-        Wrap{digest: self.digest.clone(), inner: self.inner.clone()}
+        Wrap{digest: self.digest, inner: self.inner.clone()}
     }
 }
 
@@ -48,7 +48,7 @@ where
     fn clone(&self) -> Self {
         match self {
             Node::Empty => Node::Empty,
-            Node::Internal(left, right) => Node::Internal(left.clone(), right.clone()),
+            Node::Internal(left, right) => Node::Internal(*left, *right),
             Node::Leaf(key, value) => Node::Leaf(key.clone(), value.clone())
         }
     }
