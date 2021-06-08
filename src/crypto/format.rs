@@ -8,7 +8,7 @@ use super::key::Key;
 impl Display for Digest {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "<")?;
-        for byte in &self.0 {
+        for byte in self.as_bytes() {
             write!(fmt, "{:02x}", byte)?;
         }
         write!(fmt, ">")?;

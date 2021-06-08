@@ -1,17 +1,19 @@
+use std::cmp;
+
 use super::key::Key;
 use super::BincodeError;
 
 use bincode::serialize;
 
+pub use blake3::Hash;
+use blake3::Hasher as BlakeHasher;
+
 use serde::{Deserialize, Serialize};
 
-use snafu::{ensure, Backtrace, ResultExt, Snafu};
-
-use sodiumoxide::crypto::generichash::State as SodiumState;
-use sodiumoxide::utils;
+use snafu::{ResultExt, Snafu};
 
 /// Static size for hashes
-pub const SIZE: usize = 32;
+pub const SIZE: usize = blake3::OUT_LEN;
 
 #[derive(Debug, Snafu)]
 /// Errors enountered by [`Hasher`]
@@ -24,44 +26,78 @@ pub enum HashError {
         /// Underlying error cause
         source: BincodeError,
     },
-
-    #[snafu(display("sodium error"))]
-    /// Cryptographic operation error
-    SodiumError {
-        /// Error backtrace
-        backtrace: Backtrace,
-    },
 }
 
-/// Wrapper for sodium hasher
-pub struct Hasher(SodiumState);
+/// Wrapper for blake3 hasher
+pub struct Hasher(BlakeHasher);
 
-#[allow(clippy::result_unit_err)]
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Hash")]
+struct SerdeDigest(
+    #[serde(getter = "Hash::as_bytes")] pub(crate) [u8; SIZE],
+);
+
+impl From<SerdeDigest> for Hash {
+    fn from(d: SerdeDigest) -> Self {
+        Self::from(d.0)
+    }
+}
+
+/// A hash digest using blake3
+#[derive(Serialize, Deserialize, Eq, PartialEq, Copy, Clone, Hash)]
+pub struct Digest(#[serde(with = "SerdeDigest")] Hash);
+
+impl Digest {
+    /// Get the content of this `Digest` as a reference to a slice of bytes
+    pub fn as_bytes(&self) -> &[u8; SIZE] {
+        self.0.as_bytes()
+    }
+}
+
+impl Ord for Digest {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        Ord::cmp(self.0.as_bytes(), other.0.as_bytes())
+    }
+}
+
+impl PartialOrd for Digest {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl From<Hash> for Digest {
+    fn from(h: Hash) -> Self {
+        Self(h)
+    }
+}
+
+impl From<[u8; SIZE]> for Digest {
+    fn from(s: [u8; SIZE]) -> Self {
+        Self(Hash::from(s))
+    }
+}
+
 impl Hasher {
     /// Create a `Hasher` without a `Key`
     pub fn new() -> Self {
-        Hasher(SodiumState::new(SIZE, None).unwrap())
+        Self(BlakeHasher::new())
     }
 
     /// Create a `Hasher` with a specified `Key`. <br/ >
     /// This, in effect, creates a MAC producer for authenticating data.
-    pub fn keyed(key: &Key) -> Result<Self, HashError> {
-        let state = SodiumState::new(SIZE, Some(&key.0))
-            .map_err(|_| SodiumError.build())?;
-        Ok(Hasher(state))
+    pub fn keyed(key: &Key) -> Self {
+        Self(BlakeHasher::new_keyed(key.as_ref()))
     }
 
     /// Feed a chunk of bytes to this hasher
-    pub fn update(&mut self, chunk: &[u8]) -> Result<(), HashError> {
-        self.0.update(chunk).map_err(|_| SodiumError.build())
+    pub fn update(&mut self, chunk: &[u8]) {
+        self.0.update(chunk);
     }
 
     /// Considers the data complete and returns the resulting hash
-    pub fn finalize(self) -> Result<Digest, HashError> {
-        self.0
-            .finalize()
-            .map(|x| x.into())
-            .map_err(|_| SodiumError.build())
+    pub fn finalize(self) -> Digest {
+        self.0.finalize().into()
     }
 }
 
@@ -71,40 +107,19 @@ impl Default for Hasher {
     }
 }
 
-/// A hash digest
-#[allow(clippy::derive_hash_xor_eq)]
-#[derive(Copy, Clone, Deserialize, Hash, Eq, Ord, PartialOrd, Serialize)]
-pub struct Digest(pub(crate) [u8; SIZE]);
-
-impl AsRef<[u8; SIZE]> for Digest {
-    fn as_ref(&self) -> &[u8; SIZE] {
-        &self.0
-    }
-}
-
-impl PartialEq for Digest {
-    fn eq(&self, rhs: &Digest) -> bool {
-        utils::memcmp(&self.0, &rhs.0)
-    }
-}
-
 fn do_hash<M: Serialize>(
     mut hasher: Hasher,
     message: &M,
 ) -> Result<Digest, HashError> {
-    ensure!(
-        hasher
-            .update(&serialize(message).context(SerializeError)?)
-            .is_ok(),
-        SodiumError
-    );
+    hasher.update(&serialize(message).context(SerializeError)?);
 
-    hasher.finalize().map_err(|_| SodiumError.build())
+    Ok(hasher.finalize())
 }
 
 /// Computes the cryptographic hash of the specified message.
 pub fn hash<M: Serialize>(message: &M) -> Result<Digest, HashError> {
     let hasher = Hasher::new();
+
     do_hash(hasher, message)
 }
 
@@ -113,7 +128,8 @@ pub fn authenticate<Message: Serialize>(
     key: &Key,
     message: &Message,
 ) -> Result<Digest, HashError> {
-    let hasher = Hasher::keyed(key)?;
+    let hasher = Hasher::keyed(key);
+
     do_hash(hasher, message)
 }
 
@@ -156,7 +172,7 @@ mod tests {
     fn correct_hash_0u32() {
         compare_digest!(
             0u32,
-            "11da6d1f761ddf9bdb4c9d6e5303ebd41f61858d0a5647a1a7bfe089bf921be9"
+            "ec2bd03bf86b935fa34d71ad7ebb049f1f10f87d343e521511d8f9e6625620cd"
         );
     }
 
@@ -164,7 +180,7 @@ mod tests {
     fn correct_hash_string() {
         compare_digest!(
             "Hello World!",
-            "aee54b3a4b95463009c1f3a1b5092c9e918fc64f9e0dd31ff7a2bf51e8614121"
+            "f081b531fffc1e69b73f40a2b08e705bd5b8dfb2396f5bc90f81118ce1286f90"
         );
     }
 
@@ -172,7 +188,7 @@ mod tests {
     fn correct_hash_u32_array() {
         compare_digest!(
             [0u32, 1u32, 2u32, 3u32, 4u32, 5u32, 6u32, 7u32],
-            "d6a648a90a8267de463f99f87849e7e7c5a9273a252e501c95b44fbb958b6f7b"
+            "5c7b5564a4f3fb20589ebb6d46f85373980382cdf55f71bd4955e03eb8cc2c96"
         );
     }
 
@@ -181,7 +197,7 @@ mod tests {
         compare_mac!(
             KEY,
             0u32,
-            "77b158a4b3694545b41363bf4a88d5e22fb5f563e7dce933d00942fb1444070c"
+            "40cc83b9a432048488badd27670dbb6fdf890ac5662b92a53f9363dbd54e023f"
         );
     }
 
@@ -190,7 +206,7 @@ mod tests {
         compare_mac!(
             KEY,
             "Hello World!",
-            "cd9cab2bd07de0d5e015ad1dc671b1928871b36b8961010a2d0878409133fd49"
+            "95302a0102fef2d232c196b8c0f585e3c6fc3b2d8da9bb4a199e8e409f893231"
         );
     }
 
@@ -199,7 +215,7 @@ mod tests {
         compare_mac!(
             KEY,
             [0u32, 1u32, 2u32, 3u32, 4u32, 5u32, 6u32, 7u32],
-            "c12785392eb364193254445f8c14d8729f59713eeb0f5664eb61c9b96f4044a4"
+            "62f6e2709f98a117e0ae2c078eba3fbe62ba89d7aca1540c8d341bdde1d9264d"
         );
     }
 

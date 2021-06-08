@@ -53,7 +53,7 @@ impl Path {
         if idx < Path::NUM_BITS {
             let (byte_idx, bit_idx) = split_bits(idx);
 
-            let byte = (self.0).0[byte_idx as usize];
+            let byte = (self.0).as_bytes()[byte_idx as usize];
 
             Ok(Direction::from_bit(byte, bit_idx))
         } else {
@@ -171,7 +171,7 @@ impl Prefix {
 
     fn from_digest(digest: &Digest, depth: usize) -> Prefix {
         Prefix {
-            inner: digest.0,
+            inner: *digest.as_bytes(),
             depth,
         }
     }
@@ -189,14 +189,16 @@ impl Prefix {
     pub fn is_prefix_of(&self, rhs: &Path) -> bool {
         let (num_full_bytes, overflow_bits) = split_bits(self.depth);
 
-        if self.inner[0..num_full_bytes] != (rhs.0).0[0..num_full_bytes] {
+        if self.inner[0..num_full_bytes]
+            != (rhs.0).as_bytes()[0..num_full_bytes]
+        {
             return false;
         }
 
         // If there are some bits left to individually compare in the last byte
         if overflow_bits > 0 {
             let last_byte_left = self.inner[num_full_bytes];
-            let last_byte_right = (rhs.0).0[num_full_bytes];
+            let last_byte_right = (rhs.0).as_bytes()[num_full_bytes];
             let shift_amount = BITS_IN_BYTE - overflow_bits;
 
             // Right shift to truncate irrelevant bits
@@ -284,12 +286,12 @@ mod tests {
     #[test]
     fn hashpath() {
         use Direction::*;
-        // hash(15092) = 0101 1010 0001 1111 ...
+        // hash(15092) = 1010 0100 0000 1100 ...
         let path = Path::new(&15092).unwrap();
 
         let expected_vec = vec![
-            Left, Right, Left, Right, Right, Left, Right, Left, Left, Left,
-            Left, Right, Right, Right, Right, Right,
+            Right, Left, Right, Left, Left, Right, Left, Left, Left, Left,
+            Left, Left, Right, Right, Left, Left,
         ];
 
         for (idx, expected) in expected_vec.iter().enumerate() {
