@@ -46,7 +46,7 @@ impl fmt::Display for PublicKey {
     }
 }
 
-impl fmt::Display for SecretKey {
+impl fmt::Display for PrivateKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for b in self.0.as_ref() {
             write!(f, "{:02x}", b)?;
@@ -70,16 +70,16 @@ impl AsRef<[u8]> for PublicKey {
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-/// A `SecretKey` used to compute a shared secret with a remote party
-pub struct SecretKey(SodiumSecKey);
+/// A `PrivateKey` used to compute a shared secret with a remote party
+pub struct PrivateKey(SodiumSecKey);
 
-impl AsRef<[u8]> for SecretKey {
+impl AsRef<[u8]> for PrivateKey {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
     }
 }
 
-impl From<SodiumSecKey> for SecretKey {
+impl From<SodiumSecKey> for PrivateKey {
     fn from(key: SodiumSecKey) -> Self {
         Self(key)
     }
@@ -89,12 +89,12 @@ impl From<SodiumSecKey> for SecretKey {
 /// A `KeyPair` that can be used to exchange a secret symmetric key for use in an encrypted network stream
 pub struct KeyPair {
     public: PublicKey,
-    secret: SecretKey,
+    secret: PrivateKey,
 }
 
 impl KeyPair {
     /// Creates a new `KeyPair` with a public key linked to the secret key
-    pub fn new(secret: SecretKey, public: PublicKey) -> Self {
+    pub fn new(secret: PrivateKey, public: PublicKey) -> Self {
         // TODO check that keys are linked somehow
         Self { public, secret }
     }
@@ -105,7 +105,7 @@ impl KeyPair {
 
         Self {
             public: PublicKey(public),
-            secret: SecretKey(secret),
+            secret: PrivateKey(secret),
         }
     }
 
@@ -114,8 +114,8 @@ impl KeyPair {
         &self.public
     }
 
-    /// Get the `SecretKey` from this `KeyPair`
-    pub fn secret(&self) -> &SecretKey {
+    /// Get the `PrivateKey` from this `KeyPair`
+    pub fn secret(&self) -> &PrivateKey {
         &self.secret
     }
 }
@@ -192,7 +192,7 @@ mod tests {
     use super::*;
 
     /// Create a KeyExchange from the given `KeyPair` and computes
-    /// shared secret using the given `SecretKey`
+    /// shared secret using the given `PublicKey`
     macro_rules! exchange_key {
         ($keypair:expr, $pubkey:expr) => {{
             let kp = $keypair;
