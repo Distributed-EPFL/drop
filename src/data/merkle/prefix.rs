@@ -2,16 +2,16 @@ use crate::crypto::hash::{Digest, SIZE};
 
 use std::ops::Index;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Direction {
     Left,
     Right
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub(super) struct Path([u8; SIZE]);
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone, Copy, Eq)]
 pub(super) struct Prefix {
     path: Path,
     depth: u8
@@ -32,6 +32,7 @@ impl Index<u8> for Prefix {
     type Output = Direction;
 
     fn index(&self, index: u8) -> &Self::Output {
+        debug_assert!(index < self.depth);
         &self.path[index]
     }
 }
@@ -68,7 +69,7 @@ impl Prefix {
     }
 
     pub fn root() -> Self {
-        Prefix{path: Path([0; SIZE]), depth: 0}
+        Prefix{path: Path::empty(), depth: 0}
     }
 
     pub fn depth(&self) -> u8 {
@@ -84,7 +85,7 @@ impl Prefix {
     }
 
     fn child(&self, direction: Direction) -> Self {
-        let mut path = self.path.clone();
+        let mut path = self.path;
         path.set(self.depth, direction);
 
         Prefix{path, depth: self.depth + 1}
@@ -175,7 +176,7 @@ mod tests {
 
         let path = path_from_directions(&reference);
 
-        assert_eq!(directions_from_prefix(&Prefix::new(path.clone(), reference.len() as u8)), reference);
+        assert_eq!(directions_from_prefix(&Prefix::new(path, reference.len() as u8)), reference);
         assert_eq!(directions_from_prefix(&Prefix::root()), vec![]);
         assert_eq!(directions_from_prefix(&Prefix::root().right().right().right().left().right().right().right().left().left().left().right().left().left().right().left().right()), reference);
 
@@ -188,9 +189,9 @@ mod tests {
         assert!(Prefix::root().right().right().right().left().right().right().right().contains(&path));
         assert!(!Prefix::root().right().right().right().left().right().right().left().contains(&path));
 
-        assert!(Prefix::new(path.clone(), reference.len() as u8).contains(&path));
-        assert!(Prefix::new(path.clone(), reference.len() as u8).right().contains(&path));
-        assert!(!Prefix::new(path.clone(), reference.len() as u8).left().contains(&path));
+        assert!(Prefix::new(path, reference.len() as u8).contains(&path));
+        assert!(Prefix::new(path, reference.len() as u8).right().contains(&path));
+        assert!(!Prefix::new(path, reference.len() as u8).left().contains(&path));
 
         assert_eq!(Prefix::root(), Prefix::root());
         assert_eq!(Prefix::root().left(), Prefix::root().left());
