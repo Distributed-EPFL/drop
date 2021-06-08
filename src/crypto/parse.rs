@@ -4,7 +4,7 @@ use std::str::FromStr;
 use super::hash::Digest;
 use super::key::exchange;
 use super::key::Key;
-use super::sign::{self, PUBLICKEYBYTES, SECRETKEYBYTES};
+use super::sign::{self, PRIVATEKEYBYTES, PUBLICKEYBYTES};
 
 use snafu::{ensure, Backtrace, OptionExt, ResultExt, Snafu};
 
@@ -107,7 +107,7 @@ impl FromStr for exchange::PublicKey {
     }
 }
 
-impl FromStr for exchange::SecretKey {
+impl FromStr for exchange::PrivateKey {
     type Err = ParseHexError;
 
     fn from_str(hex: &str) -> Result<Self, Self::Err> {
@@ -146,7 +146,7 @@ impl FromStr for sign::PrivateKey {
     fn from_str(hex: &str) -> Result<Self, Self::Err> {
         use ed25519_dalek::SecretKey;
 
-        ensure!(hex.len() == 2 * SECRETKEYBYTES, UnexpectedSize);
+        ensure!(hex.len() == 2 * PRIVATEKEYBYTES, UnexpectedSize);
 
         let bytes = hex.parse_hex()?;
         let sodium = SecretKey::from_bytes(bytes.as_slice()).context(Dalek)?;
