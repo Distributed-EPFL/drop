@@ -171,69 +171,56 @@ where
     Key: Serialize,
     Value: Serialize
 {
-    match batch.task() {
-        Task::Pass => target.brief(),
-        Task::Do(operation) => {
-            match (&target.node, &operation.action) {
-                (Node::Empty, Action::Set(value)) => {
+    match (&target.node, batch.task()) {
+        (_, Task::Pass) => target.brief(),
+
+        (Node::Empty, Task::Do(operation)) => {
+            match &operation.action {
+                Action::Set(value) => {
                     let node = Node::Leaf(operation.key.clone(), value.clone());
                     let label = label(&node);
                     incref(store, &label, node);
 
                     Brief::Leaf(label)
                 },
-                (Node::Empty, Action::Remove) => Brief::Empty,
+                Action::Remove => Brief::Empty
+            }
+        },
+        (Node::Empty, Task::Split) => branch(store, None, preserve, depth, batch, Entry::empty(), Entry::empty()),
 
-                (Node::Leaf(key, original_value), Action::Set(new_value)) if *key == operation.key => {
-                    if new_value != original_value {
-                        let node = Node::Leaf(operation.key.clone(), new_value.clone());
-                        let label = label(&node);
-                        incref(store, &label, node);
+        (Node::Leaf(key, original_value), Task::Do(operation)) if *key == operation.key => {
+            match &operation.action {
+                Action::Set(new_value) if new_value != original_value => {
+                    let node = Node::Leaf(operation.key.clone(), new_value.clone());
+                    let label = label(&node);
+                    incref(store, &label, node);
 
-                        if !preserve {
-                            decref(store, &target.label);
-                        }
-
-                        Brief::Leaf(label)
-                    } else {
-                        target.brief()
-                    }
-                },
-                (Node::Leaf(_, _), Action::Set(_)) => {
-                    let (left, right) = if Path::new(target.label)[depth] == Direction::Left {
-                        (target, Entry::empty())
-                    } else {
-                        (Entry::empty(), target)
-                    };
-
-                    branch(store, None, preserve, depth, batch, left, right)
-                },
-                (Node::Leaf(key, _), Action::Remove) if *key == operation.key => {
                     if !preserve {
                         decref(store, &target.label);
                     }
-                    
+
+                    Brief::Leaf(label)
+                },
+                Action::Set(_) => target.brief(),
+                Action::Remove => {
+                    if !preserve {
+                        decref(store, &target.label);
+                    }
+
                     Brief::Empty
                 }
-                (Node::Leaf(_, _), Action::Remove) => target.brief(),
-
-                (Node::Internal(left, right), _) => branch(store, Some(&target), preserve, depth, batch, get(store, *left), get(store, *right))
-            }
-        },
-        Task::Split => {
-            match &target.node {
-                Node::Empty => branch(store, None, preserve, depth, batch, Entry::empty(), Entry::empty()),
-                Node::Leaf(_, _) => {
-                    let (left, right) = if Path::new(target.label)[depth] == Direction::Left {
-                        (target, Entry::empty())
-                    } else {
-                        (Entry::empty(), target)
-                    };
-
-                    branch(store, None, preserve, depth, batch, left, right)
-                }
-                Node::Internal(left, right) => branch(store, Some(&target), preserve, depth, batch, get(store, *left), get(store, *right))
             }
         }
+        (Node::Leaf(key, value), _) => {
+            let (left, right) = if Path::new(target.label)[depth] == Direction::Left {
+                (target, Entry::empty())
+            } else {
+                (Entry::empty(), target)
+            };
+
+            branch(store, None, preserve, depth, batch, left, right)
+        },
+
+        (Node::Internal(left, right), _) => branch(store, Some(&target), preserve, depth, batch, get(store, *left), get(store, *right))
     }
 }
