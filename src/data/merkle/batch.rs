@@ -8,13 +8,13 @@ use std::rc::Rc;
 use super::entry::Wrap;
 use super::prefix::{Path, Prefix};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq)]
 pub(super) enum Action<Value: Serialize> {
     Set(Wrap<Value>),
     Remove
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq)]
 pub(super) struct Operation<Key: Serialize, Value: Serialize> {
     pub path: Path,
     pub key: Wrap<Key>,
@@ -26,11 +26,48 @@ pub(super) struct Batch<'a, Key: Serialize, Value: Serialize> {
     operations: &'a [Operation<Key, Value>]
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, Debug)]
 pub(super) enum Task<'a, Key: Serialize, Value: Serialize> {
     Pass,
     Do(&'a Operation<Key, Value>),
     Split
+}
+
+impl<Value> PartialEq for Action<Value>
+where Value: Serialize
+{
+    fn eq(&self, rho: &Self) -> bool {
+        match (self, rho) {
+            (Action::Set(self_value), Action::Set(rho_value)) => self_value == rho_value,
+            (Action::Remove, Action::Remove) => true,
+            _ => false
+        }
+    }
+}
+
+impl<Key, Value> PartialEq for Operation<Key, Value> 
+where
+    Key: Serialize,
+    Value: Serialize
+{
+    fn eq(&self, rho: &Self) -> bool {
+        (self.key == rho.key) && (self.action == rho.action) // `path` is uniquely determined by `key`
+    }
+}
+
+impl<'a, Key, Value> PartialEq for Task<'a, Key, Value>
+where
+    Key: Serialize,
+    Value: Serialize
+{
+    fn eq(&self, rho: &Self) -> bool {
+        match (self, rho) {
+            (Task::Pass, Task::Pass) => true,
+            (Task::Do(self_op), Task::Do(rho_op)) => self_op == rho_op,
+            (Task::Split, Task::Split) => true,
+            _ => false
+        }
+    }
 }
 
 impl<Key, Value> Operation<Key, Value> 
@@ -42,12 +79,12 @@ where
         let key = Wrap::new(key)?;
         let value = Wrap::new(value)?;
         
-        Ok(Operation{path: Path::new(key.digest().clone()), key, action: Action::Set(value)})
+        Ok(Operation{path: Path::new(*key.digest()), key, action: Action::Set(value)})
     }
 
     fn remove(key: Key) -> Result<Self, HashError> {
         let key = Wrap::new(key)?;
-        Ok(Operation{path: Path::new(key.digest().clone()), key, action: Action::Remove})
+        Ok(Operation{path: Path::new(*key.digest()), key, action: Action::Remove})
     }
 }
 
