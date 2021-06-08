@@ -224,3 +224,11 @@ where
         (Node::Internal(left, right), _) => branch(store, Some(&target), preserve, depth, batch, get(store, *left), get(store, *right))
     }
 }
+
+pub(super) fn traverse<Key, Value>(store: &mut Store<Key, Value>, root: Digest, batch: Batch<Key, Value>) 
+where
+    Key: Serialize,
+    Value: Serialize
+{
+    recur(store, get(store, root), false, 0, batch);
+}
