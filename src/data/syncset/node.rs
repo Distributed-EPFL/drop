@@ -410,12 +410,14 @@ mod tests {
     fn label() {
         use Node::*;
         let mut root = Empty;
-        // hash(15092) = 0101 1010 0001 1111 ...
-        let elem_l = 15092;
-        let hash_left = hash(&elem_l).unwrap();
-        // hash(13) = 1101 ...
-        let elem_r = 13;
+
+        let elem_r = 15092;
         let hash_right = hash(&elem_r).unwrap();
+
+        // hash(13) = 1101 ...
+        let elem_l = 13;
+        let hash_left = hash(&elem_l).unwrap();
+
         root.insert(elem_l, 0, Path(hash_left)).unwrap();
         root.insert(elem_r, 0, Path(hash_right)).unwrap();
 
@@ -429,11 +431,13 @@ mod tests {
         use Node::*;
         let mut root = Empty;
         // hash(15092) = 0101 1010 0001 1111 ...
-        let elem_l = 15092;
-        let hash_left = hash(&elem_l).unwrap();
-        // hash(13) = 1101 ...
-        let elem_r = 13;
+        let elem_r = 15092;
         let hash_right = hash(&elem_r).unwrap();
+
+        // hash(13) = 1101 ...
+        let elem_l = 13;
+        let hash_left = hash(&elem_l).unwrap();
+
         root.insert(elem_l, 0, Path(hash_left)).unwrap();
         if let Leaf { item, .. } = root {
             assert_eq!(item, elem_l, "Inserted element doesn't match");
