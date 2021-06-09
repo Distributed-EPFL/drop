@@ -142,10 +142,8 @@ mod tests {
 
     #[test]
     fn path() {
-        let reference = vec![Direction::Right, Direction::Right, Direction::Right, Direction::Left, 
-                             Direction::Right, Direction::Right, Direction::Right, Direction::Left, 
-                             Direction::Left, Direction::Left, Direction::Right, Direction::Left,
-                             Direction::Left, Direction::Right, Direction::Left, Direction::Right];
+        use Direction::{Left as L, Right as R};
+        let reference = vec![L, L, L, R, L, L, R, R, R, R, L, R, L, R, L, L];
 
         assert_eq!(directions_from_path(&Path::empty(), (8 * SIZE - 1) as u8), iter::repeat(Direction::Right).take(8 * SIZE - 1).collect::<Vec<Direction>>());
         assert_eq!(directions_from_path(&Path::from(&hash(&0u32).unwrap()), reference.len() as u8), reference);
@@ -154,42 +152,39 @@ mod tests {
 
     #[test]
     fn ordering() {
-        assert!(&path_from_directions(&vec![Direction::Right]) < &path_from_directions(&vec![Direction::Left]));
-        assert!(&path_from_directions(&vec![Direction::Right]) < &path_from_directions(&vec![Direction::Right, Direction::Left]));
-        assert!(&path_from_directions(&vec![Direction::Left, Direction::Right, Direction::Left]) < &path_from_directions(&vec![Direction::Left, Direction::Left, Direction::Left, Direction::Left, Direction::Left]));
+        use Direction::{Left as L, Right as R};
 
-        let lesser = vec![Direction::Right, Direction::Right, Direction::Right, Direction::Left, 
-                          Direction::Right, Direction::Right, Direction::Right, Direction::Left, 
-                          Direction::Left, Direction::Left, Direction::Right, Direction::Left,
-                          Direction::Left, Direction::Right, Direction::Left, Direction::Right];
+        assert!(&path_from_directions(&vec![R]) < &path_from_directions(&vec![L]));
+        assert!(&path_from_directions(&vec![R]) < &path_from_directions(&vec![R, L]));
+        assert!(&path_from_directions(&vec![L, R, L]) < &path_from_directions(&vec![L, L, L, L, L]));
+
+        let lesser = vec![L, L, L, R, L, L, R, R, R, R, L, R, L, R, L, L];
 
         let mut greater = lesser.clone();
-        greater.push(Direction::Left);
+        greater.push(L);
 
         assert!(&path_from_directions(&lesser) < &path_from_directions(&greater));
     }
 
     #[test]
     fn prefix() {
-        let reference = vec![Direction::Right, Direction::Right, Direction::Right, Direction::Left, 
-                             Direction::Right, Direction::Right, Direction::Right, Direction::Left, 
-                             Direction::Left, Direction::Left, Direction::Right, Direction::Left,
-                             Direction::Left, Direction::Right, Direction::Left, Direction::Right];
+        use Direction::{Left as L, Right as R};
+        let reference = vec![L, L, L, R, L, L, R, R, R, R, L, R, L, R, L, L];
 
         let path = path_from_directions(&reference);
 
         assert_eq!(directions_from_prefix(&Prefix::new(path, reference.len() as u8)), reference);
         assert_eq!(directions_from_prefix(&Prefix::root()), vec![]);
-        assert_eq!(directions_from_prefix(&Prefix::root().right().right().right().left().right().right().right().left().left().left().right().left().left().right().left().right()), reference);
+        assert_eq!(directions_from_prefix(&Prefix::root().left().left().left().right().left().left().right().right().right().right().left().right().left().right().left().left()), reference);
 
-        assert!(Prefix::root().contains(&path_from_directions(&vec![Direction::Left])));
-        assert!(Prefix::root().contains(&path_from_directions(&vec![Direction::Right])));
+        assert!(Prefix::root().contains(&path_from_directions(&vec![L])));
+        assert!(Prefix::root().contains(&path_from_directions(&vec![R])));
 
-        assert!(Prefix::root().right().contains(&path));
-        assert!(!Prefix::root().left().contains(&path));
+        assert!(Prefix::root().left().contains(&path));
+        assert!(!Prefix::root().right().contains(&path));
         
-        assert!(Prefix::root().right().right().right().left().right().right().right().contains(&path));
-        assert!(!Prefix::root().right().right().right().left().right().right().left().contains(&path));
+        assert!(Prefix::root().left().left().left().right().left().left().right().contains(&path));
+        assert!(!Prefix::root().left().left().left().right().left().left().left().contains(&path));
 
         assert!(Prefix::new(path, reference.len() as u8).contains(&path));
         assert!(Prefix::new(path, reference.len() as u8).right().contains(&path));
