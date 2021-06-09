@@ -5,15 +5,42 @@ use serde::Serialize;
 
 use super::entry::Node;
 
-pub(super) const EMPTY: Digest = Digest([0u8; SIZE]);
+#[derive(Clone, Copy, Eq, PartialEq, Serialize)]
+pub(super) enum Label {
+    Filled(Digest),
+    Empty
+}
 
-pub(super) fn label<Key, Value>(node: &Node<Key, Value>) -> Digest 
+impl From<Digest> for Label {
+    fn from(digest: Digest) -> Self {
+        Label::Filled(digest)
+    }
+}
+
+impl Label {
+    pub fn is_filled(&self) -> bool {
+        *self != Label::Empty
+    }
+
+    pub fn is_empty(&self) -> bool {
+        *self == Label::Empty
+    }
+
+    pub fn as_digest(&self) -> &Digest {
+        match self {
+            Label::Filled(digest) => digest,
+            Label::Empty => panic!("called `Label::as_digest()` on an `Empty` value")
+        }
+    }
+}
+
+pub(super) fn label<Key, Value>(node: &Node<Key, Value>) -> Label 
 where
     Key: Serialize,
     Value: Serialize
 {
     match node {
-        Node::Empty => EMPTY,
-        node => hash(&node).unwrap()
+        Node::Empty => Label::Empty,
+        node => hash(&node).unwrap().into()
     }
 }

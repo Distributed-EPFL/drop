@@ -79,12 +79,12 @@ where
         let key = Wrap::new(key)?;
         let value = Wrap::new(value)?;
         
-        Ok(Operation{path: Path::new(*key.digest()), key, action: Action::Set(value)})
+        Ok(Operation{path: Path::from(key.digest()), key, action: Action::Set(value)})
     }
 
     fn remove(key: Key) -> Result<Self, HashError> {
         let key = Wrap::new(key)?;
-        Ok(Operation{path: Path::new(*key.digest()), key, action: Action::Remove})
+        Ok(Operation{path: Path::from(key.digest()), key, action: Action::Remove})
     }
 }
 

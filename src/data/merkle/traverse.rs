@@ -9,7 +9,8 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 use super::batch::{Action, Batch, Task};
 use super::database::Store;
 use super::entry::{Entry as StoreEntry, Node};
-use super::label::{label, EMPTY};
+use super::label::Label;
+use super::label::label;
 use super::prefix::{Direction, Path};
 
 #[derive(Copy, Clone)]
@@ -25,17 +26,17 @@ enum References {
 }
 
 struct Entry<Key: Serialize, Value: Serialize> {
-    label: Digest,
+    label: Label,
     node: Node<Key, Value>,
     references: References
 }
 
 impl Brief {
-    fn label(&self) -> &Digest {
+    fn label(&self) -> Label {
         match self {
-            Brief::Empty => &EMPTY,
-            Brief::Internal(label) => label,
-            Brief::Leaf(label) => label
+            Brief::Empty => Label::Empty,
+            Brief::Internal(label) => (*label).into(),
+            Brief::Leaf(label) => (*label).into()
         }
     }
 }
@@ -55,40 +56,41 @@ where
     Value: Serialize
 {
     fn empty() -> Self {
-        Entry{label: EMPTY, node: Node::Empty, references: References::NotApplicable}
+        Entry{label: Label::Empty, node: Node::Empty, references: References::NotApplicable}
     }
 
     fn brief(&self) -> Brief {
         match self.node {
             Node::Empty => Brief::Empty,
-            Node::Internal(..) => Brief::Internal(self.label),
-            Node::Leaf(..) => Brief::Leaf(self.label)
+            Node::Internal(..) => Brief::Internal(*self.label.as_digest()),
+            Node::Leaf(..) => Brief::Leaf(*self.label.as_digest())
         }
     }
 }
 
-fn get<Key, Value>(store: &Store<Key, Value>, label: Digest) -> Entry<Key, Value>
+fn get<Key, Value>(store: &Store<Key, Value>, label: Label) -> Entry<Key, Value>
 where
     Key: Serialize,
     Value: Serialize
 {
-    if label == EMPTY {
-        Entry{label: EMPTY, node: Node::Empty, references: References::NotApplicable}
-    } else {
-        let entry = &store.entries[&label];
-        Entry{label, node: entry.node.clone(), references: References::Applicable(entry.references)}
+    match label {
+        Label::Empty => Entry::empty(),
+        Label::Filled(label) => {
+            let entry = &store.entries[&label];
+            Entry{label: label.into(), node: entry.node.clone(), references: References::Applicable(entry.references)}
+        }
     }
 }
 
-fn incref<Key, Value>(store: &mut Store<Key, Value>, label: &Digest, node: Node<Key, Value>) 
+fn incref<Key, Value>(store: &mut Store<Key, Value>, label: &Label, node: Node<Key, Value>) 
 where
     Key: Serialize,
     Value: Serialize
 {
-    if *label != EMPTY {
-        match store.entries.get_mut(label) {
-            Some(entry) => {
-                entry.references += 1;
+    if label.is_filled() {
+        match store.entries.entry(*label.as_digest()) {
+            Occupied(mut entry) => {
+                entry.get_mut().references += 1;
 
                 // This `match` is tied to the traversal of a `MerkleTable`'s tree: 
                 // increfing an internal node implies a previous incref of its children, 
@@ -96,26 +98,26 @@ where
                 // A normal `incref` method would not have this.
                 match node { 
                     Node::Internal(left, right) => {
-                        store.entries.get_mut(&left).unwrap().references -= 1;
-                        store.entries.get_mut(&right).unwrap().references -= 1;
+                        decref(store, &left);
+                        decref(store, &right);
                     },
                     _ => {}
                 }
             },
-            None => {
-                store.entries.insert(*label, StoreEntry{node, references: 1});
+            Vacant(entry) => {
+                entry.insert(StoreEntry{node, references: 1});
             }
         }
     }
 }
 
-fn decref<Key, Value>(store: &mut Store<Key, Value>, label: &Digest) 
+fn decref<Key, Value>(store: &mut Store<Key, Value>, label: &Label) 
 where
     Key: Serialize,
     Value: Serialize
 {
-    if *label != EMPTY {
-        match store.entries.entry(*label) {
+    if label.is_filled() {
+        match store.entries.entry(*label.as_digest()) {
             Occupied(mut entry) => {
                 let value = entry.get_mut();
                 value.references -= 1;
@@ -124,7 +126,7 @@ where
                     entry.remove_entry();
                 }
             }
-            Vacant(_) => {}
+            Vacant(_) => unreachable!()
         };
     }
 }
@@ -143,7 +145,7 @@ where
         (Brief::Empty, Brief::Empty) => Brief::Empty,
         (Brief::Empty, Brief::Leaf(label)) | (Brief::Leaf(label), Brief::Empty) => Brief::Leaf(label),
         (left, right) => {
-            let node = Node::<Key, Value>::Internal(*left.label(), *right.label());
+            let node = Node::<Key, Value>::Internal(left.label(), right.label());
             match original {
                 Some(original) if node == original.node => { // Unchanged `original`
                     original.brief()
@@ -151,14 +153,14 @@ where
                 _ => { // New or modified `original`
                     let label = label(&node);
                     incref(store, &label, node);
-                    Brief::Internal(label)
+                    Brief::Internal(*label.as_digest())
                 }
             }
         }
     };
 
     if let Some(original) = original {
-        if *new.label() != original.label && !preserve {
+        if new.label() != original.label && !preserve {
             decref(store, &original.label);
         }
     }
@@ -181,7 +183,7 @@ where
                     let label = label(&node);
                     incref(store, &label, node);
 
-                    Brief::Leaf(label)
+                    Brief::Leaf(*label.as_digest())
                 },
                 Action::Remove => Brief::Empty
             }
@@ -199,7 +201,7 @@ where
                         decref(store, &target.label);
                     }
 
-                    Brief::Leaf(label)
+                    Brief::Leaf(*label.as_digest())
                 },
                 Action::Set(_) => target.brief(),
                 Action::Remove => {
@@ -212,7 +214,7 @@ where
             }
         }
         (Node::Leaf(key, value), _) => {
-            let (left, right) = if Path::new(target.label)[depth] == Direction::Left {
+            let (left, right) = if Path::from(target.label.as_digest())[depth] == Direction::Left {
                 (target, Entry::empty())
             } else {
                 (Entry::empty(), target)
@@ -225,7 +227,7 @@ where
     }
 }
 
-pub(super) fn traverse<Key, Value>(store: &mut Store<Key, Value>, root: Digest, batch: Batch<Key, Value>) 
+pub(super) fn traverse<Key, Value>(store: &mut Store<Key, Value>, root: Label, batch: Batch<Key, Value>) 
 where
     Key: Serialize,
     Value: Serialize

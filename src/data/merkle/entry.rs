@@ -6,6 +6,8 @@ use serde::Serialize;
 
 use std::rc::Rc;
 
+use super::label::Label;
+
 #[derive(Debug, Eq, Serialize)]
 pub(super) struct Wrap<Inner: Serialize> {
     digest: Digest,
@@ -15,7 +17,7 @@ pub(super) struct Wrap<Inner: Serialize> {
 #[derive(Eq, Serialize)]
 pub(super) enum Node<Key: Serialize, Value: Serialize> {
     Empty,
-    Internal(Digest, Digest),
+    Internal(Label, Label),
     Leaf(Wrap<Key>, Wrap<Value>)
 }
 

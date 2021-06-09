@@ -43,13 +43,15 @@ impl PartialEq for Prefix {
     }
 }
 
+impl From<&Digest> for Path {
+    fn from(digest: &Digest) -> Self {
+        Path(*digest.as_bytes())
+    }
+}
+
 impl Path {
     pub fn empty() -> Self {
         Path([0; SIZE])
-    }
-
-    pub fn new(digest: Digest) -> Self {
-        Path(digest.0)
     }
 
     pub fn set(&mut self, index: u8, value: Direction) {
@@ -146,7 +148,7 @@ mod tests {
                              Direction::Left, Direction::Right, Direction::Left, Direction::Right];
 
         assert_eq!(directions_from_path(&Path::empty(), (8 * SIZE - 1) as u8), iter::repeat(Direction::Right).take(8 * SIZE - 1).collect::<Vec<Direction>>());
-        assert_eq!(directions_from_path(&Path::new(hash(&0u32).unwrap()), reference.len() as u8), reference);
+        assert_eq!(directions_from_path(&Path::from(&hash(&0u32).unwrap()), reference.len() as u8), reference);
         assert_eq!(directions_from_path(&path_from_directions(&reference), reference.len() as u8), reference);
     }
 

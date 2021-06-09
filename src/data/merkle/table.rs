@@ -5,10 +5,11 @@ use serde::Serialize;
 
 use super::database::MerkleDatabase;
 use super::entry::Node;
+use super::label::Label;
 
 pub struct MerkleTable<Key: Serialize, Value: Serialize> {
     database: MerkleDatabase<Key, Value>,
-    root: Digest
+    root: Label
 }
 
 impl<Key, Value> MerkleTable<Key, Value> 
@@ -17,6 +18,6 @@ where
     Value: Serialize
 {
     pub(super) fn new(database: &MerkleDatabase<Key, Value>) -> Self {
-        MerkleTable{database: database.clone(), root: hash(&Node::<Key, Value>::Empty).unwrap()}
+        MerkleTable{database: database.clone(), root: Label::Empty}
     }
 }
