@@ -212,6 +212,15 @@ impl PartialEq for KeyPair {
 
 impl Eq for KeyPair {}
 
+impl From<PrivateKey> for KeyPair {
+    fn from(private: PrivateKey) -> Self {
+        Self(Keypair {
+            public: DalekPublicKey::from(&private.0),
+            secret: private.0,
+        })
+    }
+}
+
 /// A signature that can be used to verify the authenticity of a message
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Signature(DalekSignature);
