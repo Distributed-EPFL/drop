@@ -26,7 +26,7 @@ impl Debug for Digest {
 impl Display for Key {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "<")?;
-        for byte in &self.0 {
+        for byte in self.as_ref() {
             write!(fmt, "{:02x}", byte)?;
         }
         write!(fmt, ">")?;
