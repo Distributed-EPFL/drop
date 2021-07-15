@@ -5,6 +5,7 @@ use std::convert::Into;
 
 use serde::{Deserialize, Serialize};
 
+use sodiumoxide::crypto::kx;
 use sodiumoxide::crypto::secretstream;
 use sodiumoxide::utils;
 
@@ -13,7 +14,7 @@ pub const SIZE: usize = 32;
 
 #[derive(Clone, Deserialize, Eq, PartialOrd, Ord, Serialize)]
 /// A symmetric cryptographic `Key`
-pub struct Key(pub(super) [u8; SIZE]);
+pub struct Key([u8; SIZE]);
 
 impl Key {
     /// Generate a new random `Key`
@@ -31,6 +32,30 @@ impl AsRef<[u8; SIZE]> for Key {
 impl From<[u8; SIZE]> for Key {
     fn from(s: [u8; SIZE]) -> Self {
         Self(s)
+    }
+}
+
+impl From<secretstream::Key> for Key {
+    fn from(key: secretstream::Key) -> Self {
+        Key(key.0)
+    }
+}
+
+impl From<kx::SessionKey> for Key {
+    fn from(key: kx::SessionKey) -> Self {
+        Key(key.0)
+    }
+}
+
+impl From<Key> for secretstream::Key {
+    fn from(v: Key) -> Self {
+        Self(v.0)
+    }
+}
+
+impl From<Key> for kx::SessionKey {
+    fn from(key: Key) -> Self {
+        Self(key.0)
     }
 }
 
