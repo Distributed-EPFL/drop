@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 use super::errors::{PathLength, SyncError};
 use crate::crypto::hash::{hash, Digest, HashError, SIZE as HASH_SIZE};
-
-use serde::{Deserialize, Serialize};
 
 const BITS_IN_BYTE: usize = 8;
 
@@ -230,7 +230,7 @@ fn get_mask(bit_idx: usize) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
+    use hex::FromHex;
 
     use super::*;
 
@@ -343,7 +343,7 @@ mod tests {
     #[test]
     fn prefixes() {
         let full = Path(
-            Digest::try_from("0101010101000000000000000000000000000000000000000000000000000000")
+            Digest::from_hex("0101010101000000000000000000000000000000000000000000000000000000")
                 .unwrap(),
         );
 

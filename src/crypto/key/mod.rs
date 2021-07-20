@@ -3,8 +3,6 @@ pub mod exchange;
 
 use std::convert::Into;
 
-use serde::{Deserialize, Serialize};
-
 use sodiumoxide::crypto::kx;
 use sodiumoxide::crypto::secretstream;
 use sodiumoxide::utils;
@@ -12,7 +10,7 @@ use sodiumoxide::utils;
 /// Hardcoded key size
 pub const SIZE: usize = 32;
 
-#[derive(Clone, Deserialize, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Eq, PartialOrd, Ord)]
 /// A symmetric cryptographic `Key`
 pub struct Key([u8; SIZE]);
 
@@ -75,9 +73,9 @@ impl PartialEq for Key {
 mod tests {
     use std::cmp::Ordering;
 
-    use super::*;
-
     use sodiumoxide::utils::increment_le;
+
+    use super::*;
 
     #[test]
     fn symmetric_key_ordering() {
