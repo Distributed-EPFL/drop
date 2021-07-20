@@ -23,7 +23,7 @@ pub use key::Key;
 pub use hash::authenticate;
 pub use hash::hash;
 
-pub use parse::{ParseHex, ParseHexError};
+pub use parse::ParseHexError;
 
 /// Type alias for serializer errors
 pub type BincodeError = Box<bincode::ErrorKind>;

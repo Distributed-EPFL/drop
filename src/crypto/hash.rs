@@ -1,16 +1,13 @@
 use std::cmp;
 
-use super::key::Key;
-use super::BincodeError;
-
 use bincode::serialize;
-
 pub use blake3::Hash;
 use blake3::Hasher as BlakeHasher;
-
 use serde::{Deserialize, Serialize};
-
 use snafu::{ResultExt, Snafu};
+
+use super::key::Key;
+use super::BincodeError;
 
 /// Static size for hashes
 pub const SIZE: usize = blake3::OUT_LEN;
@@ -33,9 +30,7 @@ pub struct Hasher(BlakeHasher);
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Hash")]
-struct SerdeDigest(
-    #[serde(getter = "Hash::as_bytes")] pub(crate) [u8; SIZE],
-);
+struct SerdeDigest(#[serde(getter = "Hash::as_bytes")] pub(crate) [u8; SIZE]);
 
 impl From<SerdeDigest> for Hash {
     fn from(d: SerdeDigest) -> Self {
@@ -136,8 +131,8 @@ pub fn authenticate<Message: Serialize>(
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-    use std::convert::TryFrom;
-    use std::convert::TryInto;
+
+    use hex::FromHex;
 
     use super::*;
 
@@ -147,7 +142,7 @@ mod tests {
     macro_rules! compare_digest {
         ($data:expr, $expected:expr) => {
             let expected =
-                Digest::try_from($expected).expect("failed to create digest");
+                Digest::from_hex($expected).expect("failed to create digest");
             let actual = hash(&($data)).expect("failed to hash data");
 
             assert_eq!(actual, expected, "incorrect digest computed");
@@ -157,12 +152,12 @@ mod tests {
     macro_rules! compare_mac {
         ($key:expr, $data:expr, $expected:expr) => {
             let actual_digest = authenticate(
-                &($key).try_into().expect("failed to create key"),
+                &Key::from_hex($key).expect("failed to create key"),
                 &($data),
             )
             .expect("failed to hash data");
-            let expected_digest: Digest =
-                $expected.try_into().expect("failed to create digest");
+            let expected_digest =
+                Digest::from_hex($expected).expect("failed to create digest");
 
             assert_eq!(expected_digest, actual_digest, "wrong mac computed");
         };
@@ -233,7 +228,7 @@ mod tests {
     fn mac_collisions() {
         let mut set = HashSet::new();
         for value in 0u32..1024u32 {
-            set.insert(authenticate(&"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".try_into().unwrap(), &value).unwrap());
+            set.insert(authenticate(&Key::from_hex("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").unwrap(), &value).unwrap());
         }
         assert_eq!(set.len(), 1024, "collisions detected");
     }
