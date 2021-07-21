@@ -6,9 +6,6 @@ pub mod hash;
 pub mod key;
 mod parse;
 
-/// Utilities for sealed cryptographic boxes
-pub mod seal;
-
 /// Signature computation and verification utilities
 pub mod sign;
 
