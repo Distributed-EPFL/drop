@@ -1,15 +1,15 @@
 use std::fmt;
 
-use super::super::stream::{Pull, Push};
-use super::Key;
-
 use serde::{Deserialize, Serialize};
-
 use snafu::{Backtrace, Snafu};
-
 use sodiumoxide::crypto::kx::{
     client_session_keys, gen_keypair, server_session_keys,
     PublicKey as SodiumPubKey, SecretKey as SodiumSecKey,
+};
+
+use super::{
+    super::stream::{Pull, Push},
+    Key,
 };
 
 /// Error encountered while computing shared secrets using [`Exchanger`]
@@ -69,7 +69,7 @@ impl AsRef<[u8]> for PublicKey {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 /// A `PrivateKey` used to compute a shared secret with a remote party
 pub struct PrivateKey(SodiumSecKey);
 
@@ -85,7 +85,7 @@ impl From<SodiumSecKey> for PrivateKey {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 /// A `KeyPair` that can be used to exchange a secret symmetric key for use in an encrypted network stream
 pub struct KeyPair {
     public: PublicKey,
@@ -122,7 +122,7 @@ impl KeyPair {
 
 /// A pair of exchanged ephemeral keys that can be used to
 /// securely exchange data with a peer.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub struct Session {
     transmit: Key,
     receive: Key,

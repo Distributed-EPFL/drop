@@ -3,14 +3,15 @@ pub mod exchange;
 
 use std::convert::Into;
 
-use sodiumoxide::crypto::kx;
-use sodiumoxide::crypto::secretstream;
-use sodiumoxide::utils;
+use sodiumoxide::{
+    crypto::{kx, secretstream},
+    utils,
+};
 
 /// Hardcoded key size
 pub const SIZE: usize = 32;
 
-#[derive(Clone, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq)]
 /// A symmetric cryptographic `Key`
 pub struct Key([u8; SIZE]);
 
@@ -60,34 +61,5 @@ impl From<Key> for kx::SessionKey {
 impl Drop for Key {
     fn drop(&mut self) {
         utils::memzero(&mut self.0);
-    }
-}
-
-impl PartialEq for Key {
-    fn eq(&self, rhs: &Key) -> bool {
-        utils::memcmp(&self.0, &rhs.0)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::cmp::Ordering;
-
-    use sodiumoxide::utils::increment_le;
-
-    use super::*;
-
-    #[test]
-    fn symmetric_key_ordering() {
-        let key = Key::random();
-        let mut key_plus_one = key.clone();
-
-        increment_le(&mut key_plus_one.0);
-
-        assert_eq!(
-            key.cmp(&key_plus_one),
-            Ordering::Less,
-            "failed to compare keys correctly"
-        );
     }
 }
