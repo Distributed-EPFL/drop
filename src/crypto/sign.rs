@@ -1,25 +1,23 @@
-use std::fmt;
-use std::hash::{Hash, Hasher};
-
-use super::BincodeError;
-
-use bincode::serialize_into;
-
-use ed25519_dalek::{
-    Keypair, PublicKey as DalekPublicKey, SecretKey as DalekPrivateKey,
-    Signature as DalekSignature, Signer as _, Verifier as _,
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
 };
 
+use bincode::serialize_into;
+use ed25519_dalek::{
+    Keypair as DalekKeyPair, PublicKey as DalekPublicKey,
+    SecretKey as DalekPrivateKey, Signature as DalekSignature, Signer as _,
+    Verifier as _,
+};
 pub use ed25519_dalek::{
     KEYPAIR_LENGTH as KEYPAIRBYTES, PUBLIC_KEY_LENGTH as PUBLICKEYBYTES,
     SECRET_KEY_LENGTH as PRIVATEKEYBYTES,
 };
-
-use rand::rngs::OsRng;
-
+use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-
 use snafu::{ResultExt, Snafu};
+
+use super::BincodeError;
 
 #[derive(Debug, Snafu)]
 /// Error encountered when attempting to sign data using [`PrivateKey`]
@@ -162,12 +160,18 @@ impl From<DalekPrivateKey> for PrivateKey {
 
 /// A key pair that can be used for both signing and verifying messages
 #[derive(Debug, Serialize, Deserialize)]
-pub struct KeyPair(Keypair);
+pub struct KeyPair(DalekKeyPair);
 
 impl KeyPair {
     /// Create a `KeyPair` using both a random secret and public key
     pub fn random() -> Self {
-        Self(Keypair::generate(&mut OsRng))
+        let mut bytes = [0u8; PRIVATEKEYBYTES];
+        OsRng.fill_bytes(&mut bytes);
+
+        let secret = DalekPrivateKey::from_bytes(&bytes).unwrap();
+        let public = DalekPublicKey::from(&secret);
+
+        Self(DalekKeyPair { secret, public })
     }
 
     /// Get the `PublicKey` in this `KeyPair`
@@ -200,7 +204,7 @@ impl KeyPair {
 
 impl Clone for KeyPair {
     fn clone(&self) -> Self {
-        Self(Keypair::from_bytes(&self.0.to_bytes()).unwrap())
+        Self(DalekKeyPair::from_bytes(&self.0.to_bytes()).unwrap())
     }
 }
 
@@ -214,7 +218,7 @@ impl Eq for KeyPair {}
 
 impl From<PrivateKey> for KeyPair {
     fn from(private: PrivateKey) -> Self {
-        Self(Keypair {
+        Self(DalekKeyPair {
             public: DalekPublicKey::from(&private.0),
             secret: private.0,
         })

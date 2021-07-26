@@ -1,23 +1,27 @@
-use std::collections::{HashMap, HashSet};
-use std::marker::PhantomData;
+use std::{
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    sync::Arc,
+};
 
-use std::sync::Arc;
-
-use super::Message;
-use crate::async_trait;
-use crate::crypto::key::exchange::PublicKey;
-use crate::net::{ConnectionWrite, SendError};
-
-use futures::future;
-use futures::stream::{FuturesUnordered, Stream, StreamExt, TryStreamExt};
-
+use futures::{
+    future,
+    stream::{FuturesUnordered, Stream, StreamExt, TryStreamExt},
+};
 use snafu::{ensure, OptionExt, ResultExt, Snafu};
-
-use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
-use tokio::task;
-
+use tokio::{
+    sync::{mpsc, oneshot, Mutex, RwLock},
+    task,
+};
 use tracing::{debug_span, warn};
 use tracing_futures::Instrument;
+
+use super::Message;
+use crate::{
+    async_trait,
+    crypto::key::exchange::PublicKey,
+    net::{ConnectionWrite, SendError},
+};
 
 #[derive(Debug, Snafu)]
 /// Error returned by `Sender` when attempting to send `Message`s
@@ -374,17 +378,17 @@ impl<M: Message + 'static> Sender<M> for CollectingSender<M> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use std::net::{Ipv4Addr, SocketAddr};
 
-    use crate::system::message;
-    use crate::test::keyset;
-
-    use crate::crypto::key::exchange::Exchanger;
-    use crate::net::{Connector, Listener, TcpConnector, TcpListener};
-
     use serde::{Deserialize, Serialize};
+
+    use super::*;
+    use crate::{
+        crypto::key::exchange::Exchanger,
+        net::{Connector, Listener, TcpConnector, TcpListener},
+        system::message,
+        test::keyset,
+    };
 
     #[tokio::test]
     async fn convert_sender() {
@@ -402,9 +406,9 @@ mod test {
             }
         }
 
-        const COUNT: u16 = 10;
+        const COUNT: usize = 10;
 
-        let expected = (0..COUNT).map(M2).collect::<Vec<_>>();
+        let expected = (0..COUNT as u16).map(M2).collect::<Vec<_>>();
 
         let peer = keyset(1).next().unwrap();
         let sender = CollectingSender::<M2>::new(vec![peer]);
@@ -420,7 +424,7 @@ mod test {
 
         let messages = sender.messages().await.into_iter().map(Into::into);
 
-        assert_eq!(messages.len(), COUNT.into(), "wrong message count");
+        assert_eq!(messages.len(), COUNT, "wrong message count");
 
         messages
             .map(|x: (PublicKey, M2)| x.1)
