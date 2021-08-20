@@ -18,29 +18,23 @@ pub mod server;
 
 pub(self) mod utils;
 
-use std::fmt;
-use std::io::Error as IoError;
-use std::mem;
-use std::net::SocketAddr;
-
-use self::socket::Socket;
-use crate::crypto::key::exchange::{ExchangeError, Exchanger, PublicKey};
-use crate::crypto::stream::{DecryptError, EncryptError};
-use crate::crypto::stream::{Pull, Push};
+use std::{fmt, io::Error as IoError, mem, net::SocketAddr};
 
 use bincode::{deserialize, serialize, ErrorKind as BincodeErrorKind};
-
 use serde::{Deserialize, Serialize};
-
 use snafu::{Backtrace, ResultExt, Snafu};
-
 use tokio::io::{
     split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf,
     WriteHalf,
 };
-
 use tracing::{debug, debug_span, info};
 use tracing_futures::Instrument;
+
+use self::socket::Socket;
+use crate::crypto::{
+    key::exchange::{ExchangeError, Exchanger, PublicKey},
+    stream::{DecryptError, EncryptError, Pull, Push},
+};
 
 /// Type of errors returned when serializing/deserializing
 pub type SerializerError = Box<BincodeErrorKind>;
@@ -357,7 +351,7 @@ impl Connection {
         exchanger: &Exchanger,
         remote: &PublicKey,
     ) -> Result<(), SecureError> {
-        let session = exchanger.exchange(remote).context(Exchange)?;
+        let session = exchanger.exchange(remote);
         let (push, pull): (Push, Pull) = session.into();
 
         self.state = ConnectionState::Secured(pull, push);

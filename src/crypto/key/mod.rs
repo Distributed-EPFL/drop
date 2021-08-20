@@ -1,12 +1,8 @@
 /// Utilities to compute a shared secret to establish a secure network stream
 pub mod exchange;
 
-use std::convert::Into;
-
-use sodiumoxide::{
-    crypto::{kx, secretstream},
-    utils,
-};
+use crypto_secretstream as secretstream;
+use rand::{rngs::OsRng, RngCore};
 
 /// Hardcoded key size
 pub const SIZE: usize = 32;
@@ -18,7 +14,10 @@ pub struct Key([u8; SIZE]);
 impl Key {
     /// Generate a new random `Key`
     pub fn random() -> Self {
-        secretstream::gen_key().into()
+        let mut bytes = [0u8; SIZE];
+        OsRng.fill_bytes(&mut bytes);
+
+        Self(bytes)
     }
 }
 
@@ -36,30 +35,15 @@ impl From<[u8; SIZE]> for Key {
 
 impl From<secretstream::Key> for Key {
     fn from(key: secretstream::Key) -> Self {
-        Key(key.0)
-    }
-}
+        let mut bytes = [0u8; SIZE];
+        bytes.clone_from_slice(key.as_ref());
 
-impl From<kx::SessionKey> for Key {
-    fn from(key: kx::SessionKey) -> Self {
-        Key(key.0)
+        Self(bytes)
     }
 }
 
 impl From<Key> for secretstream::Key {
     fn from(v: Key) -> Self {
-        Self(v.0)
-    }
-}
-
-impl From<Key> for kx::SessionKey {
-    fn from(key: Key) -> Self {
-        Self(key.0)
-    }
-}
-
-impl Drop for Key {
-    fn drop(&mut self) {
-        utils::memzero(&mut self.0);
+        Self::from(v.0)
     }
 }

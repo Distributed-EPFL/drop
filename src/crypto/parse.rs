@@ -1,9 +1,11 @@
 use hex::FromHex;
-use snafu::{Backtrace, OptionExt, ResultExt, Snafu};
+use snafu::{ResultExt, Snafu};
 
-use super::hash::{self, Digest};
-use super::key::{self, exchange, Key};
-use super::sign;
+use super::{
+    hash::{self, Digest},
+    key::{self, exchange, Key},
+    sign,
+};
 
 /// Error encountered when parsing hexadecimal strings using the [`ParseHex`] trait
 ///
@@ -21,12 +23,6 @@ pub enum ParseHexError {
     Dalek {
         /// Error source
         source: ed25519_dalek::SignatureError,
-    },
-
-    /// Sodium error
-    Sodium {
-        /// Error backtrace
-        backtrace: Backtrace,
     },
 }
 
@@ -52,14 +48,12 @@ impl FromHex for exchange::PublicKey {
     type Error = ParseHexError;
 
     fn from_hex<T: AsRef<[u8]>>(hex: T) -> Result<Self, Self::Error> {
-        use sodiumoxide::crypto::kx::{PublicKey, PUBLICKEYBYTES};
+        use crypto_kx::PublicKey;
 
-        let mut slice = [0u8; PUBLICKEYBYTES];
-        hex::decode_to_slice(hex, &mut slice).context(MalformedHex)?;
+        let mut array = [0u8; PublicKey::BYTES];
+        hex::decode_to_slice(hex, &mut array).context(MalformedHex)?;
 
-        let key = PublicKey::from_slice(&slice).context(Sodium)?;
-
-        Ok(Self::from(key))
+        Ok(Self::from(PublicKey::from(array)))
     }
 }
 
@@ -67,14 +61,12 @@ impl FromHex for exchange::PrivateKey {
     type Error = ParseHexError;
 
     fn from_hex<T: AsRef<[u8]>>(hex: T) -> Result<Self, Self::Error> {
-        use sodiumoxide::crypto::kx::{SecretKey, SECRETKEYBYTES};
+        use crypto_kx::SecretKey;
 
-        let mut slice = [0u8; SECRETKEYBYTES];
-        hex::decode_to_slice(hex, &mut slice).context(MalformedHex)?;
+        let mut array = [0u8; SecretKey::BYTES];
+        hex::decode_to_slice(hex, &mut array).context(MalformedHex)?;
 
-        let key = SecretKey::from_slice(&slice).context(Sodium)?;
-
-        Ok(Self::from(key))
+        Ok(Self::from(SecretKey::from(array)))
     }
 }
 
@@ -102,9 +94,9 @@ impl FromHex for sign::PrivateKey {
         let mut slice = [0u8; SECRET_KEY_LENGTH];
         hex::decode_to_slice(hex, &mut slice).context(MalformedHex)?;
 
-        let sodium = SecretKey::from_bytes(&slice).context(Dalek)?;
+        let dalek = SecretKey::from_bytes(&slice).context(Dalek)?;
 
-        Ok(Self::from(sodium))
+        Ok(Self::from(dalek))
     }
 }
 

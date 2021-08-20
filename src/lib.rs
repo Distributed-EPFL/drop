@@ -21,7 +21,7 @@
 //! [`system`]: self::system
 //! [`test`]: self::test
 
-/// Cryptographic primitives using sodiumoxide
+/// Cryptographic primitives
 pub mod crypto;
 
 /// Syncset to efficiently synchronize two sets of values
