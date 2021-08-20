@@ -1,17 +1,12 @@
-use std::fmt;
-
-use super::key::Key;
-use super::BincodeError;
+use std::{convert::TryFrom, fmt};
 
 use bincode::{deserialize, serialize_into};
-
+use crypto_secretstream::{Header, PullStream, PushStream, Tag};
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
+use snafu::{ensure, Backtrace, OptionExt, ResultExt, Snafu};
 
-use snafu::{ensure, Backtrace, ResultExt, Snafu};
-
-use sodiumoxide::crypto::secretstream::{
-    Header, Pull as SodiumPull, Push as SodiumPush, Stream, Tag, HEADERBYTES,
-};
+use super::{key::Key, BincodeError};
 
 #[derive(Debug, Snafu)]
 /// Error encountered when decyphering data
@@ -19,20 +14,6 @@ pub enum DecryptError {
     #[snafu(display("missing cryptographic header"))]
     /// The message did not contain a cryptographic header
     MissingHeader {
-        /// Error backtrace
-        backtrace: Backtrace,
-    },
-
-    #[snafu(display("invalid cryptographic header"))]
-    /// The header contained in the data was invalid
-    InvalidHeader {
-        /// Error backtrace
-        backtrace: Backtrace,
-    },
-
-    #[snafu(display("failed to verify message authentication code"))]
-    /// The message authentication code was invalid
-    InvalidMac {
         /// Error backtrace
         backtrace: Backtrace,
     },
@@ -50,6 +31,10 @@ pub enum DecryptError {
         /// Deserialize error
         source: BincodeError,
     },
+
+    #[snafu(display("decryption failed"))]
+    /// Error while pulling from the underlying strem
+    CryptoDecrypt,
 }
 
 #[derive(Debug, Snafu)]
@@ -61,16 +46,20 @@ pub enum EncryptError {
         /// Underlying serializer error
         source: BincodeError,
     },
+
+    #[snafu(display("encryption failed"))]
+    /// Error while pushing to the underlying strem
+    CryptoEncrypt,
 }
 
 enum PushState {
     Setup(Key),
-    Run { stream: Stream<SodiumPush> },
+    Run(PushStream),
 }
 
 enum PullState {
     Setup(Key),
-    Run(Stream<SodiumPull>),
+    Run(PullStream),
     Broken,
 }
 
@@ -109,30 +98,34 @@ impl Push {
     where
         T: Serialize,
     {
-        let encrypt = |stream: &mut Stream<SodiumPush>,
-                       mut buffer: &mut Vec<u8>| {
+        let encrypt = |stream: &mut PushStream, mut buffer: &mut Vec<u8>| {
+            buffer.clear();
             serialize_into(&mut buffer, message).context(SerializeEncrypt)?;
 
-            let ciphertext = stream.push(&buffer, None, Tag::Message).unwrap();
-            buffer.clear();
-            Ok(ciphertext)
+            stream
+                .push(buffer, &[], Tag::Message)
+                .ok()
+                .context(CryptoEncrypt)?;
+
+            Ok(())
         };
 
         match &mut self.state {
             PushState::Setup(key) => {
-                let (mut stream, header) =
-                    Stream::init_push(&key.clone().into()).unwrap();
+                let (header, mut stream) =
+                    PushStream::init(&mut OsRng, &key.clone().into());
 
-                let mut ciphertext = encrypt(&mut stream, &mut self.buffer)?;
-                ciphertext.extend_from_slice(&header[..]);
+                encrypt(&mut stream, &mut self.buffer)?;
+                self.buffer.extend_from_slice(header.as_ref());
 
-                self.state = PushState::Run { stream };
-                Ok(ciphertext)
+                self.state = PushState::Run(stream);
             }
-            PushState::Run { ref mut stream } => {
-                encrypt(stream, &mut self.buffer)
+            PushState::Run(ref mut stream) => {
+                encrypt(stream, &mut self.buffer)?
             }
         }
+
+        Ok(self.buffer.clone()) // TODO clearly inefficient, modify in place
     }
 }
 
@@ -163,45 +156,50 @@ impl Pull {
     where
         T: Deserialize<'de>,
     {
+        let pull = |stream: &mut PullStream,
+                    ciphertext: &[u8],
+                    buffer: &mut Vec<u8>| {
+            buffer.clear();
+            buffer.extend_from_slice(ciphertext);
+
+            stream
+                .pull(buffer, &[])
+                .map_err(|_| CryptoDecrypt.build())?;
+
+            Ok(())
+        };
+
         match &mut self.state {
             PullState::Setup(key) => {
-                ensure!(ciphertext.len() >= HEADERBYTES, MissingHeader);
+                ensure!(ciphertext.len() >= Header::BYTES, MissingHeader);
 
                 let (ciphertext, header) =
-                    ciphertext.split_at(ciphertext.len() - HEADERBYTES);
+                    ciphertext.split_at(ciphertext.len() - Header::BYTES);
 
-                let mut stream = Stream::init_pull(
-                    &Header::from_slice(header).unwrap(),
+                let mut stream = PullStream::init(
+                    Header::try_from(header).unwrap(), // already checked
                     &key.clone().into(),
-                )
-                .map_err(|_| {
-                    self.state = PullState::Broken;
-                    InvalidHeader.build()
-                })?;
+                );
 
-                stream
-                    .pull_to_vec(ciphertext, None, &mut self.buffer)
-                    .map_err(|_| {
+                pull(&mut stream, ciphertext, &mut self.buffer).map_err(
+                    |err| {
                         self.state = PullState::Broken;
-                        InvalidMac.build()
-                    })?;
+                        err
+                    },
+                )?;
 
                 self.state = PullState::Run(stream);
-
-                deserialize(&self.buffer).context(SerializeDecrypt)
             }
             PullState::Run(ref mut stream) => {
-                stream
-                    .pull_to_vec(ciphertext, None, &mut self.buffer)
-                    .map_err(|_| {
-                        self.state = PullState::Broken;
-                        InvalidMac.build()
-                    })?;
-
-                deserialize(&self.buffer).context(SerializeDecrypt)
+                pull(stream, ciphertext, &mut self.buffer).map_err(|err| {
+                    self.state = PullState::Broken;
+                    err
+                })?;
             }
-            PullState::Broken => BrokenStream.fail(),
+            PullState::Broken => BrokenStream.fail()?,
         }
+
+        deserialize(&self.buffer).context(SerializeDecrypt)
     }
 }
 

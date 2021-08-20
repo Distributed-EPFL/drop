@@ -1,11 +1,8 @@
 use std::fmt;
 
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use snafu::{Backtrace, Snafu};
-use sodiumoxide::crypto::kx::{
-    client_session_keys, gen_keypair, server_session_keys,
-    PublicKey as SodiumPubKey, SecretKey as SodiumSecKey,
-};
 
 use super::{
     super::stream::{Pull, Push},
@@ -25,28 +22,17 @@ pub enum ExchangeError {
     },
 }
 
-#[derive(
-    Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
-)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 /// A `PublicKey` used to compute a shared secret with a remote party
-pub struct PublicKey(SodiumPubKey);
+pub struct PublicKey(crypto_kx::PublicKey);
 
-impl From<SodiumPubKey> for PublicKey {
-    fn from(key: SodiumPubKey) -> Self {
+impl From<crypto_kx::PublicKey> for PublicKey {
+    fn from(key: crypto_kx::PublicKey) -> Self {
         Self(key)
     }
 }
 
 impl fmt::Display for PublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for b in self.0.as_ref() {
-            write!(f, "{:02x}", b)?;
-        }
-        Ok(())
-    }
-}
-
-impl fmt::Display for PrivateKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for b in self.0.as_ref() {
             write!(f, "{:02x}", b)?;
@@ -63,6 +49,18 @@ impl fmt::Debug for PublicKey {
     }
 }
 
+impl PartialOrd for PublicKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PublicKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_ref().cmp(other.as_ref())
+    }
+}
+
 impl AsRef<[u8]> for PublicKey {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
@@ -71,17 +69,20 @@ impl AsRef<[u8]> for PublicKey {
 
 #[derive(Clone, Serialize, Deserialize)]
 /// A `PrivateKey` used to compute a shared secret with a remote party
-pub struct PrivateKey(SodiumSecKey);
+pub struct PrivateKey(crypto_kx::SecretKey);
 
-impl AsRef<[u8]> for PrivateKey {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
+impl From<crypto_kx::SecretKey> for PrivateKey {
+    fn from(key: crypto_kx::SecretKey) -> Self {
+        Self(key)
     }
 }
 
-impl From<SodiumSecKey> for PrivateKey {
-    fn from(key: SodiumSecKey) -> Self {
-        Self(key)
+impl fmt::Display for PrivateKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for b in self.0.to_bytes() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
     }
 }
 
@@ -94,19 +95,13 @@ pub struct KeyPair {
 
 impl KeyPair {
     /// Creates a new `KeyPair` with a public key linked to the secret key
-    pub fn new(secret: PrivateKey, public: PublicKey) -> Self {
-        // TODO check that keys are linked somehow
-        Self { public, secret }
+    pub fn new(secret: PrivateKey) -> Self {
+        Self::from(crypto_kx::KeyPair::from(secret.0))
     }
 
     /// Generate a new random `KeyPair`
     pub fn random() -> Self {
-        let (public, secret) = gen_keypair();
-
-        Self {
-            public: PublicKey(public),
-            secret: PrivateKey(secret),
-        }
+        Self::from(crypto_kx::KeyPair::generate(&mut OsRng))
     }
 
     /// Get the `PublicKey` from this `KeyPair`
@@ -117,6 +112,22 @@ impl KeyPair {
     /// Get the `PrivateKey` from this `KeyPair`
     pub fn secret(&self) -> &PrivateKey {
         &self.secret
+    }
+
+    /// Creates a [`crypto_kx::KeyPair`] from this one
+    pub fn as_sodium(&self) -> crypto_kx::KeyPair {
+        crypto_kx::KeyPair::from(self.secret.0.clone())
+    }
+}
+
+impl From<crypto_kx::KeyPair> for KeyPair {
+    fn from(keypair: crypto_kx::KeyPair) -> Self {
+        let (public, secret) = keypair.split();
+
+        Self {
+            public: PublicKey::from(public),
+            secret: PrivateKey::from(secret),
+        }
     }
 }
 
@@ -162,28 +173,19 @@ impl Exchanger {
     /// Exchange keys with a remote peer.
     /// The resulting `SessionKey` can be used to securely encrypt and decrypt
     /// data to and from the remote peer.
-    pub fn exchange(
-        &self,
-        pubkey: &PublicKey,
-    ) -> Result<Session, ExchangeError> {
-        if *pubkey < self.keypair.public {
-            server_session_keys(
-                &self.keypair.public.0,
-                &self.keypair.secret.0,
-                &pubkey.0,
-            )
+    pub fn exchange(&self, pubkey: &PublicKey) -> Session {
+        let (rx, tx) = if pubkey.0.as_ref() < self.keypair.public().0.as_ref() {
+            let keys = self.keypair.as_sodium().session_keys_to(&pubkey.0);
+            (keys.rx, keys.tx)
         } else {
-            client_session_keys(
-                &self.keypair.public.0,
-                &self.keypair.secret.0,
-                &pubkey.0,
-            )
+            let keys = self.keypair.as_sodium().session_keys_from(&pubkey.0);
+            (keys.rx, keys.tx)
+        };
+
+        Session {
+            receive: rx.as_ref().to_owned().into(),
+            transmit: tx.as_ref().to_owned().into(),
         }
-        .map(|(rx, tx)| Session {
-            receive: rx.into(),
-            transmit: tx.into(),
-        })
-        .map_err(|_| Sodium.build())
     }
 }
 
@@ -198,9 +200,7 @@ mod tests {
             let kp = $keypair;
             let pk = $pubkey;
 
-            Exchanger::new(kp)
-                .exchange(&pk)
-                .expect("failed to compute secret")
+            Exchanger::new(kp).exchange(&pk)
         }};
     }
 
