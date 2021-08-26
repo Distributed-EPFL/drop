@@ -24,24 +24,21 @@
 //! [`AggregatePublicKey`]: self::AggregatePublicKey
 //! [`Signature`]: self::Signature
 
-use std::fmt;
-use std::iter::FromIterator;
-
-use super::BincodeError;
+use std::{fmt, iter::FromIterator};
 
 use bincode::serialize_into;
-
-use blst::min_sig::{
-    AggregateSignature as BlsAggrSig, PublicKey as BlsPublicKey,
-    SecretKey as BlsPrivateKey, Signature as BlsSignature,
+use blst::{
+    min_sig::{
+        AggregateSignature as BlsAggrSig, PublicKey as BlsPublicKey,
+        SecretKey as BlsPrivateKey, Signature as BlsSignature,
+    },
+    BLST_ERROR,
 };
-use blst::BLST_ERROR;
-
+use rand::{rngs::OsRng, RngCore};
 use serde::{de, Deserialize, Deserializer, Serialize};
-
 use snafu::{OptionExt, ResultExt, Snafu};
 
-use rand::{rngs::OsRng, RngCore};
+use super::BincodeError;
 
 const BLST_DST: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_";
 
@@ -519,9 +516,9 @@ impl From<BlsAggrSig> for AggregateSignature {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use bincode::deserialize_from;
+
+    use super::*;
 
     fn generate_sequence(
         size: usize,
@@ -559,11 +556,13 @@ mod test {
         let initial = signatures.next().map(Clone::clone).unwrap().aggregate();
 
         let aggregate = signatures.fold(initial, |mut acc, curr| {
-            acc.aggregate(&curr).unwrap();
+            acc.aggregate(curr).unwrap();
             acc
         });
 
-        aggregate.verify_many(&messages, &public).expect("verify failed");
+        aggregate
+            .verify_many(&messages, &public)
+            .expect("verify failed");
     }
 
     #[test]

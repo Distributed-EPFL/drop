@@ -1,27 +1,32 @@
-use std::fmt;
-use std::io::{Error, ErrorKind};
-use std::net::SocketAddr;
-use std::time::Duration;
-
-use super::super::common::directory::{Request, Response};
-use super::super::connector::{ConnectError, Connector};
-use super::super::socket::Socket;
-use super::super::utils::resolve_addr;
-use super::super::{Connection, ReceiveError};
-use super::*;
-use crate::crypto::key::exchange::{Exchanger, PublicKey};
+use std::{
+    fmt,
+    io::{Error, ErrorKind},
+    net::SocketAddr,
+    time::Duration,
+};
 
 use async_trait::async_trait;
-
 use snafu::{ResultExt, Snafu};
-
-use tokio::net::ToSocketAddrs;
-use tokio::sync::oneshot::{channel, Receiver, Sender};
-use tokio::task::{self, JoinHandle};
-use tokio::time::{interval, Interval};
-
+use tokio::{
+    net::ToSocketAddrs,
+    sync::oneshot::{channel, Receiver, Sender},
+    task::{self, JoinHandle},
+    time::{interval, Interval},
+};
 use tracing::{error, info, trace_span};
 use tracing_futures::Instrument;
+
+use super::{
+    super::{
+        common::directory::{Request, Response},
+        connector::{ConnectError, Connector},
+        socket::Socket,
+        utils::resolve_addr,
+        Connection, ReceiveError,
+    },
+    *,
+};
+use crate::crypto::key::exchange::{Exchanger, PublicKey};
 
 #[derive(Debug, Snafu)]
 enum DirectoryError {
@@ -184,7 +189,7 @@ async fn send_request(
         error!("failed to send message: {}", e);
 
         while let Err(e) =
-            check_connection(connector, connection, &pkey, directory).await
+            check_connection(connector, connection, pkey, directory).await
         {
             error!("failed to re-establish connection to directory: {}", e);
             timer.tick().await;
@@ -200,7 +205,7 @@ async fn check_connection(
 ) -> Result<(), ConnectError> {
     error!("lost connection to directory, reconnecting");
 
-    *connection = connector.connect(&pkey, &dir_addr).await?;
+    *connection = connector.connect(pkey, &dir_addr).await?;
 
     Ok(())
 }
@@ -287,12 +292,14 @@ impl fmt::Display for DirectoryCandidate {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::crypto::key::exchange::Exchanger;
-    use crate::net::{Connector, Listener, TcpConnector, TcpListener};
-    use crate::test::*;
-
     use tokio::task;
+
+    use super::*;
+    use crate::{
+        crypto::key::exchange::Exchanger,
+        net::{Connector, Listener, TcpConnector, TcpListener},
+        test::*,
+    };
 
     #[tokio::test]
     async fn directory_register() {
@@ -340,9 +347,10 @@ mod test {
         });
 
         let connector = TcpConnector::new(server_exchanger);
-        let mut listener = DirectoryListener::new(dir_listener, connector, dir_server)
-            .await
-            .expect("dir_bind failed");
+        let mut listener =
+            DirectoryListener::new(dir_listener, connector, dir_server)
+                .await
+                .expect("dir_bind failed");
 
         listener.accept().await.expect("accept failed");
 

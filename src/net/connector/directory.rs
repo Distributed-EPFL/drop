@@ -1,30 +1,36 @@
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::fmt;
-use std::future::Future;
-use std::io::{Error, ErrorKind};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::Arc;
-
-use super::super::common::directory::{Info, Request, Response};
-use super::super::{Connection, ReceiveError, SendError, Socket};
-use super::Other as ConnectOther;
-use super::*;
-use crate::crypto::key::exchange::{Exchanger, PublicKey};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt,
+    future::Future,
+    io::{Error, ErrorKind},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
-
-use futures::future::{select, Either, FutureExt};
-use futures::stream::StreamExt;
-
+use futures::{
+    future::{select, Either, FutureExt},
+    stream::StreamExt,
+};
 use snafu::{ResultExt, Snafu};
-
-use tokio::sync::broadcast::{channel, Receiver, Sender};
-use tokio::sync::Mutex;
-use tokio::task;
-
+use tokio::{
+    sync::{
+        broadcast::{channel, Receiver, Sender},
+        Mutex,
+    },
+    task,
+};
 use tracing::{debug, error, info, trace_span};
 use tracing_futures::Instrument;
+
+use super::{
+    super::{
+        common::directory::{Info, Request, Response},
+        Connection, ReceiveError, SendError, Socket,
+    },
+    Other as ConnectOther, *,
+};
+use crate::crypto::key::exchange::{Exchanger, PublicKey};
 
 #[derive(Debug, Snafu)]
 pub enum DirectoryError {
@@ -199,7 +205,7 @@ impl Connector for DirectoryConnector {
         while let Ok(response) = rx.recv().await {
             match response {
                 Response::Found(recvd_pkey, addr) if recvd_pkey == *pkey => {
-                    return self.connector.establish(&pkey, &addr).await;
+                    return self.connector.establish(pkey, &addr).await;
                 }
                 Response::NotFound(_) => ConnectOther {
                     reason: "peer not found in directory",
@@ -358,9 +364,11 @@ impl From<&SocketAddr> for PeerInfo {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::crypto::key::exchange::Exchanger;
-    use crate::net::{DirectoryConnector, Listener, TcpConnector, TcpListener};
-    use crate::test::*;
+    use crate::{
+        crypto::key::exchange::Exchanger,
+        net::{DirectoryConnector, Listener, TcpConnector, TcpListener},
+        test::*,
+    };
 
     #[tokio::test]
     async fn wait_whitebox() {

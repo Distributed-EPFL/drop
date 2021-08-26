@@ -7,13 +7,13 @@ mod node;
 mod path;
 mod set;
 
-use crate::crypto::hash;
 pub use errors::*;
 use node::Node;
 pub use path::*;
 pub use set::Set;
-
 use snafu::ResultExt;
+
+use crate::crypto::hash;
 
 pub trait Syncable: Serialize + PartialEq {}
 impl<T: Serialize + PartialEq> Syncable for T {}
@@ -252,7 +252,7 @@ impl<Data: Syncable> SyncSet<Data> {
                                     remote_hash_opt.as_ref().unwrap();
 
                                 // Add elements in order
-                                match remote_hash.cmp(&local_hash) {
+                                match remote_hash.cmp(local_hash) {
                                     Ordering::Less => {
                                         let new = unsafe {
                                             remote_data.get_unchecked(i)
@@ -322,9 +322,9 @@ impl<Data: Syncable> Default for SyncSet<Data> {
 mod tests {
     use std::collections::HashSet;
 
-    use super::*;
-
     use rand::Rng;
+
+    use super::*;
 
     const NUM_ITERS: u32 = 50000;
     #[test]
@@ -394,7 +394,7 @@ mod tests {
                     "Number of elements received exceeds the threshold"
                 );
                 assert!(
-                    prefix.is_prefix_of(&elem_path),
+                    prefix.is_prefix_of(elem_path),
                     "Prefix isn't a prefix of the full hash"
                 );
                 assert_eq!(

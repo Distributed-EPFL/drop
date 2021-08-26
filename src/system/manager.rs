@@ -1,28 +1,21 @@
-use std::iter;
-use std::marker::PhantomData;
-use std::sync::Arc;
+use std::{iter, marker::PhantomData, sync::Arc};
 
-use super::sender::NetworkSender;
-use super::{Message, Sampler, Sender, System};
-
-use crate::async_trait;
-use crate::crypto::key::exchange::PublicKey;
-use crate::net::{Connection, ConnectionRead, ConnectionWrite};
-
-use futures::stream::{self, FuturesUnordered, StreamExt};
-use futures::FutureExt as _;
-
-use postage::dispatch;
-use postage::mpsc;
-use postage::sink::Sink;
-use postage::stream::Stream;
-
+use futures::{
+    stream::{self, FuturesUnordered, StreamExt},
+    FutureExt as _,
+};
+use postage::{dispatch, mpsc, sink::Sink, stream::Stream};
 use snafu::OptionExt;
-
 use tokio::task::{self, JoinHandle};
-
 use tracing::{debug, debug_span, error, info, warn};
 use tracing_futures::Instrument;
+
+use super::{sender::NetworkSender, Message, Sampler, Sender, System};
+use crate::{
+    async_trait,
+    crypto::key::exchange::PublicKey,
+    net::{Connection, ConnectionRead, ConnectionWrite},
+};
 
 #[async_trait]
 /// Trait used to process incoming messages from a `SystemManager`
@@ -460,18 +453,29 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    use super::super::sampler::AllSampler;
-    use super::*;
-    use crate::test::*;
+    use std::{
+        error::Error,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
 
     use tokio::sync::{mpsc, Mutex};
+
+    use super::{super::sampler::AllSampler, *};
+    use crate::test::*;
 
     #[derive(Default)]
     struct Dummy {
         sender: Option<mpsc::Sender<(PublicKey, usize)>>,
     }
+
+    #[derive(Debug)]
+    struct UnreachableError;
+    impl std::fmt::Display for UnreachableError {
+        fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            Err(std::fmt::Error)
+        }
+    }
+    impl Error for UnreachableError {}
 
     #[async_trait]
     impl Processor<usize, usize, (PublicKey, usize), NetworkSender<usize>>
@@ -479,7 +483,7 @@ mod test {
     {
         type Handle = TestHandle<usize>;
 
-        type Error = mpsc::error::RecvError;
+        type Error = UnreachableError;
 
         async fn process(
             &self,
@@ -539,7 +543,7 @@ mod test {
     where
         M: Message,
     {
-        type Error = mpsc::error::RecvError;
+        type Error = UnreachableError;
 
         async fn deliver(&mut self) -> Result<(PublicKey, M), Self::Error> {
             Ok(self.channel.lock().await.recv().await.expect("no message"))
