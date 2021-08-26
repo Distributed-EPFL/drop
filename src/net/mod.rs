@@ -32,7 +32,7 @@ use tracing_futures::Instrument;
 
 use self::socket::Socket;
 use crate::crypto::{
-    key::exchange::{ExchangeError, Exchanger, PublicKey},
+    key::exchange::{Exchanger, PublicKey},
     stream::{DecryptError, EncryptError, Pull, Push},
 };
 
@@ -120,13 +120,6 @@ pub enum ReceiveError {
 #[derive(Debug, Snafu)]
 /// Error encountered when attempting to secure a `Connection`
 pub enum SecureError {
-    #[snafu(display("could not exchange keys: {}", source))]
-    /// Keys could not be exchanged properly
-    Exchange {
-        /// Underlying error cause
-        source: ExchangeError,
-    },
-
     #[snafu(display("i/o error: {}", source))]
     /// OS error occurred while handshaking
     SecureIo {
