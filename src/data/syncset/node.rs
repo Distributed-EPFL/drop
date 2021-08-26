@@ -1,12 +1,12 @@
-use std::cell::{Cell, RefCell};
-use std::mem;
-
-use super::errors::*;
-use super::path::*;
-use super::Syncable;
-use crate::crypto::hash::{hash, Digest};
+use std::{
+    cell::{Cell, RefCell},
+    mem,
+};
 
 use snafu::ResultExt;
+
+use super::{errors::*, path::*, Syncable};
+use crate::crypto::hash::{hash, Digest};
 
 /// Private type used for the binary tree
 #[derive(Debug)]
@@ -49,11 +49,11 @@ impl<Data: Syncable> Node<Data> {
                 }
             } else {
                 // Leaf -> this is the node wanted
-                &self
+                self
             }
         } else {
             // End of path reached, this is the node wanted
-            &self
+            self
         }
     }
 

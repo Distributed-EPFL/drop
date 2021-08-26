@@ -126,7 +126,7 @@ pub trait Sender<M: Message + 'static>: Send + Sync {
         let errors = keys
             .map(|key| {
                 let message = message.clone();
-                self.send(message, &key)
+                self.send(message, key)
             })
             .collect::<FuturesUnordered<_>>();
 

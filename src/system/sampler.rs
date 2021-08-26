@@ -1,11 +1,9 @@
 use std::collections::HashSet;
 
-use crate::async_trait;
-use crate::crypto::key::exchange::PublicKey;
-
 use peroxide::fuga::*;
-
 use snafu::{ensure, OptionExt, Snafu};
+
+use crate::{async_trait, crypto::key::exchange::PublicKey};
 
 #[derive(Snafu, Debug)]
 #[snafu(visibility(pub))]
@@ -58,7 +56,7 @@ pub trait Sampler: Send + Sync {
         I: IntoIterator<Item = PublicKey> + Send,
         I::IntoIter: Send,
     {
-        let sample = keys.into_iter().filter(|x| !excluding.contains(&x));
+        let sample = keys.into_iter().filter(|x| !excluding.contains(x));
 
         self.sample(sample, expected).await
     }
@@ -131,11 +129,14 @@ impl Sampler for AllSampler {
 
 #[cfg(test)]
 mod test {
-    use super::super::sampler::{AllSampler, PoissonSampler};
-    use super::super::sender::CollectingSender;
-    use super::super::Sender;
-    use super::*;
-
+    use super::{
+        super::{
+            sampler::{AllSampler, PoissonSampler},
+            sender::CollectingSender,
+            Sender,
+        },
+        *,
+    };
     use crate::test::*;
 
     static EXPECTED: usize = 100;
