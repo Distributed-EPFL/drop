@@ -2,25 +2,11 @@ use std::fmt;
 
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
-use snafu::{Backtrace, Snafu};
 
 use super::{
     super::stream::{Pull, Push},
     Key,
 };
-
-/// Error encountered while computing shared secrets using [`Exchanger`]
-///
-/// [`Exchanger`]: self::Exchanger
-#[derive(Debug, Snafu)]
-pub enum ExchangeError {
-    /// Cryptographic operation failure
-    #[snafu(display("sodium failure"))]
-    Sodium {
-        /// Error backtrace
-        backtrace: Backtrace,
-    },
-}
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 /// A `PublicKey` used to compute a shared secret with a remote party
