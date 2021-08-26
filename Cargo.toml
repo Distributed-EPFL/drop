@@ -13,6 +13,7 @@ An asynchronous framework for the development of distributed systems
 categories = [ "asynchronous", "network", "distributed-systems", "cryptography" ]
 keywords = [ "distributed", "async", "crypto" ]
 readme="README.md"
+resolver = "2"
 
 [dependencies]
 async-trait = { version = "0.1", optional = true }
@@ -40,6 +41,9 @@ tracing = { version = "0.1", optional = true }
 # pending inclusion of stream in std
 async-stream = "0.3"
 tokio-stream = "0.1"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 drop = { path = ".", features = [ "system" ] }

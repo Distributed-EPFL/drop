@@ -8,8 +8,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        rust: [ stable, beta, nightly ]
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        rust: [stable, beta, nightly]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v2
 
@@ -37,13 +37,34 @@ jobs:
         with:
           command: test
           args: --all-features
-          
+
       - uses: actions-rs/cargo@v1
         name: build examples
         with:
           command: build
           args: --examples
-          
+
+  wasm:
+    name: wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        name: install toolchain
+        with:
+          profile: minimal
+          toolchain: stable
+          target: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v1
+
+      - uses: actions-rs/cargo@v1
+        name: build for wasm
+        with:
+          command: build
+          args: --target wasm32-unknown-unknown
+
   coverage:
     name: coverage
     runs-on: ubuntu-20.04
