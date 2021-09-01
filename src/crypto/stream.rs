@@ -287,7 +287,8 @@ mod tests {
 
         let mut ciphertext =
             transmitter.encrypt(&0u32).expect("failed to encrypt");
-        *ciphertext.first_mut().expect("empty ciphertext") += 1;
+        let first_byte = ciphertext.first_mut().expect("empty ciphertext");
+        *first_byte = first_byte.wrapping_add(1);
 
         receiver
             .decrypt::<u32>(&ciphertext)
