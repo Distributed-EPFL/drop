@@ -369,6 +369,55 @@ impl Signature {
     }
 }
 
+impl PartialEq for Signature {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_bytes() == other.0.to_bytes()
+    }
+}
+
+impl Eq for Signature {
+}
+
+impl<'de> Deserialize<'de> for Signature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::Visitor;
+
+        struct ByteVisitor;
+
+        impl<'de> Visitor<'de> for ByteVisitor {
+            type Value = BlsSignature;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("byte representation of a bls signature")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                BlsSignature::from_bytes(v)
+                    .map_err(Into::into)
+                    .context(Bls)
+                    .map_err(E::custom)
+            }
+        }
+
+        Ok(Self(deserializer.deserialize_bytes(ByteVisitor)?))
+    }
+}
+
+impl Serialize for Signature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_bytes(&self.0.to_bytes())
+    }
+}
+
 impl From<BlsSignature> for Signature {
     fn from(signature: BlsSignature) -> Self {
         Self(signature)
