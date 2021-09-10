@@ -49,12 +49,7 @@ pub trait Message:
 }
 
 impl<T> Message for T where
-    T: for<'de> Deserialize<'de>
-        + Serialize
-        + fmt::Debug
-        + Send
-        + Sync
-        + Clone
+    T: for<'de> Deserialize<'de> + Serialize + fmt::Debug + Send + Sync + Clone
 {
 }
 

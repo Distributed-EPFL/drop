@@ -340,9 +340,10 @@ mod test {
         });
 
         let connector = TcpConnector::new(server_exchanger);
-        let mut listener = DirectoryListener::new(dir_listener, connector, dir_server)
-            .await
-            .expect("dir_bind failed");
+        let mut listener =
+            DirectoryListener::new(dir_listener, connector, dir_server)
+                .await
+                .expect("dir_bind failed");
 
         listener.accept().await.expect("accept failed");
 

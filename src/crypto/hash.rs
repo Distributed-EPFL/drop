@@ -33,9 +33,7 @@ pub struct Hasher(BlakeHasher);
 
 #[derive(Serialize, Deserialize)]
 #[serde(remote = "Hash")]
-struct SerdeDigest(
-    #[serde(getter = "Hash::as_bytes")] pub(crate) [u8; SIZE],
-);
+struct SerdeDigest(#[serde(getter = "Hash::as_bytes")] pub(crate) [u8; SIZE]);
 
 impl From<SerdeDigest> for Hash {
     fn from(d: SerdeDigest) -> Self {

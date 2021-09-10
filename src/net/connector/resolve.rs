@@ -85,7 +85,8 @@ mod test {
             .await
             .expect("listen failed");
 
-        let connector = ResolveConnector::new(TcpConnector::new(Exchanger::random()));
+        let connector =
+            ResolveConnector::new(TcpConnector::new(Exchanger::random()));
 
         let handle = task::spawn(async move {
             listener.accept().await.expect("accept failed");

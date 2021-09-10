@@ -125,7 +125,9 @@ mod tests {
             .await
             .expect("failed to bind");
 
-        let two = TcpListener::new(addr, exchanger).await.expect("failed to bind");
+        let two = TcpListener::new(addr, exchanger)
+            .await
+            .expect("failed to bind");
 
         assert_eq!(one.local_addr().unwrap(), two.local_addr().unwrap());
     }

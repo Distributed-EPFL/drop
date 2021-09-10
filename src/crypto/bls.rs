@@ -375,8 +375,7 @@ impl PartialEq for Signature {
     }
 }
 
-impl Eq for Signature {
-}
+impl Eq for Signature {}
 
 impl<'de> Deserialize<'de> for Signature {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -612,7 +611,9 @@ mod test {
             acc
         });
 
-        aggregate.verify_many(&messages, &public).expect("verify failed");
+        aggregate
+            .verify_many(&messages, &public)
+            .expect("verify failed");
     }
 
     #[test]
