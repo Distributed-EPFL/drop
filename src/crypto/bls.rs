@@ -367,6 +367,31 @@ impl Signature {
     {
         AggregateSignature::aggregate_iter(iter)
     }
+
+    /// See documentation for `AggregateSignature::verify`
+    pub fn verify<T>(
+        &self,
+        message: &T,
+        keys: &AggregatePublicKey,
+    ) -> Result<(), BlsError>
+    where
+        T: Serialize,
+    {
+        let mut buffer = Vec::new();
+        serialize_into(&mut buffer, message).expect("serialize failed");
+
+        let keys_refs = keys.as_slice().iter().collect::<Vec<_>>();
+
+        self.0
+            .fast_aggregate_verify(
+                true,
+                buffer.as_slice(),
+                BLST_DST,
+                keys_refs.as_slice(),
+            )
+            .into_result(())
+            .context(Bls)
+    }
 }
 
 impl PartialEq for Signature {
