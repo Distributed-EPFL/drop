@@ -394,6 +394,32 @@ impl Signature {
             .into_result(())
             .context(Bls)
     }
+
+    /// See documentation for `AggregateSignature::verify`
+    pub fn verify_from_slice_of_pubkeys<'a, T, I>(
+        &self,
+        message: &T,
+        keys_refs: I,
+    ) -> Result<(), BlsError>
+    where
+        T: Serialize,
+        I: IntoIterator<Item = &'a BlsPublicKey>,
+    {
+        let mut buffer = Vec::new();
+        serialize_into(&mut buffer, message).expect("serialize failed");
+
+        let keys_refs = keys_refs.into_iter().collect::<Vec<_>>();
+
+        self.0
+            .fast_aggregate_verify(
+                true,
+                buffer.as_slice(),
+                BLST_DST,
+                keys_refs.as_slice(),
+            )
+            .into_result(())
+            .context(Bls)
+    }
 }
 
 impl PartialEq for Signature {
