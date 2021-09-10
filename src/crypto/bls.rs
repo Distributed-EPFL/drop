@@ -565,6 +565,12 @@ impl From<BlsAggrSig> for AggregateSignature {
     }
 }
 
+impl Into<Signature> for AggregateSignature {
+    fn into(self) -> Signature {
+        Signature(self.0.to_signature())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
