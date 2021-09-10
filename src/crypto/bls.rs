@@ -403,12 +403,13 @@ impl Signature {
     ) -> Result<(), BlsError>
     where
         T: Serialize,
-        I: IntoIterator<Item = &'a BlsPublicKey>,
+        I: IntoIterator<Item = &'a PublicKey>,
     {
         let mut buffer = Vec::new();
         serialize_into(&mut buffer, message).expect("serialize failed");
 
-        let keys_refs = keys_refs.into_iter().collect::<Vec<_>>();
+        let keys_refs =
+            keys_refs.into_iter().map(|key| &key.0).collect::<Vec<_>>();
 
         self.0
             .fast_aggregate_verify(
