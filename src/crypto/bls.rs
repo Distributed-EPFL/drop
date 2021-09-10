@@ -290,6 +290,8 @@ impl PartialEq for PublicKey {
     }
 }
 
+impl Eq for PublicKey {}
+
 impl From<BlsPublicKey> for PublicKey {
     fn from(k: BlsPublicKey) -> Self {
         Self(k)
