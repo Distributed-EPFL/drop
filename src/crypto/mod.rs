@@ -12,14 +12,11 @@ pub mod sign;
 /// Secure network stream utilities
 pub mod stream;
 
+#[cfg(features = "blst")]
 pub mod bls;
 
-pub use hash::Digest;
+pub use hash::{authenticate, hash, Digest};
 pub use key::Key;
-
-pub use hash::authenticate;
-pub use hash::hash;
-
 pub use parse::ParseHexError;
 
 /// Type alias for serializer errors
