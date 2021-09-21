@@ -110,6 +110,7 @@ impl fmt::Display for BlstError {
             BLST_ERROR::BLST_BAD_ENCODING => "bad encoding",
             BLST_ERROR::BLST_POINT_NOT_ON_CURVE => "point not on curve",
             BLST_ERROR::BLST_VERIFY_FAIL => "bad signature",
+            BLST_ERROR::BLST_BAD_SCALAR => "bad scalar"
         };
 
         write!(f, "{}", s)
