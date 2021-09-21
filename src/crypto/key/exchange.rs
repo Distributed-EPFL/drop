@@ -69,7 +69,7 @@ impl AsRef<[u8]> for PublicKey {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// A `PrivateKey` used to compute a shared secret with a remote party
 pub struct PrivateKey(SodiumSecKey);
 
@@ -85,7 +85,7 @@ impl From<SodiumSecKey> for PrivateKey {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 /// A `KeyPair` that can be used to exchange a secret symmetric key for use in an encrypted network stream
 pub struct KeyPair {
     public: PublicKey,
