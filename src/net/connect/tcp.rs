@@ -1,12 +1,16 @@
-use std::net::SocketAddr;
-
-use super::super::Socket;
-use super::{ConnectError, Connector, Io};
-use crate::crypto::key::exchange::{Exchanger, PublicKey};
+use crate::{
+    crypto::key::exchange::{Exchanger, PublicKey},
+    net::{
+        connect::{errors::ConnectError, errors::Io, Connector},
+        socket::Socket,
+    },
+};
 
 use async_trait::async_trait;
 
 use snafu::ResultExt;
+
+use std::net::SocketAddr;
 
 use tokio::net::TcpStream;
 
@@ -56,9 +60,9 @@ impl Connector for TcpConnector {
 
 #[cfg(test)]
 mod test {
-    use super::super::Connection;
     use super::*;
     use crate::crypto::key::exchange::PublicKey;
+    use crate::net::Connection;
     use crate::net::{Listener, TcpConnector, TcpListener};
     use crate::test::*;
     use crate::{exchange_data_and_compare, generate_connection};
@@ -190,8 +194,8 @@ mod test {
             format!("{:?}", client),
             format!(
                 "secure connection {} -> {}",
-                client.socket.local_addr().unwrap(),
-                client.socket.peer_addr().unwrap()
+                client.local_addr().unwrap(),
+                client.peer_addr().unwrap()
             )
         );
     }

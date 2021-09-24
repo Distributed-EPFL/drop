@@ -1,16 +1,16 @@
-use std::io::Result;
-use std::net::SocketAddr;
+use crate::net::socket::Socket;
 
-use super::Socket;
+use std::io;
+use std::net::SocketAddr;
 
 use tokio::net::TcpStream;
 
 impl Socket for TcpStream {
-    fn local_addr(&self) -> Result<SocketAddr> {
+    fn local_addr(&self) -> io::Result<SocketAddr> {
         self.local_addr()
     }
 
-    fn peer_addr(&self) -> Result<SocketAddr> {
+    fn peer_addr(&self) -> io::Result<SocketAddr> {
         self.peer_addr()
     }
 }

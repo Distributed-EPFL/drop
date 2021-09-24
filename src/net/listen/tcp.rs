@@ -1,13 +1,18 @@
-use std::fmt;
-use std::net::SocketAddr;
-
-use super::super::socket::Socket;
-use super::{Io, Listener, ListenerError};
-use crate::crypto::key::exchange::Exchanger;
+use crate::{
+    crypto::key::exchange::Exchanger,
+    net::{
+        listen::errors::{Io, ListenerError},
+        socket::Socket,
+        Listener,
+    },
+};
 
 use async_trait::async_trait;
 
 use snafu::ResultExt;
+
+use std::fmt;
+use std::net::SocketAddr;
 
 use tokio::net::{TcpListener as TokioListener, ToSocketAddrs};
 
