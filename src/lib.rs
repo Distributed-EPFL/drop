@@ -24,18 +24,10 @@
 /// Cryptographic primitives using sodiumoxide
 pub mod crypto;
 
-/// Syncset to efficiently synchronize two sets of values
-pub mod data;
-
 /// Asynchronous secure network utilities
 #[cfg(feature = "net")]
 #[cfg_attr(docsrs, doc(cfg(feature = "net")))]
 pub mod net;
-
-/// System management utilities for implementing distributed algorithms
-#[cfg(feature = "system")]
-#[cfg_attr(docsrs, doc(cfg(feature = "system")))]
-pub mod system;
 
 #[cfg(any(test, feature = "test"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test")))]

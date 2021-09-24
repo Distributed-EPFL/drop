@@ -1,6 +1,3 @@
-mod directory;
-pub use self::directory::*;
-
 use std::io::Error;
 
 use super::{ListenerError, ReceiveError, SendError};

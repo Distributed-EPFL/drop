@@ -1,7 +1,3 @@
-/// Common data shared between `Listener`s and `Connector`s
-pub(crate) mod common;
-pub use common::directory::Info as DirectoryInfo;
-
 /// Utilities to connect to other peers in a secure fashion
 mod connector;
 pub use connector::*;

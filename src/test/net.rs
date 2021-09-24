@@ -1,3 +1,28 @@
+use std::net::{Ipv4Addr, SocketAddr};
+use std::sync::atomic::{AtomicU16, Ordering};
+
+use crate::crypto::key::exchange::Exchanger;
+
+/// Get the next available port for testing purposes
+pub fn next_test_port() -> u16 {
+    static PORT_OFFSET: AtomicU16 = AtomicU16::new(0);
+    const PORT_START: u16 = 9600;
+
+    PORT_START + PORT_OFFSET.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Get the next available `SocketAddr` that can be used for testing
+pub fn next_test_ip4() -> SocketAddr {
+    (Ipv4Addr::new(127, 0, 0, 1), next_test_port()).into()
+}
+
+/// Generate a set of `count` address and port pairs for local testing
+pub fn test_addrs(count: usize) -> Vec<(Exchanger, SocketAddr)> {
+    (0..count)
+        .map(|_| (Exchanger::random(), next_test_ip4()))
+        .collect()
+}
+
 /// Create two ends of a `Connection` using the specified `Listener`
 /// and `Connector` types
 #[macro_export]

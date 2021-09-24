@@ -1,7 +1,3 @@
-/// Connector that uses a central directory server to find peers
-mod directory;
-pub use directory::DirectoryConnector;
-
 /// Connector that can use anything that resolves to a `SocketAddr`
 mod resolve;
 pub use resolve::ResolveConnector;

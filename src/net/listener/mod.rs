@@ -8,10 +8,6 @@ mod utp;
 #[cfg(feature = "unstable")]
 pub use self::utp::UtpListener;
 
-mod directory;
-/// Directory listener
-pub use directory::DirectoryListener;
-
 use std::fmt;
 use std::io::Error;
 use std::net::SocketAddr;
