@@ -57,19 +57,6 @@ impl FromHex for exchange::PublicKey {
     }
 }
 
-impl FromHex for exchange::PrivateKey {
-    type Error = ParseHexError;
-
-    fn from_hex<T: AsRef<[u8]>>(hex: T) -> Result<Self, Self::Error> {
-        use crypto_kx::SecretKey;
-
-        let mut array = [0u8; SecretKey::BYTES];
-        hex::decode_to_slice(hex, &mut array).context(MalformedHex)?;
-
-        Ok(Self::from(SecretKey::from(array)))
-    }
-}
-
 impl FromHex for sign::PublicKey {
     type Error = ParseHexError;
 
