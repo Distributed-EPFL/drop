@@ -1,6 +1,11 @@
 /// Utilities to compute a shared secret to establish a secure network stream
 pub mod exchange;
 
+use std::{
+    fmt,
+    fmt::{Debug, Display},
+};
+
 use crypto_secretstream as secretstream;
 use rand::{rngs::OsRng, RngCore};
 
@@ -45,5 +50,23 @@ impl From<secretstream::Key> for Key {
 impl From<Key> for secretstream::Key {
     fn from(v: Key) -> Self {
         Self::from(v.0)
+    }
+}
+
+impl Display for Key {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "<")?;
+        for byte in self.as_ref() {
+            write!(fmt, "{:02x}", byte)?;
+        }
+        write!(fmt, ">")?;
+
+        Ok(())
+    }
+}
+
+impl Debug for Key {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "{}", self)
     }
 }
