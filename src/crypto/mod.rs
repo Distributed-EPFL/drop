@@ -1,4 +1,3 @@
-mod format;
 /// Hashing and HMAC utilities
 pub mod hash;
 

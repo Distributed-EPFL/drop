@@ -1,4 +1,7 @@
-use std::cmp;
+use std::{
+    cmp, fmt,
+    fmt::{Debug, Display},
+};
 
 use bincode::serialize;
 pub use blake3::Hash;
@@ -6,8 +9,7 @@ use blake3::Hasher as BlakeHasher;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 
-use super::key::Key;
-use super::BincodeError;
+use super::{key::Key, BincodeError};
 
 /// Static size for hashes
 pub const SIZE: usize = blake3::OUT_LEN;
@@ -70,6 +72,24 @@ impl From<Hash> for Digest {
 impl From<[u8; SIZE]> for Digest {
     fn from(s: [u8; SIZE]) -> Self {
         Self(Hash::from(s))
+    }
+}
+
+impl Display for Digest {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "<")?;
+        for byte in self.as_bytes() {
+            write!(fmt, "{:02x}", byte)?;
+        }
+        write!(fmt, ">")?;
+
+        Ok(())
+    }
+}
+
+impl Debug for Digest {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "{}", self)
     }
 }
 
