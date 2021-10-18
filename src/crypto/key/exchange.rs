@@ -53,24 +53,8 @@ impl AsRef<[u8]> for PublicKey {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
 /// A `PrivateKey` used to compute a shared secret with a remote party
-pub struct PrivateKey(crypto_kx::SecretKey);
-
-impl From<crypto_kx::SecretKey> for PrivateKey {
-    fn from(key: crypto_kx::SecretKey) -> Self {
-        Self(key)
-    }
-}
-
-impl fmt::Display for PrivateKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for b in self.0.to_bytes() {
-            write!(f, "{:02x}", b)?;
-        }
-        Ok(())
-    }
-}
+pub use crypto_kx::SecretKey as PrivateKey;
 
 #[derive(Clone, Deserialize, Serialize)]
 /// A `KeyPair` that can be used to exchange a secret symmetric key for use in an encrypted network stream
@@ -82,7 +66,7 @@ pub struct KeyPair {
 impl KeyPair {
     /// Creates a new `KeyPair` with a public key linked to the secret key
     pub fn new(secret: PrivateKey) -> Self {
-        Self::from(crypto_kx::KeyPair::from(secret.0))
+        Self::from(crypto_kx::KeyPair::from(secret))
     }
 
     /// Generate a new random `KeyPair`
@@ -102,7 +86,7 @@ impl KeyPair {
 
     /// Creates a [`crypto_kx::KeyPair`] from this one
     pub fn as_sodium(&self) -> crypto_kx::KeyPair {
-        crypto_kx::KeyPair::from(self.secret.0.clone())
+        crypto_kx::KeyPair::from(self.secret.clone())
     }
 }
 
@@ -112,7 +96,7 @@ impl From<crypto_kx::KeyPair> for KeyPair {
 
         Self {
             public: PublicKey::from(public),
-            secret: PrivateKey::from(secret),
+            secret,
         }
     }
 }
