@@ -5,7 +5,7 @@ use crypto_secretstream as secretstream;
 use rand::{rngs::OsRng, RngCore};
 
 /// Hardcoded key size
-pub const SIZE: usize = 32;
+pub const SIZE: usize = secretstream::Key::BYTES;
 
 #[derive(Clone, PartialEq, Eq)]
 /// A symmetric cryptographic `Key`
