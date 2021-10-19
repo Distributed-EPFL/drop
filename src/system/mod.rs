@@ -1,27 +1,18 @@
-use std::collections::HashMap;
-use std::fmt;
-use std::future::Future;
-use std::net::Ipv4Addr;
-
-use crate::crypto::key::exchange::PublicKey;
-use crate::net::{
-    ConnectError, Connection, Connector, Listener, ListenerError,
-};
+use std::{collections::HashMap, fmt, future::Future, net::Ipv4Addr};
 
 use futures::stream::{select_all, FuturesUnordered, Stream, StreamExt};
-
-use serde::{Deserialize, Serialize};
-
-use tokio::sync::mpsc;
-use tokio::task::{self, JoinHandle};
-
+use tokio::{
+    sync::mpsc,
+    task::{self, JoinHandle},
+};
 use tokio_stream::wrappers::ReceiverStream;
-
 use tracing::{debug_span, error, info, warn};
 use tracing_futures::Instrument;
 
-/// A convenient macro to derive all required traits for your message types
-pub use drop_derive::message;
+use crate::{
+    crypto::key::exchange::PublicKey,
+    net::{ConnectError, Connection, Connector, Listener, ListenerError},
+};
 
 /// System manager and related traits
 mod manager;
@@ -37,25 +28,7 @@ pub use sampler::*;
 
 /// Easy import path to use the system functionnality from drop
 pub mod prelude {
-    pub use super::manager::*;
-    pub use super::sampler::*;
-    pub use super::sender::*;
-}
-
-/// A trait bound for types that can be used as messages
-pub trait Message:
-    for<'de> Deserialize<'de> + Serialize + fmt::Debug + Send + Sync + Clone
-{
-}
-
-impl<T> Message for T where
-    T: for<'de> Deserialize<'de>
-        + Serialize
-        + fmt::Debug
-        + Send
-        + Sync
-        + Clone
-{
+    pub use super::{manager::*, sampler::*, sender::*};
 }
 
 /// A representation of a distributed `System` that manages connections to and
@@ -276,13 +249,14 @@ impl From<Vec<Connection>> for System {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use crate::crypto::key::exchange::Exchanger;
-    use crate::net::{TcpConnector, TcpListener};
-    use crate::test::*;
-
     use futures::StreamExt;
+
+    use super::*;
+    use crate::{
+        crypto::key::exchange::Exchanger,
+        net::{TcpConnector, TcpListener},
+        test::*,
+    };
 
     #[tokio::test]
     async fn add_peers() {

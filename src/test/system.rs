@@ -1,20 +1,24 @@
-use std::future::Future;
-use std::marker::PhantomData;
-use std::net::{Ipv4Addr, SocketAddr};
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::Arc;
+use std::{
+    future::Future,
+    marker::PhantomData,
+    net::{Ipv4Addr, SocketAddr},
+    sync::{
+        atomic::{AtomicU16, Ordering},
+        Arc,
+    },
+};
+
+use futures::{future, stream::StreamExt};
+use tokio::task::{self, JoinHandle};
+use tracing::{info, trace};
 
 use super::*;
-use crate::crypto::key::exchange::{Exchanger, KeyPair, PublicKey};
-use crate::net::*;
-use crate::system::{AllSampler, CollectingSender, Message, Processor, System};
-
-use futures::future;
-use futures::stream::StreamExt;
-
-use tokio::task::{self, JoinHandle};
-
-use tracing::{info, trace};
+use crate::{
+    crypto::key::exchange::{Exchanger, KeyPair, PublicKey},
+    net::*,
+    system::{AllSampler, CollectingSender, Processor, System},
+    Message,
+};
 
 /// Get the next available port for testing purposes
 pub fn next_test_port() -> u16 {

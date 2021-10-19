@@ -27,6 +27,9 @@ pub mod crypto;
 /// Syncset to efficiently synchronize two sets of values
 pub mod data;
 
+mod message;
+pub use message::*;
+
 /// Asynchronous secure network utilities
 #[cfg(feature = "net")]
 #[cfg_attr(docsrs, doc(cfg(feature = "net")))]
