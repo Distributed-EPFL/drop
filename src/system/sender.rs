@@ -16,11 +16,11 @@ use tokio::{
 use tracing::{debug_span, warn};
 use tracing_futures::Instrument;
 
-use super::Message;
 use crate::{
     async_trait,
     crypto::key::exchange::PublicKey,
     net::{ConnectionWrite, SendError},
+    Message,
 };
 
 #[derive(Debug, Snafu)]
@@ -380,13 +380,11 @@ impl<M: Message + 'static> Sender<M> for CollectingSender<M> {
 mod test {
     use std::net::{Ipv4Addr, SocketAddr};
 
-    use serde::{Deserialize, Serialize};
-
     use super::*;
     use crate::{
         crypto::key::exchange::Exchanger,
+        message,
         net::{Connector, Listener, TcpConnector, TcpListener},
-        system::message,
         test::keyset,
     };
 

@@ -2,9 +2,7 @@ use std::fmt;
 use std::net::SocketAddr;
 
 use crate::crypto::key::exchange::PublicKey;
-use drop_derive::message;
-
-use serde::{Deserialize, Serialize};
+use crate::message;
 
 #[message]
 #[derive(Copy, Eq, PartialEq)]

@@ -10,8 +10,9 @@ use tokio::task::{self, JoinHandle};
 use tracing::{debug, debug_span, error, info, warn};
 use tracing_futures::Instrument;
 
-use super::{sender::NetworkSender, Message, Sampler, Sender, System};
+use super::{sender::NetworkSender, Sampler, Sender, System};
 use crate::{
+    Message,
     async_trait,
     crypto::key::exchange::PublicKey,
     net::{Connection, ConnectionRead, ConnectionWrite},
