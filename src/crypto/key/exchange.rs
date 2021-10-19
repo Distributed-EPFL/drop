@@ -10,6 +10,9 @@ use super::{
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 /// A `PublicKey` used to compute a shared secret with a remote party
+// We need a separated type for `PublicKey` as it needs to implement `Ord` for
+// use in a `BTreeSet`. As rust doesn't allow (yet) for a foreign trait to be
+// implemented on a foreign type, we need to wrap it here.
 pub struct PublicKey(crypto_kx::PublicKey);
 
 impl From<crypto_kx::PublicKey> for PublicKey {
