@@ -380,6 +380,8 @@ impl<M: Message + 'static> Sender<M> for CollectingSender<M> {
 mod test {
     use std::net::{Ipv4Addr, SocketAddr};
 
+    use serde::{Deserialize, Serialize};
+
     use super::*;
     use crate::{
         crypto::key::exchange::Exchanger,
