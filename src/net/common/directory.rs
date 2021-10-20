@@ -1,5 +1,6 @@
 use std::fmt;
 use std::net::SocketAddr;
+use serde::{Serialize, Deserialize};
 
 use crate::crypto::key::exchange::PublicKey;
 use crate::message;
