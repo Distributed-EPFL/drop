@@ -2,7 +2,7 @@
 name = "drop-derive"
 version = "0.1.0"
 authors = ["Ogier Bouvier <ars3nic@ars3nic.ch>"]
-edition = "2018"
+edition = "2021"
 license = "AGPL-3.0-or-later"
 description = "Derive macros for drop"
 

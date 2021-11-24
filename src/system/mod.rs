@@ -52,7 +52,7 @@ impl System {
         let iter = initial.into_iter();
 
         let connections = iter
-            .map(|x| async {
+            .map(|x| async move {
                 (
                     x.1.instrument(debug_span!("system_connect", dest = %x.0))
                         .await,

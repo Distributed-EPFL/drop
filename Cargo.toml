@@ -2,7 +2,7 @@
 name = "drop"
 version = "0.1.0"
 authors = [ "Ogier Bouvier <ogier@bouvier.family", "Matteo Monti <matteo.monti@epfl.ch>" ]
-edition = "2018"
+edition = "2021"
 homepage = "https://github.com/Distributed-EPFL/drop"
 repository = "https://github.com/Distributed-EPFL/drop"
 documentation = "https://docs.rs/drop/0.1.0/drop"
@@ -13,7 +13,6 @@ An asynchronous framework for the development of distributed systems
 categories = [ "asynchronous", "network", "distributed-systems", "cryptography" ]
 keywords = [ "distributed", "async", "crypto" ]
 readme="README.md"
-resolver = "2"
 
 [dependencies]
 async-trait = { version = "0.1", optional = true }
