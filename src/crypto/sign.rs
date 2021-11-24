@@ -238,7 +238,7 @@ impl From<PrivateKey> for KeyPair {
 }
 
 /// A signature that can be used to verify the authenticity of a message
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Signature(DalekSignature);
 
 impl Signature {
@@ -253,20 +253,6 @@ impl Signature {
         serialize_into(&mut buffer, message).context(VerifySerialize)?;
 
         pkey.0.verify(&buffer, &self.0).context(Dalek)
-    }
-}
-
-impl Clone for Signature {
-    fn clone(&self) -> Self {
-        Self(DalekSignature::new(self.0.to_bytes()))
-    }
-}
-
-impl Eq for Signature {}
-
-impl PartialEq for Signature {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.to_bytes() == other.0.to_bytes()
     }
 }
 
