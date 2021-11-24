@@ -80,6 +80,18 @@ impl PartialEq for PublicKey {
     }
 }
 
+impl PartialOrd for PublicKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PublicKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_bytes().cmp(other.as_bytes())
+    }
+}
+
 impl fmt::Display for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for b in self.0.as_ref() {
